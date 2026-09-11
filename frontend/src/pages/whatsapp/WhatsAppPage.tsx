@@ -224,10 +224,40 @@ const WhatsAppPage: React.FC = () => {
         onError: (err: any) => toast.error('Error al guardar configuración: ' + (err.response?.data?.message || err.message || 'Desconocido'))
     });
 
+    const defaultBankAccounts = [
+        {
+            id: 'acc_bnb_default',
+            banco: 'Banco Nacional de Bolivia (BNB)',
+            tipoCuenta: 'Cuenta Corriente BOB',
+            numeroCuenta: '100-01928374',
+            titular: 'GIPAAF S.R.L.',
+            documentoIdentidad: 'NIT: 1029384756',
+            qrImage: null,
+            activo: true
+        },
+        {
+            id: 'acc_bcp_default',
+            banco: 'Banco de Crédito de Bolivia (BCP)',
+            tipoCuenta: 'Cuenta Corriente BOB',
+            numeroCuenta: '201-50982736',
+            titular: 'GIPAAF S.R.L.',
+            documentoIdentidad: 'NIT: 1029384756',
+            qrImage: null,
+            activo: true
+        }
+    ];
+
     // Initialize config state when data arrives
     useEffect(() => {
         if (statusData?.config) {
-            setConfigState(statusData.config);
+            const cfg = { ...statusData.config };
+            if (cfg.autoReplyEnabled === undefined || cfg.autoReplyEnabled === null) {
+                cfg.autoReplyEnabled = true;
+            }
+            if (!cfg.bankAccounts || cfg.bankAccounts.length === 0) {
+                cfg.bankAccounts = defaultBankAccounts;
+            }
+            setConfigState(cfg);
         }
     }, [statusData?.config]);
 

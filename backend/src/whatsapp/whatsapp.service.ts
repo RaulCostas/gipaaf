@@ -258,6 +258,29 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
         const branchDisplay = this.formatBranchName(sucursalNombre, ciudadNombre);
 
+        const defaultBankAccounts: BankAccountItem[] = [
+            {
+                id: 'acc_bnb_default',
+                banco: 'Banco Nacional de Bolivia (BNB)',
+                tipoCuenta: 'Cuenta Corriente BOB',
+                numeroCuenta: '100-01928374',
+                titular: 'GIPAAF S.R.L.',
+                documentoIdentidad: 'NIT: 1029384756',
+                qrImage: null,
+                activo: true
+            },
+            {
+                id: 'acc_bcp_default',
+                banco: 'Banco de Crédito de Bolivia (BCP)',
+                tipoCuenta: 'Cuenta Corriente BOB',
+                numeroCuenta: '201-50982736',
+                titular: 'GIPAAF S.R.L.',
+                documentoIdentidad: 'NIT: 1029384756',
+                qrImage: null,
+                activo: true
+            }
+        ];
+
         const defaultConfig: WhatsAppConfig = {
             autoReplyEnabled: true,
             ignoreGroups: true,
@@ -274,7 +297,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 `• Cuenta Corriente BOB: 201-50982736\n` +
                 `• Titular: GIPAAF S.R.L. - NIT: 1029384756\n\n` +
                 `📌 _Una vez realizada tu transferencia, envía la foto del comprobante aquí para su validación._`,
-            bankAccounts: []
+            bankAccounts: defaultBankAccounts
         };
 
         // Load config from file if exists
@@ -295,6 +318,19 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             }
         } catch (e) {
             this.logger.error(`Error al cargar configuración para sucursal ${targetId}:`, e);
+        }
+
+        // Asegurar que autoReplyEnabled sea true por defecto y las cuentas bancarias existan
+        if (loadedConfig.autoReplyEnabled === undefined || loadedConfig.autoReplyEnabled === null) {
+            loadedConfig.autoReplyEnabled = true;
+        }
+        if (!loadedConfig.bankAccounts || loadedConfig.bankAccounts.length === 0) {
+            loadedConfig.bankAccounts = defaultBankAccounts;
+        } else {
+            loadedConfig.bankAccounts = loadedConfig.bankAccounts.map(acc => ({
+                ...acc,
+                activo: acc.activo !== false
+            }));
         }
 
         const newSession: BranchSession = {
