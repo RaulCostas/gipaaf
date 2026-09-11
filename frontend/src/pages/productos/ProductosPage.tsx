@@ -180,6 +180,7 @@ const ProductosPage: React.FC = () => {
         e.preventDefault();
         
         const { marca, categoria, grupo, ...safeData } = currentProduct as any;
+        safeData.imagen = currentProduct.imagen || null;
 
         if (currentProduct.id) {
             updateMutation.mutate(safeData as Producto, {
@@ -522,7 +523,7 @@ const ProductosPage: React.FC = () => {
                                         />
                                         <button
                                             type="button"
-                                            onClick={() => setCurrentProduct({ ...currentProduct, imagen: undefined })}
+                                            onClick={() => setCurrentProduct({ ...currentProduct, imagen: null as any })}
                                             className="absolute inset-0 bg-destructive/80 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs font-bold"
                                         >
                                             Quitar
