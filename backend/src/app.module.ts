@@ -40,16 +40,33 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DB_HOST', '127.0.0.1'),
-        port: configService.get<number>('DB_PORT', 5433),
-        username: configService.get<string>('DB_USERNAME', 'postgres'),
-        password: configService.get<string>('DB_PASSWORD', 'postgrespg'),
-        database: configService.get<string>('DB_NAME', 'gipaaf'),
-        autoLoadEntities: true,
-        synchronize: true,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const dbUrl = configService.get<string>('DATABASE_URL');
+        const dbSsl = configService.get<string>('DB_SSL');
+        const isSsl = dbSsl === 'true' || (dbUrl && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1'));
+
+        if (dbUrl) {
+          return {
+            type: 'postgres',
+            url: dbUrl,
+            autoLoadEntities: true,
+            synchronize: configService.get<string>('DB_SYNCHRONIZE', 'true') === 'true',
+            ssl: isSsl ? { rejectUnauthorized: false } : false,
+          };
+        }
+
+        return {
+          type: 'postgres',
+          host: configService.get<string>('DB_HOST', '127.0.0.1'),
+          port: Number(configService.get<number>('DB_PORT', 5433)),
+          username: configService.get<string>('DB_USERNAME', 'postgres'),
+          password: configService.get<string>('DB_PASSWORD', 'postgrespg'),
+          database: configService.get<string>('DB_NAME', 'gipaaf'),
+          autoLoadEntities: true,
+          synchronize: configService.get<string>('DB_SYNCHRONIZE', 'true') === 'true',
+          ssl: isSsl ? { rejectUnauthorized: false } : false,
+        };
+      },
     }),
     AuthModule,
     PersonasModule,
