@@ -411,7 +411,35 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
     async updateConfig(sucursalId: number | undefined, newConfig: Partial<WhatsAppConfig>): Promise<WhatsAppConfig> {
         const session = await this.getOrCreateSession(sucursalId);
-        session.config = { ...session.config, ...newConfig };
+        
+        // Manejar subida o eliminación de Catálogo PDF personalizado
+        if (newConfig.customCatalogPdf !== undefined) {
+            const pdfFilePath = path.join(session.authDir, 'catalog.pdf');
+            if (newConfig.customCatalogPdf && (newConfig.customCatalogPdf.startsWith('data:application/pdf') || newConfig.customCatalogPdf.includes('base64,'))) {
+                try {
+                    const base64Data = newConfig.customCatalogPdf.includes('base64,') 
+                        ? newConfig.customCatalogPdf.split('base64,')[1] 
+                        : newConfig.customCatalogPdf;
+                    fs.writeFileSync(pdfFilePath, Buffer.from(base64Data, 'base64'));
+                    session.config.customCatalogPdf = 'FILE_SAVED';
+                    session.config.catalogPdfName = newConfig.catalogPdfName || 'Catalogo_Oficial.pdf';
+                    this.logger.log(`Catálogo PDF oficial guardado en disco para sucursal ${session.sucursalNombre} (${pdfFilePath})`);
+                } catch (pdfErr) {
+                    this.logger.error(`Error al guardar archivo PDF en disco para sucursal ${session.sucursalId}:`, pdfErr);
+                }
+            } else if (newConfig.customCatalogPdf === null || newConfig.customCatalogPdf === '') {
+                if (fs.existsSync(pdfFilePath)) {
+                    try { fs.unlinkSync(pdfFilePath); } catch (e) {}
+                }
+                session.config.customCatalogPdf = null;
+                session.config.catalogPdfName = undefined;
+                this.logger.log(`Catálogo PDF personalizado eliminado para sucursal ${session.sucursalNombre}. Se usará generador dinámico.`);
+            }
+        }
+
+        // Actualizar resto de propiedades excluyendo el customCatalogPdf crudo
+        const { customCatalogPdf, ...otherConfig } = newConfig;
+        session.config = { ...session.config, ...otherConfig };
         this.saveSessionConfig(session);
 
         if (Array.isArray(newConfig.bankAccounts)) {
@@ -1059,7 +1087,19 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         if (!session.sock) return false;
 
         try {
-            if (session.config.customCatalogPdf) {
+            const pdfFilePath = path.join(session.authDir, 'catalog.pdf');
+            if (session.config.customCatalogPdf && fs.existsSync(pdfFilePath)) {
+                const pdfBuffer = fs.readFileSync(pdfFilePath);
+                const docName = session.config.catalogPdfName || `Catalogo_GIPAAF_${session.sucursalNombre.replace(/\s+/g, '_')}.pdf`;
+
+                await session.sock.sendMessage(jid, {
+                    document: pdfBuffer,
+                    mimetype: 'application/pdf',
+                    fileName: docName,
+                    caption: `📄 *Catálogo Oficial de Productos - GIPAAF*\nSucursal: *${session.sucursalNombre}*\nDescárgalo para consultar nuestra línea completa de pinturas y acabados.`
+                });
+                return true;
+            } else if (session.config.customCatalogPdf && !session.config.customCatalogPdf.startsWith('FILE_SAVED')) {
                 const base64Data = session.config.customCatalogPdf.includes('base64,')
                     ? session.config.customCatalogPdf.split('base64,')[1]
                     : session.config.customCatalogPdf;

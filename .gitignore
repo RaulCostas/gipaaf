@@ -19,7 +19,10 @@ whatsapp_auth/*
 !whatsapp_auth/.gitkeep
 backend/whatsapp_auth/*
 !backend/whatsapp_auth/.gitkeep
+whatsapp_config*.json
+backend/whatsapp_config*.json
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+

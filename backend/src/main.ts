@@ -9,6 +9,11 @@ async function bootstrap() {
   process.env.PGTZ = 'America/La_Paz';
   const app = await NestFactory.create(AppModule);
 
+  // Body parser limit (50MB for PDF catalogs and QR image uploads)
+  const express = require('express');
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
   // CORS
   const configuredOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
