@@ -1,0 +1,33 @@
+{
+  "autoReplyEnabled": false,
+  "ignoreGroups": true,
+  "allowClientQueries": true,
+  "allowSellerQueries": true,
+  "allowAdminReports": true,
+  "botName": "GIPAAF Bot",
+  "customWelcomeMessage": "¡Hola! Bienvenido al canal oficial de *GIPAAF* - Grupo Importador de Pinturas Automotrices y Articulos de Ferreteria.",
+  "bankAccountsInfo": "*CUENTAS BANCARIAS OFICIALES - GIPAAF*\n\n🏦 *Banco Nacional de Bolivia (BNB)*\n• Cuenta Corriente BOB: 100-01928374\n• Titular: GIPAAF S.R.L. - NIT: 1029384756\n\n🏦 *Banco de Crédito de Bolivia (BCP)*\n• Cuenta Corriente BOB: 201-50982736\n• Titular: GIPAAF S.R.L. - NIT: 1029384756\n\n📌 _Una vez realizada tu transferencia, envía la foto del comprobante aquí para su validación._",
+  "bankAccounts": [
+    {
+      "id": "1",
+      "banco": "Banco Nacional de Bolivia (BNB)",
+      "tipoCuenta": "Cuenta Corriente BOB",
+      "numeroCuenta": "100-01928374",
+      "titular": "GIPAAF S.R.L.",
+      "documentoIdentidad": "NIT: 1029384756",
+      "qrImage": null,
+      "activo": false
+    },
+    {
+      "id": "2",
+      "banco": "Banco de Crédito de Bolivia (BCP)",
+      "tipoCuenta": "Cuenta Corriente BOB",
+      "numeroCuenta": "201-50982736",
+      "titular": "GIPAAF S.R.L.",
+      "documentoIdentidad": "NIT: 1029384756",
+      "qrImage": null,
+      "activo": true
+    }
+  ],
+  "usuarioId": 1
+}
