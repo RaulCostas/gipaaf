@@ -1529,7 +1529,20 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             ? `${cliente.persona.nombres} ${cliente.persona.apellidos}`.trim()
             : 'Estimado Cliente';
 
-        const notas = await this.notaRepo.find({
+        const branchDisplay = this.getSessionBranchDisplay(session);
+
+        // Asegurar que cliente.sucursal esté cargada con su ciudad
+        if (!cliente.sucursal) {
+            try {
+                const fullCli = await this.clienteRepo.findOne({
+                    where: { id: cliente.id },
+                    relations: ['sucursal', 'sucursal.ciudad']
+                });
+                if (fullCli?.sucursal) cliente.sucursal = fullCli.sucursal;
+            } catch (e) {}
+        }
+
+        const allNotas = await this.notaRepo.find({
             where: {
                 cliente: { id: cliente.id },
                 tipo: TipoNota.VENTA,
@@ -1539,26 +1552,46 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             order: { fecha: 'ASC' }
         });
 
-        const branchDisplay = this.getSessionBranchDisplay(session);
-        const notasConSaldo = notas.filter(n => Number(n.saldo || 0) > 0.01);
+        // Filtrar notas con saldo estrictamente pertenecientes a la sucursal actual del bot (Opción A)
+        const notasSucursalActual = allNotas.filter(n => n.sucursal?.id === session.sucursalId);
+        const notasConSaldo = notasSucursalActual.filter(n => Number(n.saldo || 0) > 0.01);
         const saldoTotalBOB = notasConSaldo.reduce((acc, n) => {
             const s = Number(n.saldo || 0);
             return acc + (n.moneda === 'USD' ? (s * (Number(n.tipoCambio) || 6.96)) : s);
         }, 0);
 
+        // Deudas en otras sucursales
+        const notasOtrasSucursales = allNotas.filter(n => n.sucursal?.id !== session.sucursalId && Number(n.saldo || 0) > 0.01);
+
+        // CASO 1: No tiene saldo pendiente en esta sucursal
         if (notasConSaldo.length === 0) {
+            const isOtroSucursal = cliente.sucursal && cliente.sucursal.id !== session.sucursalId;
+            let respNoDebt = `✅ *ESTADO DE CUENTA - ${branchDisplay.toUpperCase()}*\n\n` +
+                `Hola *${clientName}*, actualmente *no registras deudas ni compras pendientes* en *${branchDisplay}*.\n`;
+
+            if (isOtroSucursal) {
+                const sucRegDisplay = this.formatSucursalDisplay(cliente.sucursal!);
+                const telReg = cliente.sucursal?.telefono ? `\n📱 *Teléfono de atención:* ${cliente.sucursal.telefono}` : '';
+                respNoDebt += `\n🏢 *Sucursal de Registro:* Tu cuenta de cliente está asignada a *${sucRegDisplay}*.`;
+
+                if (notasOtrasSucursales.length > 0) {
+                    respNoDebt += `\n\n📌 Para consultar tu estado de cuenta o pagos pendientes de *${sucRegDisplay}*, por favor comunícate directamente con la línea de WhatsApp de esa sucursal.${telReg}`;
+                }
+            } else {
+                respNoDebt += `\n¡Gracias por tu puntualidad y confianza! 🤝`;
+            }
+
             return {
-                text: `✅ *ESTADO DE CUENTA - ${branchDisplay.toUpperCase()}*\n\n` +
-                    `¡Buenas noticias, *${clientName}*! Actualmente *no tienes deudas pendientes* con GIPAAF.\n\n` +
-                    `¡Gracias por tu puntualidad y confianza! 🤝`,
+                text: respNoDebt,
                 pdfBuffer: null
             };
         }
 
-        let resp = `📋 *ESTADO DE CUENTA DE CRÉDITO*\n\n` +
+        // CASO 2: Sí tiene saldo pendiente en esta sucursal
+        let resp = `📋 *ESTADO DE CUENTA DE CRÉDITO - ${branchDisplay.toUpperCase()}*\n\n` +
             `Cliente: *${clientName}*\n` +
             `Código: \`${cliente.codigo || '-'}\`\n` +
-            `💰 *Saldo Total Pendiente:* *Bs. ${saldoTotalBOB.toLocaleString('es-BO', { minimumFractionDigits: 2 })}*\n\n` +
+            `💰 *Saldo Pendiente en ${branchDisplay}:* *Bs. ${saldoTotalBOB.toLocaleString('es-BO', { minimumFractionDigits: 2 })}*\n\n` +
             `*Detalle de Notas de Venta con Saldo:*\n`;
 
         notasConSaldo.forEach((n, idx) => {
@@ -1566,15 +1599,18 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             const monedaSimbolo = n.moneda === 'USD' ? '$us' : 'Bs.';
             const totalFmt = Number(n.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 });
             const saldoFmt = Number(n.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 });
-            const sucNom = n.sucursal ? ` (${this.formatSucursalDisplay(n.sucursal)})` : '';
 
-            resp += `\n*${idx + 1}. Nota #${n.numero || n.id}*${sucNom}\n` +
+            resp += `\n*${idx + 1}. Nota #${n.numero || n.id}*\n` +
                 `  📅 Fecha: ${fechaStr}\n` +
                 `  💵 Total Venta: ${monedaSimbolo} ${totalFmt}\n` +
                 `  ⚠️ *Saldo Pendiente:* *${monedaSimbolo} ${saldoFmt}*\n` +
                 (n.moneda === 'USD' ? `     _(Equiv: Bs. ${(Number(n.saldo) * (Number(n.tipoCambio) || 6.96)).toFixed(2)})_\n` : '') +
                 `───────────────────`;
         });
+
+        if (notasOtrasSucursales.length > 0) {
+            resp += `\n\n📌 _Nota: Este estado de cuenta contiene únicamente tus compras en *${branchDisplay}*._`;
+        }
 
         resp += `\n\n📌 _Para abonar a tu cuenta, responde *4* para ver los números de cuenta bancaria y códigos QR._`;
 
