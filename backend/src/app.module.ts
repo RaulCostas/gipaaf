@@ -50,7 +50,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
             type: 'postgres',
             url: dbUrl,
             autoLoadEntities: true,
-            synchronize: configService.get<string>('DB_SYNCHRONIZE', 'true') === 'true',
+            synchronize: configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
             ssl: isSsl ? { rejectUnauthorized: false } : false,
           };
         }
@@ -63,7 +63,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
           password: configService.get<string>('DB_PASSWORD', 'postgrespg'),
           database: configService.get<string>('DB_NAME', 'gipaaf'),
           autoLoadEntities: true,
-          synchronize: configService.get<string>('DB_SYNCHRONIZE', 'true') === 'true',
+          synchronize: configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
           ssl: isSsl ? { rejectUnauthorized: false } : false,
         };
       },
