@@ -1535,7 +1535,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 tipo: TipoNota.VENTA,
                 estado: EstadoNota.CONFIRMADA
             },
-            relations: ['sucursal', 'sucursal.ciudad', 'detalles', 'detalles.producto'],
+            relations: ['sucursal', 'sucursal.ciudad', 'vendedor', 'detalles', 'detalles.producto'],
             order: { fecha: 'ASC' }
         });
 
@@ -1619,7 +1619,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         return new Promise((resolve, reject) => {
             const doc = new PDFDocument({
                 size: 'A4',
-                layout: 'portrait',
+                layout: 'landscape',
                 margin: 36,
                 autoFirstPage: true
             });
@@ -1637,123 +1637,209 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
             const clientName = cliente.persona ? `${cliente.persona.nombres} ${cliente.persona.apellidos}`.trim() : 'Cliente';
 
-            const drawHeader = () => {
+            const drawHeaderAndBanner = (isFirstPage: boolean) => {
                 // Banner superior azul oscuro corporativo (#0b132b)
-                doc.rect(36, 30, 523, 56).fill('#0b132b');
+                doc.rect(36, 30, 770, 56).fill('#0b132b');
 
                 // Lado izquierdo del banner
-                doc.font('Helvetica-Bold').fontSize(15).fillColor('#ffffff').text('GIPAAF S.R.L.', 48, 41);
-                doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text('Grupo Importador de Pinturas Automotrices y Artículos de Ferretería', 48, 60);
+                doc.font('Helvetica-Bold').fontSize(16).fillColor('#ffffff').text('GIPAAF S.R.L.', 50, 41);
+                doc.font('Helvetica').fontSize(8.5).fillColor('#94a3b8').text('Grupo Importador de Pinturas Automotrices y Artículos de Ferretería', 50, 61);
 
                 // Lado derecho del banner
-                doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#38bdf8').text('ESTADO DE CUENTA DE CRÉDITO', 300, 39, { width: 248, align: 'right' });
-                doc.font('Helvetica').fontSize(8).fillColor('#cbd5e1').text(`Sucursal: ${sucursalNombre}`, 300, 53, { width: 248, align: 'right' });
-                doc.font('Helvetica').fontSize(8).fillColor('#cbd5e1').text(`Fecha de emisión: ${dateStr}`, 300, 66, { width: 248, align: 'right' });
+                doc.font('Helvetica-Bold').fontSize(9).fillColor('#38bdf8').text(`Estado de Cuenta Oficial • ${dateStr}`, 480, 42, { width: 310, align: 'right' });
+                doc.font('Helvetica').fontSize(8.5).fillColor('#cbd5e1').text(`Sucursal: ${sucursalNombre}`, 480, 58, { width: 310, align: 'right' });
             };
 
-            const drawTableHeader = (startY: number) => {
-                doc.rect(36, startY, 523, 20).fill('#2563eb');
-                doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff');
-                doc.text('NRO. NOTA', 44, startY + 5, { width: 85, align: 'left' });
-                doc.text('FECHA', 135, startY + 5, { width: 75, align: 'left' });
-                doc.text('SUCURSAL', 215, startY + 5, { width: 125, align: 'left' });
-                doc.text('TOTAL VENTA', 345, startY + 5, { width: 85, align: 'right' });
-                doc.text('SALDO ADEUDADO', 435, startY + 5, { width: 115, align: 'right' });
+            const drawClientInfoBox = (startY: number) => {
+                // Tarjeta de información del cliente y líneas de crédito
+                doc.rect(36, startY, 770, 48).fillAndStroke('#ffffff', '#e2e8f0');
+
+                // Línea 1: Cliente
+                doc.font('Helvetica-Bold').fontSize(10).fillColor('#0f172a').text(`CLIENTE: ${clientName.toUpperCase()}`, 48, startY + 8);
+
+                // Línea 2: Código | NIT/CI | Teléfono
+                doc.font('Helvetica').fontSize(8).fillColor('#475569').text(
+                    `Código: ${cliente.codigo || 'C-001'}   |   NIT/CI: ${cliente.persona?.ci || '-'}   |   Teléfono: ${cliente.persona?.telefono || '-'}`,
+                    48,
+                    startY + 21
+                );
+
+                // Línea 3: Límite Crédito | Deuda Total | Crédito Disponible
+                const limiteCred = Number(cliente.limiteCredito || 0);
+                const dispCred = Math.max(0, limiteCred - saldoTotalBOB);
+
+                doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#0f172a').text(
+                    `Límite Crédito: Bs. ${limiteCred.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    48,
+                    startY + 33
+                );
+
+                doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#dc2626').text(
+                    `Deuda Total: Bs. ${saldoTotalBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    280,
+                    startY + 33
+                );
+
+                doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#16a34a').text(
+                    `Crédito Disponible: Bs. ${dispCred.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    520,
+                    startY + 33
+                );
             };
 
-            // Página 1: Banner + Info Cliente + Saldo Pendiente
-            drawHeader();
+            // Página 1
+            drawHeaderAndBanner(true);
+            drawClientInfoBox(96);
 
-            // Tarjeta de información del cliente
-            doc.roundedRect(36, 96, 523, 46, 4).fillAndStroke('#f8fafc', '#e2e8f0');
-            doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#0f172a').text(`CLIENTE: ${clientName.toUpperCase()}`, 48, 105);
-            doc.font('Helvetica').fontSize(8).fillColor('#475569').text(
-                `Código: ${cliente.codigo || 'S/C'}    |    CI/NIT: ${cliente.persona?.ci || '-'}    |    Teléfono: ${cliente.persona?.telefono || '-'}`,
-                48,
-                122
-            );
-
-            // Banner destacado de saldo total adeudado
-            doc.roundedRect(36, 150, 523, 30, 4).fillAndStroke('#fef2f2', '#fecaca');
-            doc.font('Helvetica-Bold').fontSize(11).fillColor('#b91c1c').text(
-                `SALDO TOTAL PENDIENTE: Bs. ${saldoTotalBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                36,
-                159,
-                { width: 523, align: 'center' }
-            );
-
-            // Título de la tabla
-            doc.font('Helvetica-Bold').fontSize(9).fillColor('#0f172a').text('DETALLE DE NOTAS DE VENTA CON SALDO PENDIENTE', 36, 192);
-
-            let currentY = 206;
-            drawTableHeader(currentY);
-            currentY += 20;
-
-            const rowHeight = 19;
-            const maxY = 770;
+            let currentY = 154;
+            const maxY = 550;
 
             if (notasConSaldo.length === 0) {
-                doc.roundedRect(36, currentY + 10, 523, 36, 4).fillAndStroke('#f0fdf4', '#bbf7d0');
-                doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#15803d').text(
+                doc.rect(36, currentY, 770, 40).fillAndStroke('#f0fdf4', '#bbf7d0');
+                doc.font('Helvetica-Bold').fontSize(10).fillColor('#15803d').text(
                     '✓ El cliente no registra notas de venta pendientes de pago. ¡Cuenta al día!',
                     36,
-                    currentY + 22,
-                    { width: 523, align: 'center' }
+                    currentY + 14,
+                    { width: 770, align: 'center' }
                 );
-                currentY += 56;
             } else {
-                notasConSaldo.forEach((n, idx) => {
-                    if (currentY + rowHeight > maxY) {
-                        doc.addPage({ size: 'A4', layout: 'portrait', margin: 36 });
-                        drawHeader();
+                notasConSaldo.forEach((n) => {
+                    const detallesCount = n.detalles && n.detalles.length > 0 ? n.detalles.length : 1;
+                    // Altura estimada: cabecera nota (22) + subcabecera (18) + cabecera tabla (18) + items (18*detallesCount) + resumen (46) + margen (16)
+                    const noteHeight = 22 + 18 + 18 + (18 * detallesCount) + 46 + 14;
+
+                    if (currentY + noteHeight > maxY && currentY > 154) {
+                        doc.addPage({ size: 'A4', layout: 'landscape', margin: 36 });
+                        drawHeaderAndBanner(false);
                         currentY = 96;
-                        drawTableHeader(currentY);
-                        currentY += 20;
                     }
 
-                    if (idx % 2 === 1) {
-                        doc.rect(36, currentY, 523, rowHeight).fill('#f8fafc');
-                    }
+                    // 1. Barra de cabecera de la nota de venta (Azul oscuro + Badge Naranja de Saldo)
+                    doc.rect(36, currentY, 530, 22).fill('#1e293b');
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor('#ffffff').text(`NOTA DE VENTA: ${n.numero || 'VEN-' + n.id}`, 46, currentY + 6);
 
-                    doc.strokeColor('#e2e8f0').lineWidth(0.5).moveTo(36, currentY + rowHeight).lineTo(559, currentY + rowHeight).stroke();
+                    doc.rect(566, currentY, 240, 22).fill('#ea580c');
+                    const saldoNotaStr = `SALDO: Bs. ${Number(n.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor('#ffffff').text(saldoNotaStr, 566, currentY + 6, { width: 240, align: 'center' });
+                    currentY += 22;
 
+                    // 2. Subcabecera con metadatos (Fecha, Sucursal, Vendedor, Facturación)
+                    doc.rect(36, currentY, 770, 18).fillAndStroke('#f1f5f9', '#e2e8f0');
                     const fechaStr = n.fecha ? new Date(n.fecha).toLocaleDateString('es-BO') : '-';
-                    const moneda = n.moneda === 'USD' ? '$us' : 'Bs.';
-                    const sucStr = n.sucursal ? this.formatSucursalDisplay(n.sucursal) : '-';
+                    const sucStr = n.sucursal ? this.formatSucursalDisplay(n.sucursal) : sucursalNombre;
+                    const vendStr = n.vendedor ? `${n.vendedor.nombres || ''} ${n.vendedor.apellidos || ''}`.trim() : 'Asignado';
+                    const facStr = (n.impuesto && Number(n.impuesto) > 0) ? 'Con Factura' : 'Sin Factura';
 
-                    doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#0f172a').text(`Nota #${n.numero || n.id}`, 44, currentY + 5, { width: 85 });
-                    doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(fechaStr, 135, currentY + 5, { width: 75 });
-                    doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(sucStr, 215, currentY + 5, { width: 125, lineBreak: false, ellipsis: true });
+                    doc.font('Helvetica').fontSize(7.5).fillColor('#334155');
+                    doc.text(`Fecha: ${fechaStr}`, 46, currentY + 4, { width: 130 });
+                    doc.text(`Sucursal: ${sucStr}`, 180, currentY + 4, { width: 230, lineBreak: false, ellipsis: true });
+                    doc.text(`Vendedor: ${vendStr}`, 415, currentY + 4, { width: 180, lineBreak: false, ellipsis: true });
+                    doc.text(`Facturación: ${facStr}`, 600, currentY + 4, { width: 195 });
+                    currentY += 18;
 
-                    const totalStr = `${moneda} ${Number(n.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                    doc.font('Helvetica').fontSize(7.5).fillColor('#0f172a').text(totalStr, 345, currentY + 5, { width: 85, align: 'right' });
+                    // 3. Encabezado de la tabla de items (#, CÓDIGO, PRODUCTO / DESCRIPCIÓN, CANTIDAD, P. UNITARIO, SUBTOTAL)
+                    doc.rect(36, currentY, 770, 18).fill('#2563eb');
+                    doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#ffffff');
+                    doc.text('#', 44, currentY + 5, { width: 25 });
+                    doc.text('CÓDIGO', 72, currentY + 5, { width: 85 });
+                    doc.text('PRODUCTO / DESCRIPCIÓN', 160, currentY + 5, { width: 310 });
+                    doc.text('CANTIDAD', 475, currentY + 5, { width: 75, align: 'right' });
+                    doc.text('P. UNITARIO', 555, currentY + 5, { width: 95, align: 'right' });
+                    doc.text('SUBTOTAL', 655, currentY + 5, { width: 140, align: 'right' });
+                    currentY += 18;
 
-                    const saldoStr = `${moneda} ${Number(n.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#dc2626').text(saldoStr, 435, currentY + 5, { width: 115, align: 'right' });
+                    // 4. Filas de productos
+                    if (n.detalles && n.detalles.length > 0) {
+                        n.detalles.forEach((det, dIdx) => {
+                            if (currentY + 18 > maxY) {
+                                doc.addPage({ size: 'A4', layout: 'landscape', margin: 36 });
+                                drawHeaderAndBanner(false);
+                                currentY = 96;
+                            }
 
-                    currentY += rowHeight;
+                            if (dIdx % 2 === 1) {
+                                doc.rect(36, currentY, 770, 18).fill('#f8fafc');
+                            }
+
+                            doc.strokeColor('#e2e8f0').lineWidth(0.5).moveTo(36, currentY + 18).lineTo(806, currentY + 18).stroke();
+
+                            doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(String(dIdx + 1), 44, currentY + 4);
+                            doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(det.producto?.codigo || '-', 72, currentY + 4, { width: 85, lineBreak: false });
+                            doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#0f172a').text(det.producto?.nombre || 'Producto', 160, currentY + 4, { width: 310, lineBreak: false, ellipsis: true });
+                            doc.font('Helvetica').fontSize(7.5).fillColor('#0f172a').text(Number(det.cantidad || 0).toFixed(2), 475, currentY + 4, { width: 75, align: 'right' });
+
+                            const puStr = `Bs. ${Number(det.precioUnitario || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            doc.font('Helvetica').fontSize(7.5).fillColor('#0f172a').text(puStr, 555, currentY + 4, { width: 95, align: 'right' });
+
+                            const subStr = `Bs. ${Number(det.subtotal || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#2563eb').text(subStr, 655, currentY + 4, { width: 140, align: 'right' });
+
+                            currentY += 18;
+                        });
+                    } else {
+                        doc.font('Helvetica-Oblique').fontSize(7.5).fillColor('#64748b').text('Detalle de items según nota de entrega.', 72, currentY + 4);
+                        currentY += 18;
+                    }
+
+                    // 5. Cuadro de resumen inferior (Observaciones a la izquierda + Resumen montos a la derecha)
+                    if (currentY + 48 > maxY) {
+                        doc.addPage({ size: 'A4', layout: 'landscape', margin: 36 });
+                        drawHeaderAndBanner(false);
+                        currentY = 96;
+                    }
+
+                    doc.rect(36, currentY, 390, 46).fillAndStroke('#f8fafc', '#e2e8f0');
+                    doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#475569').text('OBSERVACIONES / NOTAS:', 46, currentY + 6);
+                    doc.font('Helvetica-Oblique').fontSize(7.5).fillColor('#64748b').text(
+                        n.observaciones || 'PRUEBA DE NOTA DE VENTA',
+                        46,
+                        currentY + 18,
+                        { width: 370 }
+                    );
+
+                    doc.rect(430, currentY, 376, 46).fillAndStroke('#ffffff', '#e2e8f0');
+
+                    // Fila 1: Total Venta
+                    doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text('Total Venta:', 440, currentY + 6);
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#0f172a').text(
+                        `Bs. ${Number(n.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        440,
+                        currentY + 6,
+                        { width: 356, align: 'right' }
+                    );
+
+                    // Fila 2: Monto Cobrado / Amortizado
+                    const amortizado = Math.max(0, Number(n.total || 0) - Number(n.saldo || 0));
+                    doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#16a34a').text('Monto Cobrado / Amortizado:', 440, currentY + 19);
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#16a34a').text(
+                        `Bs. ${amortizado.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        440,
+                        currentY + 19,
+                        { width: 356, align: 'right' }
+                    );
+
+                    // Fila 3: Saldo Deuda Pendiente
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#dc2626').text('Saldo Deuda Pendiente:', 440, currentY + 32);
+                    doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#dc2626').text(
+                        `Bs. ${Number(n.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        440,
+                        currentY + 32,
+                        { width: 356, align: 'right' }
+                    );
+
+                    currentY += 46 + 16;
                 });
             }
 
-            // Nota informativa
-            if (currentY + 40 < maxY) {
-                doc.font('Helvetica-Oblique').fontSize(7.5).fillColor('#64748b').text(
-                    'Nota: Para realizar pagos o solicitar conciliación de saldos, por favor comuníquese con la administración o envíe su comprobante bancario por este chat.',
-                    36,
-                    currentY + 16,
-                    { width: 523, align: 'center' }
-                );
-            }
-
-            // Pie de página
+            // Pie de página en todas las páginas
             const range = doc.bufferedPageRange();
             for (let i = range.start; i < range.start + range.count; i++) {
                 doc.switchToPage(i);
                 doc.font('Helvetica').fontSize(7).fillColor('#94a3b8').text(
                     `GIPAAF S.R.L. • Documento generado automáticamente el ${dateStr} • Página ${i + 1} de ${range.count}`,
                     36,
-                    800,
-                    { width: 523, align: 'center' }
+                    570,
+                    { width: 770, align: 'center' }
                 );
             }
 

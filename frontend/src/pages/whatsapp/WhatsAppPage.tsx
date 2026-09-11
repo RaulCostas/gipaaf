@@ -255,12 +255,15 @@ const WhatsAppPage: React.FC = () => {
         return false;
     }, [configState, statusData?.config]);
 
+    // Modal states for confirmation
+    const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+    const [pendingBranchId, setPendingBranchId] = useState<number | null>(null);
+
     const handleSelectBranch = (branchId: number) => {
         if (branchId === activeSucursalId) return;
         if (hasUnsavedChanges) {
-            if (!window.confirm(`Tienes modificaciones sin guardar en ${currentSucursal?.nombre || 'la sucursal actual'}. ¿Deseas descartar los cambios y cambiar de sucursal?`)) {
-                return;
-            }
+            setPendingBranchId(branchId);
+            return;
         }
         setSelectedBranchId(branchId);
     };
@@ -294,11 +297,7 @@ const WhatsAppPage: React.FC = () => {
                     </button>
                     {isConnected ? (
                         <button
-                            onClick={() => {
-                                if (window.confirm(`¿Seguro que deseas desconectar la sesión de WhatsApp de ${currentSucursal?.nombre || 'esta sucursal'}?`)) {
-                                    disconnectMutation.mutate();
-                                }
-                            }}
+                            onClick={() => setShowDisconnectModal(true)}
                             disabled={disconnectMutation.isPending}
                             className="flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                         >
@@ -1091,6 +1090,100 @@ const WhatsAppPage: React.FC = () => {
                 </div>
             )}
 
+            {/* Modal de Confirmación para Desconectar WhatsApp */}
+            {showDisconnectModal && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
+                    onClick={() => setShowDisconnectModal(false)}
+                >
+                    <div
+                        className="bg-card border rounded-2xl p-5 sm:p-6 max-w-md w-full space-y-5 shadow-2xl animate-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 bg-red-500/15 text-red-600 dark:text-red-400 rounded-2xl shrink-0">
+                                <Power className="w-6 h-6" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <h3 className="text-base sm:text-lg font-bold text-foreground">
+                                    ¿Desconectar Chatbot de WhatsApp?
+                                </h3>
+                                <p className="text-xs sm:text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                                    Estás a punto de desconectar la sesión de WhatsApp para <strong className="text-foreground">{currentSucursal?.nombre || 'esta sucursal'}</strong>. El chatbot dejará de responder automáticamente hasta que vuelvas a escanear el código QR.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2.5 pt-3 border-t">
+                            <button
+                                onClick={() => setShowDisconnectModal(false)}
+                                disabled={disconnectMutation.isPending}
+                                className="px-4 py-2 text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded-xl transition-colors cursor-pointer"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    disconnectMutation.mutate();
+                                    setShowDisconnectModal(false);
+                                }}
+                                disabled={disconnectMutation.isPending}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-colors shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                            >
+                                <Power className="w-4 h-4" />
+                                {disconnectMutation.isPending ? 'Desconectando...' : 'Sí, Desconectar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Confirmación para Descartar Cambios al Cambiar de Sucursal */}
+            {pendingBranchId !== null && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
+                    onClick={() => setPendingBranchId(null)}
+                >
+                    <div
+                        className="bg-card border rounded-2xl p-5 sm:p-6 max-w-md w-full space-y-5 shadow-2xl animate-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-2xl shrink-0">
+                                <AlertTriangle className="w-6 h-6" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <h3 className="text-base sm:text-lg font-bold text-foreground">
+                                    Cambios sin Guardar
+                                </h3>
+                                <p className="text-xs sm:text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                                    Tienes modificaciones pendientes en la configuración de <strong className="text-foreground">{currentSucursal?.nombre || 'la sucursal actual'}</strong>. Si cambias de sucursal ahora, se perderán las modificaciones no guardadas.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2.5 pt-3 border-t">
+                            <button
+                                onClick={() => setPendingBranchId(null)}
+                                className="px-4 py-2 text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded-xl transition-colors cursor-pointer"
+                            >
+                                Continuar Editando
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (statusData?.config) setConfigState(statusData.config);
+                                    setSelectedBranchId(pendingBranchId);
+                                    setPendingBranchId(null);
+                                    toast.info('Cambios descartados');
+                                }}
+                                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-colors shadow-sm cursor-pointer flex items-center gap-1.5"
+                            >
+                                Descartar y Cambiar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* Barra Flotante de Cambios Pendientes sin Guardar */}
             {hasUnsavedChanges && (
                 <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-8 sm:max-w-md z-40 animate-in fade-in slide-in-from-bottom-5 duration-300">
