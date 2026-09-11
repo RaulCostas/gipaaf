@@ -251,10 +251,13 @@ const WhatsAppPage: React.FC = () => {
     useEffect(() => {
         if (statusData?.config) {
             const cfg = { ...statusData.config };
-            if (cfg.autoReplyEnabled === undefined || cfg.autoReplyEnabled === null) {
-                cfg.autoReplyEnabled = true;
-            }
-            if (!cfg.bankAccounts || cfg.bankAccounts.length === 0) {
+            cfg.autoReplyEnabled = cfg.autoReplyEnabled !== false;
+            if (cfg.bankAccounts && cfg.bankAccounts.length > 0) {
+                cfg.bankAccounts = cfg.bankAccounts.map(acc => ({
+                    ...acc,
+                    activo: acc.activo !== false
+                }));
+            } else {
                 cfg.bankAccounts = defaultBankAccounts;
             }
             setConfigState(cfg);

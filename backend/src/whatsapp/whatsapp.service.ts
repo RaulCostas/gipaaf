@@ -137,7 +137,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             fs.mkdirSync(this.baseAuthDir, { recursive: true });
         }
 
-        // Seed bank accounts in DB if empty
+        // Seed or activate bank accounts in DB
         try {
             const count = await this.cuentaBancariaRepo.count();
             if (count === 0) {
@@ -164,6 +164,13 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                     }
                 ]);
                 this.logger.log('Cuentas bancarias iniciales creadas en PostgreSQL.');
+            } else {
+                // Asegurar que las cuentas bancarias existentes en BD queden activadas por defecto
+                await this.cuentaBancariaRepo.createQueryBuilder()
+                    .update(CuentaBancariaBot)
+                    .set({ activo: true })
+                    .where('activo = false OR activo IS NULL')
+                    .execute();
             }
         } catch (dbErr) {
             this.logger.error('Error al verificar/sembrar cuentas bancarias en BD:', dbErr);
@@ -405,7 +412,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 titular: a.titular,
                 documentoIdentidad: a.documentoIdentidad,
                 qrImage: a.qrImage,
-                activo: a.activo
+                activo: a.activo !== false
             }));
         } catch (e) {
             this.logger.error('Error al consultar cuentas bancarias en BD:', e);
@@ -421,7 +428,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             user: session.connectedUser,
             config: {
                 ...session.config,
-                bankAccounts: dbAccounts
+                autoReplyEnabled: session.config.autoReplyEnabled !== false,
+                bankAccounts: dbAccounts.length > 0 ? dbAccounts : session.config.bankAccounts
             },
             logsCount: session.messageLogs.length,
         };
@@ -455,7 +463,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 titular: a.titular,
                 documentoIdentidad: a.documentoIdentidad,
                 qrImage: a.qrImage,
-                activo: a.activo
+                activo: a.activo !== false
             }));
         } catch (e) {
             this.logger.error('Error al obtener cuentas bancarias para configuración:', e);
@@ -463,7 +471,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
         return {
             ...session.config,
-            bankAccounts: dbAccounts
+            autoReplyEnabled: session.config.autoReplyEnabled !== false,
+            bankAccounts: dbAccounts.length > 0 ? dbAccounts : session.config.bankAccounts
         };
     }
 
