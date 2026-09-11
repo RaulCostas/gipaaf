@@ -15,10 +15,10 @@ export class PagoCobranza {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @ManyToOne(() => Nota, { eager: true })
+    @ManyToOne(() => Nota)
     nota: Nota;
 
-    @ManyToOne(() => Cliente, { eager: true })
+    @ManyToOne(() => Cliente)
     cliente: Cliente;
 
     @Column({ type: 'decimal', precision: 12, scale: 2 })

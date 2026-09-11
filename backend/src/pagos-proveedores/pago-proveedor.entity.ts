@@ -15,10 +15,10 @@ export class PagoProveedor {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @ManyToOne(() => Nota, { eager: true })
+    @ManyToOne(() => Nota)
     nota: Nota;
 
-    @ManyToOne(() => Proveedor, { eager: true })
+    @ManyToOne(() => Proveedor)
     proveedor: Proveedor;
 
     @Column({ type: 'decimal', precision: 12, scale: 2 })

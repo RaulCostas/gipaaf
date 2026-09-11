@@ -97,7 +97,7 @@ export class Nota {
     @OneToMany(() => DetalleNota, (det) => det.nota, { cascade: true, eager: true })
     detalles: DetalleNota[];
 
-    @OneToOne(() => CostoImportacion, (c) => c.nota, { nullable: true, eager: true })
+    @OneToOne(() => CostoImportacion, (c) => c.nota, { nullable: true })
     costoImportacion: CostoImportacion;
 
     @Column({ type: 'varchar', length: 10, default: Moneda.BOB })
