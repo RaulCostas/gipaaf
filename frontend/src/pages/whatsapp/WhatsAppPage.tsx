@@ -247,7 +247,7 @@ const WhatsAppPage: React.FC = () => {
         }
     ];
 
-    // Initialize config state when data arrives
+    // Initialize config state when data arrives or branch changes
     useEffect(() => {
         if (statusData?.config) {
             const cfg = { ...statusData.config };
@@ -261,8 +261,19 @@ const WhatsAppPage: React.FC = () => {
                 cfg.bankAccounts = defaultBankAccounts;
             }
             setConfigState(cfg);
+        } else {
+            setConfigState({
+                autoReplyEnabled: true,
+                ignoreGroups: true,
+                allowClientQueries: true,
+                allowSellerQueries: true,
+                allowAdminReports: true,
+                botName: `GIPAAF Bot (${currentSucursal?.nombre || 'Sucursal'})`,
+                customWelcomeMessage: `¡Hola! Bienvenido al canal oficial de *GIPAAF - ${currentSucursal?.nombre || 'Sucursal'}*.`,
+                bankAccounts: defaultBankAccounts
+            });
         }
-    }, [statusData?.config]);
+    }, [statusData?.config, activeSucursalId, currentSucursal?.nombre]);
 
     // Check for unsaved changes in the config
     const hasUnsavedChanges = useMemo(() => {
@@ -678,7 +689,7 @@ const WhatsAppPage: React.FC = () => {
                             </div>
                             <input
                                 type="checkbox"
-                                checked={configState.autoReplyEnabled ?? true}
+                                checked={configState.autoReplyEnabled !== false}
                                 onChange={(e) => setConfigState(prev => ({ ...prev, autoReplyEnabled: e.target.checked }))}
                                 className="w-5 h-5 accent-primary cursor-pointer shrink-0"
                             />

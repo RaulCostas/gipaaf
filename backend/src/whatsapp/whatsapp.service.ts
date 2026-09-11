@@ -314,21 +314,13 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 const raw = fs.readFileSync(configFile, 'utf-8');
                 const parsed = JSON.parse(raw);
                 loadedConfig = { ...loadedConfig, ...parsed };
-            } else {
-                // Check if old global config file exists and import
-                const oldConfigFile = path.join(process.cwd(), 'whatsapp_config.json');
-                if (fs.existsSync(oldConfigFile)) {
-                    const raw = fs.readFileSync(oldConfigFile, 'utf-8');
-                    const parsed = JSON.parse(raw);
-                    loadedConfig = { ...loadedConfig, ...parsed };
-                }
             }
         } catch (e) {
             this.logger.error(`Error al cargar configuración para sucursal ${targetId}:`, e);
         }
 
-        // Asegurar que autoReplyEnabled sea true por defecto y las cuentas bancarias existan
-        if (loadedConfig.autoReplyEnabled === undefined || loadedConfig.autoReplyEnabled === null) {
+        // Asegurar que autoReplyEnabled sea true por defecto para todas las sucursales (actuales y futuras)
+        if (loadedConfig.autoReplyEnabled === undefined || loadedConfig.autoReplyEnabled === null || !fs.existsSync(configFile)) {
             loadedConfig.autoReplyEnabled = true;
         }
         if (!loadedConfig.bankAccounts || loadedConfig.bankAccounts.length === 0) {

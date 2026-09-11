@@ -1,5 +1,5 @@
 {
-  "autoReplyEnabled": false,
+  "autoReplyEnabled": true,
   "ignoreGroups": true,
   "allowClientQueries": true,
   "allowSellerQueries": true,
@@ -16,7 +16,7 @@
       "titular": "GIPAAF S.R.L.",
       "documentoIdentidad": "NIT: 1029384756",
       "qrImage": null,
-      "activo": false
+      "activo": true
     },
     {
       "id": "2",
