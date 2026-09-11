@@ -1139,12 +1139,11 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 return true;
             }
 
-            // Generación dinámica en memoria de catálogo PDF
+            // Generación dinámica en memoria de catálogo PDF con diseño corporativo elegante
             const productos = await this.productoRepo.find({
                 where: { activo: true },
-                relations: ['categoria', 'marca'],
-                order: { nombre: 'ASC' },
-                take: 150
+                relations: ['categoria', 'marca', 'grupo'],
+                order: { nombre: 'ASC' }
             });
 
             const pdfBuffer = await this.generateCatalogPdfInMemory(productos, branchDisplay);
@@ -1152,7 +1151,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 document: pdfBuffer,
                 mimetype: 'application/pdf',
                 fileName: `Catalogo_GIPAAF_${branchDisplay.replace(/\s+/g, '_')}.pdf`,
-                caption: `📄 *Catálogo de Productos - GIPAAF (${branchDisplay})*\nLínea automotriz, ferretería y complementos.`
+                caption: `📄 *Catálogo de Productos - GIPAAF (${branchDisplay})*\nLínea automotriz, ferretería y complementos (${productos.length} items activos).`
             });
 
             return true;
@@ -1167,30 +1166,107 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
     private generateCatalogPdfInMemory(productos: Producto[], sucursalNombre: string): Promise<Buffer> {
         return new Promise((resolve, reject) => {
-            const doc = new PDFDocument({ margin: 36, size: 'A4' });
+            const doc = new PDFDocument({
+                size: 'A4',
+                layout: 'landscape',
+                margin: 36,
+                autoFirstPage: true
+            });
             const chunks: Buffer[] = [];
 
             doc.on('data', chunk => chunks.push(chunk));
             doc.on('end', () => resolve(Buffer.concat(chunks)));
             doc.on('error', reject);
 
-            // Encabezado
-            doc.fontSize(18).fillColor('#1e3a8a').text('GIPAAF - Catálogo de Productos', { align: 'center' });
-            doc.fontSize(10).fillColor('#475569').text(`Sucursal: ${sucursalNombre} | Fecha: ${new Date().toLocaleDateString('es-BO')}`, { align: 'center' });
-            doc.moveDown(1);
-            doc.strokeColor('#cbd5e1').lineWidth(1).moveTo(36, doc.y).lineTo(559, doc.y).stroke();
-            doc.moveDown(1);
+            const dateStr = new Date().toLocaleDateString('es-BO', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+
+            const drawHeaderAndBanner = (isFirstPage: boolean) => {
+                // Banner superior azul oscuro corporativo (#0b132b)
+                doc.rect(36, 30, 770, 56).fill('#0b132b');
+
+                // Lado izquierdo del banner: Nombre de la empresa y eslogan
+                doc.font('Helvetica-Bold').fontSize(16).fillColor('#ffffff').text('GIPAAF S.R.L.', 50, 41);
+                doc.font('Helvetica').fontSize(8.5).fillColor('#94a3b8').text('Grupo Importador de Pinturas Automotrices y Artículos de Ferretería', 50, 61);
+
+                // Lado derecho del banner: Catálogo oficial y sucursal
+                doc.font('Helvetica-Bold').fontSize(9).fillColor('#38bdf8').text(`Catálogo Oficial • Vigente: ${dateStr}`, 480, 42, { width: 310, align: 'right' });
+                doc.font('Helvetica').fontSize(8.5).fillColor('#cbd5e1').text(`Sucursal: ${sucursalNombre}`, 480, 58, { width: 310, align: 'right' });
+
+                if (isFirstPage) {
+                    // Título del documento
+                    doc.font('Helvetica-Bold').fontSize(13).fillColor('#0f172a').text('CATÁLOGO GENERAL DE PRODUCTOS Y PRECIOS', 36, 100);
+                    doc.font('Helvetica').fontSize(9).fillColor('#64748b').text(`Total de referencias activas: ${productos.length} productos`, 36, 116);
+                }
+            };
+
+            const drawTableHeader = (startY: number) => {
+                doc.rect(36, startY, 770, 22).fill('#2563eb');
+                doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff');
+                doc.text('CÓDIGO', 44, startY + 6, { width: 80, align: 'left' });
+                doc.text('DESCRIPCIÓN DEL PRODUCTO', 130, startY + 6, { width: 220, align: 'left' });
+                doc.text('MARCA', 355, startY + 6, { width: 90, align: 'left' });
+                doc.text('CATEGORÍA', 450, startY + 6, { width: 90, align: 'left' });
+                doc.text('GRUPO', 545, startY + 6, { width: 80, align: 'left' });
+                doc.text('PRECIO (BS.)', 630, startY + 6, { width: 80, align: 'right' });
+                doc.text('ESTADO', 715, startY + 6, { width: 85, align: 'center' });
+            };
+
+            // Página 1
+            drawHeaderAndBanner(true);
+            let currentY = 134;
+            drawTableHeader(currentY);
+            currentY += 22;
+
+            const rowHeight = 19;
+            const maxY = 550;
 
             productos.forEach((p, idx) => {
-                if (doc.y > 720) {
-                    doc.addPage();
+                if (currentY + rowHeight > maxY) {
+                    doc.addPage({ size: 'A4', layout: 'landscape', margin: 36 });
+                    drawHeaderAndBanner(false);
+                    currentY = 100;
+                    drawTableHeader(currentY);
+                    currentY += 22;
                 }
-                const cat = p.categoria?.nombre ? ` [${p.categoria.nombre}]` : '';
-                const marca = p.marca?.nombre ? ` (${p.marca.nombre})` : '';
-                doc.fontSize(11).fillColor('#0f172a').text(`${idx + 1}. ${p.nombre}${marca}${cat}`, { bold: true } as any);
-                doc.fontSize(9).fillColor('#334155').text(`   Código: ${p.codigo || 'S/C'} | Precio Ref: Bs. ${Number(p.precioVenta || 0).toFixed(2)} | Unidad: ${p.unidadMedida || 'Pza'}`);
-                doc.moveDown(0.5);
+
+                // Fondo alternado de fila
+                if (idx % 2 === 1) {
+                    doc.rect(36, currentY, 770, rowHeight).fill('#f8fafc');
+                }
+
+                // Línea divisoria inferior
+                doc.strokeColor('#e2e8f0').lineWidth(0.5).moveTo(36, currentY + rowHeight).lineTo(806, currentY + rowHeight).stroke();
+
+                // Columnas
+                doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#0f172a').text(p.codigo || '-', 44, currentY + 5, { width: 80, lineBreak: false });
+                doc.font('Helvetica').fontSize(7.5).fillColor('#1e293b').text(p.nombre || '-', 130, currentY + 5, { width: 220, lineBreak: false, ellipsis: true });
+                doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(p.marca?.nombre || '-', 355, currentY + 5, { width: 90, lineBreak: false, ellipsis: true });
+                doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(p.categoria?.nombre || '-', 450, currentY + 5, { width: 90, lineBreak: false, ellipsis: true });
+                doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(p.grupo?.nombre || '-', 545, currentY + 5, { width: 80, lineBreak: false, ellipsis: true });
+
+                const precioStr = `Bs. ${Number(p.precioVenta || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                doc.font('Helvetica-Bold').fontSize(8).fillColor('#2563eb').text(precioStr, 630, currentY + 5, { width: 80, align: 'right' });
+
+                doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#16a34a').text('Activo', 715, currentY + 5, { width: 85, align: 'center' });
+
+                currentY += rowHeight;
             });
+
+            // Pie de página en todas las páginas
+            const range = doc.bufferedPageRange();
+            for (let i = range.start; i < range.start + range.count; i++) {
+                doc.switchToPage(i);
+                doc.font('Helvetica').fontSize(7).fillColor('#94a3b8').text(
+                    `GIPAAF S.R.L. • Documento generado automáticamente el ${dateStr} • Página ${i + 1} de ${range.count}`,
+                    36,
+                    570,
+                    { width: 770, align: 'center' }
+                );
+            }
 
             doc.end();
         });
@@ -1541,38 +1617,145 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
     private generateAccountStatementPdfInMemory(cliente: Cliente, notasConSaldo: Nota[], saldoTotalBOB: number, sucursalNombre: string): Promise<Buffer> {
         return new Promise((resolve, reject) => {
-            const doc = new PDFDocument({ margin: 36, size: 'A4' });
+            const doc = new PDFDocument({
+                size: 'A4',
+                layout: 'portrait',
+                margin: 36,
+                autoFirstPage: true
+            });
             const chunks: Buffer[] = [];
 
             doc.on('data', chunk => chunks.push(chunk));
             doc.on('end', () => resolve(Buffer.concat(chunks)));
             doc.on('error', reject);
 
+            const dateStr = new Date().toLocaleDateString('es-BO', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+
             const clientName = cliente.persona ? `${cliente.persona.nombres} ${cliente.persona.apellidos}`.trim() : 'Cliente';
 
-            doc.fontSize(16).fillColor('#1e3a8a').text('GIPAAF - Estado de Cuenta de Crédito', { align: 'center' });
-            doc.fontSize(10).fillColor('#475569').text(`Sucursal: ${sucursalNombre} | Fecha de emisión: ${new Date().toLocaleDateString('es-BO')}`, { align: 'center' });
-            doc.moveDown(1);
-            doc.strokeColor('#cbd5e1').lineWidth(1).moveTo(36, doc.y).lineTo(559, doc.y).stroke();
-            doc.moveDown(1);
+            const drawHeader = () => {
+                // Banner superior azul oscuro corporativo (#0b132b)
+                doc.rect(36, 30, 523, 56).fill('#0b132b');
 
-            doc.fontSize(11).fillColor('#0f172a').text(`Cliente: ${clientName}`);
-            doc.fontSize(9).fillColor('#475569').text(`Código: ${cliente.codigo || '-'} | Teléfono: ${cliente.persona?.telefono || '-'} | CI: ${cliente.persona?.ci || '-'}`);
-            doc.fontSize(12).fillColor('#dc2626').text(`Saldo Total Adeudado: Bs. ${saldoTotalBOB.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`, { bold: true } as any);
-            doc.moveDown(1);
+                // Lado izquierdo del banner
+                doc.font('Helvetica-Bold').fontSize(15).fillColor('#ffffff').text('GIPAAF S.R.L.', 48, 41);
+                doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text('Grupo Importador de Pinturas Automotrices y Artículos de Ferretería', 48, 60);
 
-            doc.fontSize(10).fillColor('#1e293b').text('Detalle de Ventas Pendientes de Pago:', { underline: true });
-            doc.moveDown(0.5);
+                // Lado derecho del banner
+                doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#38bdf8').text('ESTADO DE CUENTA DE CRÉDITO', 300, 39, { width: 248, align: 'right' });
+                doc.font('Helvetica').fontSize(8).fillColor('#cbd5e1').text(`Sucursal: ${sucursalNombre}`, 300, 53, { width: 248, align: 'right' });
+                doc.font('Helvetica').fontSize(8).fillColor('#cbd5e1').text(`Fecha de emisión: ${dateStr}`, 300, 66, { width: 248, align: 'right' });
+            };
 
-            notasConSaldo.forEach((n, idx) => {
-                if (doc.y > 700) doc.addPage();
-                const fechaStr = n.fecha ? new Date(n.fecha).toLocaleDateString('es-BO') : '-';
-                const moneda = n.moneda === 'USD' ? '$us' : 'Bs.';
-                const sucStr = n.sucursal ? ` (${this.formatSucursalDisplay(n.sucursal)})` : '';
-                doc.fontSize(10).fillColor('#0f172a').text(`${idx + 1}. Nota #${n.numero || n.id}${sucStr} - Fecha: ${fechaStr}`);
-                doc.fontSize(9).fillColor('#334155').text(`   Total Venta: ${moneda} ${Number(n.total || 0).toFixed(2)} | Saldo Adeudado: ${moneda} ${Number(n.saldo || 0).toFixed(2)}`);
-                doc.moveDown(0.5);
-            });
+            const drawTableHeader = (startY: number) => {
+                doc.rect(36, startY, 523, 20).fill('#2563eb');
+                doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff');
+                doc.text('NRO. NOTA', 44, startY + 5, { width: 85, align: 'left' });
+                doc.text('FECHA', 135, startY + 5, { width: 75, align: 'left' });
+                doc.text('SUCURSAL', 215, startY + 5, { width: 125, align: 'left' });
+                doc.text('TOTAL VENTA', 345, startY + 5, { width: 85, align: 'right' });
+                doc.text('SALDO ADEUDADO', 435, startY + 5, { width: 115, align: 'right' });
+            };
+
+            // Página 1: Banner + Info Cliente + Saldo Pendiente
+            drawHeader();
+
+            // Tarjeta de información del cliente
+            doc.roundedRect(36, 96, 523, 46, 4).fillAndStroke('#f8fafc', '#e2e8f0');
+            doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#0f172a').text(`CLIENTE: ${clientName.toUpperCase()}`, 48, 105);
+            doc.font('Helvetica').fontSize(8).fillColor('#475569').text(
+                `Código: ${cliente.codigo || 'S/C'}    |    CI/NIT: ${cliente.persona?.ci || '-'}    |    Teléfono: ${cliente.persona?.telefono || '-'}`,
+                48,
+                122
+            );
+
+            // Banner destacado de saldo total adeudado
+            doc.roundedRect(36, 150, 523, 30, 4).fillAndStroke('#fef2f2', '#fecaca');
+            doc.font('Helvetica-Bold').fontSize(11).fillColor('#b91c1c').text(
+                `SALDO TOTAL PENDIENTE: Bs. ${saldoTotalBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                36,
+                159,
+                { width: 523, align: 'center' }
+            );
+
+            // Título de la tabla
+            doc.font('Helvetica-Bold').fontSize(9).fillColor('#0f172a').text('DETALLE DE NOTAS DE VENTA CON SALDO PENDIENTE', 36, 192);
+
+            let currentY = 206;
+            drawTableHeader(currentY);
+            currentY += 20;
+
+            const rowHeight = 19;
+            const maxY = 770;
+
+            if (notasConSaldo.length === 0) {
+                doc.roundedRect(36, currentY + 10, 523, 36, 4).fillAndStroke('#f0fdf4', '#bbf7d0');
+                doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#15803d').text(
+                    '✓ El cliente no registra notas de venta pendientes de pago. ¡Cuenta al día!',
+                    36,
+                    currentY + 22,
+                    { width: 523, align: 'center' }
+                );
+                currentY += 56;
+            } else {
+                notasConSaldo.forEach((n, idx) => {
+                    if (currentY + rowHeight > maxY) {
+                        doc.addPage({ size: 'A4', layout: 'portrait', margin: 36 });
+                        drawHeader();
+                        currentY = 96;
+                        drawTableHeader(currentY);
+                        currentY += 20;
+                    }
+
+                    if (idx % 2 === 1) {
+                        doc.rect(36, currentY, 523, rowHeight).fill('#f8fafc');
+                    }
+
+                    doc.strokeColor('#e2e8f0').lineWidth(0.5).moveTo(36, currentY + rowHeight).lineTo(559, currentY + rowHeight).stroke();
+
+                    const fechaStr = n.fecha ? new Date(n.fecha).toLocaleDateString('es-BO') : '-';
+                    const moneda = n.moneda === 'USD' ? '$us' : 'Bs.';
+                    const sucStr = n.sucursal ? this.formatSucursalDisplay(n.sucursal) : '-';
+
+                    doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#0f172a').text(`Nota #${n.numero || n.id}`, 44, currentY + 5, { width: 85 });
+                    doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(fechaStr, 135, currentY + 5, { width: 75 });
+                    doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(sucStr, 215, currentY + 5, { width: 125, lineBreak: false, ellipsis: true });
+
+                    const totalStr = `${moneda} ${Number(n.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    doc.font('Helvetica').fontSize(7.5).fillColor('#0f172a').text(totalStr, 345, currentY + 5, { width: 85, align: 'right' });
+
+                    const saldoStr = `${moneda} ${Number(n.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#dc2626').text(saldoStr, 435, currentY + 5, { width: 115, align: 'right' });
+
+                    currentY += rowHeight;
+                });
+            }
+
+            // Nota informativa
+            if (currentY + 40 < maxY) {
+                doc.font('Helvetica-Oblique').fontSize(7.5).fillColor('#64748b').text(
+                    'Nota: Para realizar pagos o solicitar conciliación de saldos, por favor comuníquese con la administración o envíe su comprobante bancario por este chat.',
+                    36,
+                    currentY + 16,
+                    { width: 523, align: 'center' }
+                );
+            }
+
+            // Pie de página
+            const range = doc.bufferedPageRange();
+            for (let i = range.start; i < range.start + range.count; i++) {
+                doc.switchToPage(i);
+                doc.font('Helvetica').fontSize(7).fillColor('#94a3b8').text(
+                    `GIPAAF S.R.L. • Documento generado automáticamente el ${dateStr} • Página ${i + 1} de ${range.count}`,
+                    36,
+                    800,
+                    { width: 523, align: 'center' }
+                );
+            }
 
             doc.end();
         });

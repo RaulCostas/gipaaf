@@ -219,7 +219,7 @@ const WhatsAppPage: React.FC = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['whatsappStatus', activeSucursalId] });
             queryClient.invalidateQueries({ queryKey: ['whatsappBranchesStatus'] });
-            toast.success(`Configuración del Bot actualizada para ${currentSucursal?.nombre || 'la sucursal'}`);
+            toast.success(`Configuración del Bot guardada correctamente para ${currentSucursal?.nombre || 'la sucursal'}`);
         },
         onError: (err: any) => toast.error('Error al guardar configuración: ' + (err.response?.data?.message || err.message || 'Desconocido'))
     });
@@ -231,12 +231,46 @@ const WhatsAppPage: React.FC = () => {
         }
     }, [statusData?.config]);
 
+    // Check for unsaved changes in the config
+    const hasUnsavedChanges = useMemo(() => {
+        if (!statusData?.config) return false;
+        const current = statusData.config;
+        const edited = configState;
+
+        if ((edited.autoReplyEnabled ?? true) !== (current.autoReplyEnabled ?? true)) return true;
+        if ((edited.ignoreGroups ?? true) !== (current.ignoreGroups ?? true)) return true;
+        if ((edited.allowClientQueries ?? true) !== (current.allowClientQueries ?? true)) return true;
+        if ((edited.allowSellerQueries ?? true) !== (current.allowSellerQueries ?? true)) return true;
+        if ((edited.allowAdminReports ?? true) !== (current.allowAdminReports ?? true)) return true;
+        if ((edited.botName || '') !== (current.botName || '')) return true;
+        if ((edited.customWelcomeMessage || '') !== (current.customWelcomeMessage || '')) return true;
+        if ((edited.bankAccountsInfo || '') !== (current.bankAccountsInfo || '')) return true;
+        if ((edited.customCatalogPdf || null) !== (current.customCatalogPdf || null)) return true;
+        if ((edited.catalogPdfName || '') !== (current.catalogPdfName || '')) return true;
+
+        const currAccounts = JSON.stringify(current.bankAccounts || []);
+        const editedAccounts = JSON.stringify(edited.bankAccounts || []);
+        if (currAccounts !== editedAccounts) return true;
+
+        return false;
+    }, [configState, statusData?.config]);
+
+    const handleSelectBranch = (branchId: number) => {
+        if (branchId === activeSucursalId) return;
+        if (hasUnsavedChanges) {
+            if (!window.confirm(`Tienes modificaciones sin guardar en ${currentSucursal?.nombre || 'la sucursal actual'}. ¿Deseas descartar los cambios y cambiar de sucursal?`)) {
+                return;
+            }
+        }
+        setSelectedBranchId(branchId);
+    };
+
     const isConnected = statusData?.status === 'CONNECTED';
     const isConnecting = statusData?.status === 'CONNECTING';
     const isQrReady = statusData?.status === 'QR_READY';
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative pb-16">
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="min-w-0">
@@ -309,7 +343,7 @@ const WhatsAppPage: React.FC = () => {
                             <button
                                 key={s.id}
                                 disabled={isRestrictedBranchUser && userPersonal?.sucursal?.id !== s.id}
-                                onClick={() => setSelectedBranchId(s.id)}
+                                onClick={() => handleSelectBranch(s.id)}
                                 className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 shadow-sm min-w-0 ${
                                     isSelected
                                         ? 'bg-primary/5 border-primary ring-2 ring-primary/20 shadow-md'
@@ -363,13 +397,16 @@ const WhatsAppPage: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setActiveTab('configuracion')}
-                        className={`px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 cursor-pointer shrink-0 ${
+                        className={`px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 cursor-pointer shrink-0 relative ${
                             activeTab === 'configuracion'
                                 ? 'border-primary text-primary'
                                 : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                     >
                         <Settings className="w-4 h-4 shrink-0" /> Configuración del Bot ({currentSucursal?.nombre || 'Sucursal'})
+                        {hasUnsavedChanges && (
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping absolute top-2 right-1" />
+                        )}
                     </button>
                     <button
                         onClick={() => setActiveTab('comandos')}
@@ -582,6 +619,24 @@ const WhatsAppPage: React.FC = () => {
                             Personaliza las respuestas automáticas, nombre y datos bancarios que ofrece el bot de esta sucursal.
                         </p>
                     </div>
+
+                    {/* Unsaved changes alert inside tab */}
+                    {hasUnsavedChanges && (
+                        <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-700 dark:text-amber-400">
+                            <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium">
+                                <AlertTriangle className="w-4 h-4 shrink-0 animate-pulse text-amber-500" />
+                                <span>Tienes cambios sin guardar en esta sucursal. Recuerda hacer clic en <strong>Guardar Configuración</strong>.</span>
+                            </div>
+                            <button
+                                onClick={() => updateConfigMutation.mutate(configState)}
+                                disabled={updateConfigMutation.isPending}
+                                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors shrink-0 shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5 self-end sm:self-auto"
+                            >
+                                <Check className="w-3.5 h-3.5" />
+                                {updateConfigMutation.isPending ? 'Guardando...' : 'Guardar Ahora'}
+                            </button>
+                        </div>
+                    )}
 
                     <div className="space-y-4">
                         <div className="flex items-center justify-between p-3 sm:p-3.5 border rounded-xl bg-muted/20 gap-3">
@@ -1032,6 +1087,47 @@ const WhatsAppPage: React.FC = () => {
                         >
                             Cerrar
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Barra Flotante de Cambios Pendientes sin Guardar */}
+            {hasUnsavedChanges && (
+                <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-8 sm:max-w-md z-40 animate-in fade-in slide-in-from-bottom-5 duration-300">
+                    <div className="bg-card/95 backdrop-blur-md border-2 border-amber-500/50 shadow-2xl rounded-2xl p-3.5 sm:p-4 flex flex-col gap-3">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-xl shrink-0 mt-0.5">
+                                <AlertTriangle className="w-5 h-5 animate-pulse" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="text-xs sm:text-sm font-bold text-foreground truncate">
+                                    Cambios sin guardar ({currentSucursal?.nombre || 'Sucursal'})
+                                </div>
+                                <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                                    Has modificado la configuración del bot. Guarda para que los cambios surtan efecto.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 justify-end pt-1 border-t border-border/50">
+                            <button
+                                onClick={() => {
+                                    if (statusData?.config) setConfigState(statusData.config);
+                                    toast.info('Cambios descartados');
+                                }}
+                                className="px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded-lg transition-colors cursor-pointer"
+                            >
+                                Descartar
+                            </button>
+                            <button
+                                onClick={() => updateConfigMutation.mutate(configState)}
+                                disabled={updateConfigMutation.isPending}
+                                className="flex items-center justify-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground font-bold rounded-lg text-xs hover:opacity-90 transition-all cursor-pointer shadow-md disabled:opacity-50"
+                            >
+                                <Check className="w-3.5 h-3.5" />
+                                {updateConfigMutation.isPending ? 'Guardando...' : 'Guardar Configuración'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
