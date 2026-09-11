@@ -203,6 +203,26 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
     }
 
     // ==========================================
+    // HELPERS DE FORMATO DE SUCURSAL
+    // ==========================================
+    private formatBranchName(sucursalNombre: string, ciudadNombre?: string): string {
+        if (!sucursalNombre) return 'Sucursal';
+        if (ciudadNombre && !sucursalNombre.toLowerCase().includes(ciudadNombre.toLowerCase())) {
+            return `${sucursalNombre} (${ciudadNombre})`;
+        }
+        return sucursalNombre;
+    }
+
+    private getSessionBranchDisplay(session: BranchSession): string {
+        return this.formatBranchName(session.sucursalNombre, session.ciudadNombre);
+    }
+
+    private formatSucursalDisplay(sucursal?: Sucursal | null): string {
+        if (!sucursal) return 'Sucursal Central';
+        return this.formatBranchName(sucursal.nombre, sucursal.ciudad?.nombre);
+    }
+
+    // ==========================================
     // GESTIÓN DE SESIONES POR SUCURSAL
     // ==========================================
     private async getOrCreateSession(sucursalId?: number): Promise<BranchSession> {
@@ -236,14 +256,16 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             fs.mkdirSync(authDir, { recursive: true });
         }
 
+        const branchDisplay = this.formatBranchName(sucursalNombre, ciudadNombre);
+
         const defaultConfig: WhatsAppConfig = {
             autoReplyEnabled: true,
             ignoreGroups: true,
             allowClientQueries: true,
             allowSellerQueries: true,
             allowAdminReports: true,
-            botName: `GIPAAF Bot (${sucursalNombre})`,
-            customWelcomeMessage: `¡Hola! Bienvenido al canal oficial de *GIPAAF - ${sucursalNombre}*.`,
+            botName: `GIPAAF Bot (${branchDisplay})`,
+            customWelcomeMessage: `¡Hola! Bienvenido al canal oficial de *GIPAAF - ${branchDisplay}*.`,
             bankAccountsInfo: `*CUENTAS BANCARIAS OFICIALES - GIPAAF*\n\n` +
                 `🏦 *Banco Nacional de Bolivia (BNB)*\n` +
                 `• Cuenta Corriente BOB: 100-01928374\n` +
@@ -815,7 +837,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 let msg = `⛔ *ACCESO DESHABILITADO / REGISTRO INACTIVO*\n\n` +
                     `Hola *${personName}*, tu registro se encuentra actualmente *inactivo* en el sistema de *GIPAAF*.\n\n` +
                     `Para reactivar tu cuenta o coordinar asistencia, comunícate con nuestra sucursal:\n\n` +
-                    `🏢 *${session.sucursalNombre}*\n` +
+                    `🏢 *${this.getSessionBranchDisplay(session)}*\n` +
                     `📍 Dirección: ${sucursalActual?.direccion || 'Oficina Central'}\n` +
                     `📱 Teléfono: ${sucursalActual?.telefono || 'Central'}\n`;
 
@@ -953,7 +975,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 return;
             } else if (query === '3' || query.includes('producto') || query.includes('precio') || query.includes('precios') || query.includes('stock')) {
                 responseText = `🔍 *CONSULTA DE PRODUCTOS Y PRECIOS*\n\n` +
-                    `Escribe directamente el nombre o código del producto que buscas (ej. *barniz*, *thinner*, *catalizador*, *masilla*) para ver su precio y stock disponible en *${session.sucursalNombre}*.`;
+                    `Escribe directamente el nombre o código del producto que buscas (ej. *barniz*, *thinner*, *catalizador*, *masilla*) para ver su precio y stock disponible en *${this.getSessionBranchDisplay(session)}*.`;
             } else if (query === '4' || query.includes('asesor') || query.includes('vendedor') || query.includes('registro') || query.includes('visita')) {
                 responseText = await this.handleSellerContactListQuery(session);
             } else {
@@ -992,7 +1014,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             return;
         } else if (query === '2' || query === 'stock' || query === 'precios') {
             responseText = `🔍 *CONSULTA DE PRECIOS Y STOCK EN TIEMPO REAL*\n\n` +
-                `Escribe el nombre o código del producto que deseas consultar (ej. *barniz*, *thinner*, *catalizador*) para ver las existencias en *${session.sucursalNombre}*.`;
+                `Escribe el nombre o código del producto que deseas consultar (ej. *barniz*, *thinner*, *catalizador*) para ver las existencias en *${this.getSessionBranchDisplay(session)}*.`;
         } else if (query === '3' || query.includes('saldo') || query.includes('deuda') || query.includes('cuenta')) {
             if (isCliente && cliente) {
                 const debtResult = await this.handleClientDebtQuery(cliente, session);
@@ -1086,17 +1108,19 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
     private async sendCatalogPdf(session: BranchSession, jid: string): Promise<boolean> {
         if (!session.sock) return false;
 
+        const branchDisplay = this.getSessionBranchDisplay(session);
+
         try {
             const pdfFilePath = path.join(session.authDir, 'catalog.pdf');
             if (session.config.customCatalogPdf && fs.existsSync(pdfFilePath)) {
                 const pdfBuffer = fs.readFileSync(pdfFilePath);
-                const docName = session.config.catalogPdfName || `Catalogo_GIPAAF_${session.sucursalNombre.replace(/\s+/g, '_')}.pdf`;
+                const docName = session.config.catalogPdfName || `Catalogo_GIPAAF_${branchDisplay.replace(/\s+/g, '_')}.pdf`;
 
                 await session.sock.sendMessage(jid, {
                     document: pdfBuffer,
                     mimetype: 'application/pdf',
                     fileName: docName,
-                    caption: `📄 *Catálogo Oficial de Productos - GIPAAF*\nSucursal: *${session.sucursalNombre}*\nDescárgalo para consultar nuestra línea completa de pinturas y acabados.`
+                    caption: `📄 *Catálogo Oficial de Productos - GIPAAF*\nSucursal: *${branchDisplay}*\nDescárgalo para consultar nuestra línea completa de pinturas y acabados.`
                 });
                 return true;
             } else if (session.config.customCatalogPdf && !session.config.customCatalogPdf.startsWith('FILE_SAVED')) {
@@ -1104,13 +1128,13 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                     ? session.config.customCatalogPdf.split('base64,')[1]
                     : session.config.customCatalogPdf;
                 const pdfBuffer = Buffer.from(base64Data, 'base64');
-                const docName = session.config.catalogPdfName || `Catalogo_GIPAAF_${session.sucursalNombre.replace(/\s+/g, '_')}.pdf`;
+                const docName = session.config.catalogPdfName || `Catalogo_GIPAAF_${branchDisplay.replace(/\s+/g, '_')}.pdf`;
 
                 await session.sock.sendMessage(jid, {
                     document: pdfBuffer,
                     mimetype: 'application/pdf',
                     fileName: docName,
-                    caption: `📄 *Catálogo Oficial de Productos - GIPAAF*\nSucursal: *${session.sucursalNombre}*\nDescárgalo para consultar nuestra línea completa de pinturas y acabados.`
+                    caption: `📄 *Catálogo Oficial de Productos - GIPAAF*\nSucursal: *${branchDisplay}*\nDescárgalo para consultar nuestra línea completa de pinturas y acabados.`
                 });
                 return true;
             }
@@ -1123,12 +1147,12 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 take: 150
             });
 
-            const pdfBuffer = await this.generateCatalogPdfInMemory(productos, session.sucursalNombre);
+            const pdfBuffer = await this.generateCatalogPdfInMemory(productos, branchDisplay);
             await session.sock.sendMessage(jid, {
                 document: pdfBuffer,
                 mimetype: 'application/pdf',
-                fileName: `Catalogo_GIPAAF_${session.sucursalNombre.replace(/\s+/g, '_')}.pdf`,
-                caption: `📄 *Catálogo de Productos - GIPAAF (${session.sucursalNombre})*\nLínea automotriz, ferretería y complementos.`
+                fileName: `Catalogo_GIPAAF_${branchDisplay.replace(/\s+/g, '_')}.pdf`,
+                caption: `📄 *Catálogo de Productos - GIPAAF (${branchDisplay})*\nLínea automotriz, ferretería y complementos.`
             });
 
             return true;
@@ -1245,12 +1269,12 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
         const currentSucursal = sucursales.find(s => s.id === session.sucursalId);
         const otherSucursales = sucursales.filter(s => s.id !== session.sucursalId);
+        const branchDisplay = this.getSessionBranchDisplay(session);
 
-        let resp = `🏢 *INFORMACIÓN DE SUCURSAL - ${session.sucursalNombre.toUpperCase()}*\n\n`;
+        let resp = `🏢 *INFORMACIÓN DE SUCURSAL - ${branchDisplay.toUpperCase()}*\n\n`;
 
         if (currentSucursal) {
-            const ciu = currentSucursal.ciudad?.nombre ? ` (${currentSucursal.ciudad.nombre})` : '';
-            resp += `📍 *${currentSucursal.nombre}${ciu}*\n`;
+            resp += `📍 *${this.formatSucursalDisplay(currentSucursal)}*\n`;
             if (currentSucursal.direccion) resp += `  🏠 Dirección: ${currentSucursal.direccion}\n`;
             if (currentSucursal.telefono) resp += `  📱 Teléfono / WhatsApp: *${currentSucursal.telefono}*\n`;
             if (currentSucursal.email) resp += `  ✉️ Email: ${currentSucursal.email}\n`;
@@ -1264,8 +1288,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         if (otherSucursales.length > 0) {
             resp += `📍 *OTRAS SUCURSALES GIPAAF EN EL PAÍS:*\n\n`;
             otherSucursales.forEach(s => {
-                const ciu = s.ciudad?.nombre ? ` - ${s.ciudad.nombre}` : '';
-                resp += `🏢 *${s.nombre}${ciu}*\n`;
+                resp += `🏢 *${this.formatSucursalDisplay(s)}*\n`;
                 if (s.direccion) resp += `  🏠 Dirección: ${s.direccion}\n`;
                 if (s.telefono) resp += `  📱 Contacto: ${s.telefono}\n`;
                 if (s.latitud && s.longitud) {
@@ -1286,7 +1309,9 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             order: { nombres: 'ASC' }
         });
 
-        let resp = `💼 *ASESORES COMERCIALES - SUCURSAL ${session.sucursalNombre.toUpperCase()}*\n\n` +
+        const branchDisplay = this.getSessionBranchDisplay(session);
+
+        let resp = `💼 *ASESORES COMERCIALES - SUCURSAL ${branchDisplay.toUpperCase()}*\n\n` +
             `Para registrar tu taller, compras por mayor o coordinar la visita de un asesor comercial en tu zona:\n\n`;
 
         if (branchVendedores.length > 0) {
@@ -1300,8 +1325,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                     `───────────────────\n`;
             });
         } else {
-            const currentSuc = await this.sucursalRepo.findOne({ where: { id: session.sucursalId } });
-            resp += `🏢 *Atención Directa ${session.sucursalNombre}*: 📱 ${currentSuc?.telefono || 'Oficina Central'}\n`;
+            const currentSuc = await this.sucursalRepo.findOne({ where: { id: session.sucursalId }, relations: ['ciudad'] });
+            resp += `🏢 *Atención Directa ${this.formatSucursalDisplay(currentSuc)}*: 📱 ${currentSuc?.telefono || 'Oficina Central'}\n`;
         }
 
         resp += `\n✨ _Comunícate directamente con tu asesor para dar de alta tu cuenta o coordinar despachos._`;
@@ -1319,15 +1344,17 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         isCliente: boolean,
         sucursal?: Sucursal
     ): string {
+        const branchDisplay = this.getSessionBranchDisplay(session);
+
         if (!isPersonal && !isCliente) {
             return `🤖 *${session.config.botName}*\n` +
                 `_${session.config.customWelcomeMessage}_\n\n` +
-                `👋 ¡Hola *${userName}*! Te damos la bienvenida a *GIPAAF - ${session.sucursalNombre}*.\n` +
+                `👋 ¡Hola *${userName}*! Te damos la bienvenida a *GIPAAF - ${branchDisplay}*.\n` +
                 `Por favor selecciona una opción respondiendo con el número:\n\n` +
                 `1️⃣ *🏢 Dirección, Contacto y Horarios de Sucursal*\n` +
                 `2️⃣ *📄 Descargar Catálogo General de Productos (PDF)*\n` +
                 `3️⃣ *🔍 Consultar Productos y Precios en Tiempo Real*\n` +
-                `4️⃣ *💼 Contactar a un Asesor Comercial de ${session.sucursalNombre}*\n\n` +
+                `4️⃣ *💼 Contactar a un Asesor Comercial de ${branchDisplay}*\n\n` +
                 `💬 _O escribe directamente el nombre de un producto (ej. catalizador, barniz, thinner) para consultar su precio y stock._`;
         }
 
@@ -1347,7 +1374,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             `4️⃣ *🏦 Cuentas Bancarias e Instrucciones de Pago*\n`;
 
         if (isVendedor || isJefeVentas || isAdmin) {
-            menu += `5️⃣ *🗺️ Mi Ruta de Clientes Asignados (${session.sucursalNombre})*\n`;
+            menu += `5️⃣ *🗺️ Mi Ruta de Clientes Asignados (${branchDisplay})*\n`;
         } else if (isCliente) {
             menu += `5️⃣ *🏢 Dirección, Contacto y Horarios de Sucursales*\n`;
         }
@@ -1355,8 +1382,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         if (isGerente || (isAdmin && !sucursal)) {
             menu += `6️⃣ *📊 Resumen Ejecutivo del Día (Por Sucursal o Consolidado)*\n`;
         } else if ((isAdmin || isJefeVentas) && sucursal) {
-            const sucNom = sucursal.nombre || session.sucursalNombre;
-            menu += `6️⃣ *📊 Resumen Ejecutivo del Día (${sucNom})*\n`;
+            menu += `6️⃣ *📊 Resumen Ejecutivo del Día (${this.formatSucursalDisplay(sucursal)})*\n`;
         }
 
         menu += `\n💬 _También puedes escribir directamente el nombre de un producto (ej. catalizador, barniz, thinner) para buscarlo al instante._`;
@@ -1368,8 +1394,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             `Por favor selecciona la sucursal que deseas consultar respondiendo con el número:\n\n`;
 
         sucursales.forEach((s, idx) => {
-            const ciu = s.ciudad?.nombre ? ` (${s.ciudad.nombre})` : '';
-            text += `*${idx + 1}️⃣* ${s.nombre}${ciu}\n`;
+            text += `*${idx + 1}️⃣* ${this.formatSucursalDisplay(s)}\n`;
         });
 
         text += `*0️⃣* 🌐 *Consolidado General (Todas las Sucursales)*\n\n` +
@@ -1377,7 +1402,6 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
         return text;
     }
-
     private async handleStockQuery(term: string, session: BranchSession, isDirect = false): Promise<string | null> {
         const productos = await this.productoRepo.find({
             where: [
@@ -1391,7 +1415,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             return isDirect ? null : `❌ No encontramos productos que coincidan con "*${term}*".\n\nVerifica el nombre o código y vuelve a intentar.`;
         }
 
-        let resp = `📦 *Resultados para: "${term}" en ${session.sucursalNombre}*\n\n`;
+        const branchDisplay = this.getSessionBranchDisplay(session);
+        let resp = `📦 *Resultados para: "${term}" en ${branchDisplay}*\n\n`;
 
         for (const p of productos) {
             const inventarios = await this.inventarioRepo.find({
@@ -1406,14 +1431,12 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             resp += `🔹 *${p.nombre}*\n` +
                 `• Código: \`${p.codigo}\`\n` +
                 `• Precio Venta: *Bs. ${Number(p.precioVenta || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}*\n` +
-                `• Stock en *${session.sucursalNombre}*: *${stockSucursal} ${p.unidadMedida || 'Unid.'}*\n` +
+                `• Stock en *${branchDisplay}*: *${stockSucursal} ${p.unidadMedida || 'Unid.'}*\n` +
                 `• Stock Global: ${stockTotal} ${p.unidadMedida || 'Unid.'}\n`;
 
             if (inventarios.length > 0) {
                 const stockDetails = inventarios.map(inv => {
-                    const sucNom = inv.sucursal?.nombre || 'Sucursal';
-                    const ciuNom = inv.sucursal?.ciudad?.nombre ? ` (${inv.sucursal.ciudad.nombre})` : '';
-                    return `  ▫️ ${sucNom}${ciuNom}: ${inv.stockActual}`;
+                    return `  ▫️ ${this.formatSucursalDisplay(inv.sucursal)}: ${inv.stockActual}`;
                 }).join('\n');
                 resp += `${stockDetails}\n`;
             } else {
@@ -1436,10 +1459,11 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 tipo: TipoNota.VENTA,
                 estado: EstadoNota.CONFIRMADA
             },
-            relations: ['sucursal', 'detalles', 'detalles.producto'],
+            relations: ['sucursal', 'sucursal.ciudad', 'detalles', 'detalles.producto'],
             order: { fecha: 'ASC' }
         });
 
+        const branchDisplay = this.getSessionBranchDisplay(session);
         const notasConSaldo = notas.filter(n => Number(n.saldo || 0) > 0.01);
         const saldoTotalBOB = notasConSaldo.reduce((acc, n) => {
             const s = Number(n.saldo || 0);
@@ -1448,7 +1472,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
         if (notasConSaldo.length === 0) {
             return {
-                text: `✅ *ESTADO DE CUENTA - ${session.sucursalNombre.toUpperCase()}*\n\n` +
+                text: `✅ *ESTADO DE CUENTA - ${branchDisplay.toUpperCase()}*\n\n` +
                     `¡Buenas noticias, *${clientName}*! Actualmente *no tienes deudas pendientes* con GIPAAF.\n\n` +
                     `¡Gracias por tu puntualidad y confianza! 🤝`,
                 pdfBuffer: null
@@ -1466,7 +1490,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             const monedaSimbolo = n.moneda === 'USD' ? '$us' : 'Bs.';
             const totalFmt = Number(n.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 });
             const saldoFmt = Number(n.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 });
-            const sucNom = n.sucursal?.nombre ? ` (${n.sucursal.nombre})` : '';
+            const sucNom = n.sucursal ? ` (${this.formatSucursalDisplay(n.sucursal)})` : '';
 
             resp += `\n*${idx + 1}. Nota #${n.numero || n.id}*${sucNom}\n` +
                 `  📅 Fecha: ${fechaStr}\n` +
@@ -1480,7 +1504,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
         let pdfBuffer: Buffer | null = null;
         try {
-            pdfBuffer = await this.generateAccountStatementPdfInMemory(cliente, notasConSaldo, saldoTotalBOB, session.sucursalNombre);
+            pdfBuffer = await this.generateAccountStatementPdfInMemory(cliente, notasConSaldo, saldoTotalBOB, branchDisplay);
         } catch (pdfErr) {
             this.logger.error(`Error generando PDF de estado de cuenta para cliente ${cliente.id}:`, pdfErr);
         }
@@ -1496,6 +1520,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const cliente = await this.clienteRepo.createQueryBuilder('cliente')
             .leftJoinAndSelect('cliente.persona', 'persona')
             .leftJoinAndSelect('cliente.sucursal', 'sucursal')
+            .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
             .where('cliente.activo = :activo', { activo: true })
             .andWhere(new Brackets(b => {
                 b.where("LOWER(CONCAT(COALESCE(persona.nombres, ''), ' ', COALESCE(persona.apellidos, ''))) LIKE :term", { term: `%${clientTerm.toLowerCase()}%` })
@@ -1543,7 +1568,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 if (doc.y > 700) doc.addPage();
                 const fechaStr = n.fecha ? new Date(n.fecha).toLocaleDateString('es-BO') : '-';
                 const moneda = n.moneda === 'USD' ? '$us' : 'Bs.';
-                doc.fontSize(10).fillColor('#0f172a').text(`${idx + 1}. Nota #${n.numero || n.id} - Fecha: ${fechaStr}`);
+                const sucStr = n.sucursal ? ` (${this.formatSucursalDisplay(n.sucursal)})` : '';
+                doc.fontSize(10).fillColor('#0f172a').text(`${idx + 1}. Nota #${n.numero || n.id}${sucStr} - Fecha: ${fechaStr}`);
                 doc.fontSize(9).fillColor('#334155').text(`   Total Venta: ${moneda} ${Number(n.total || 0).toFixed(2)} | Saldo Adeudado: ${moneda} ${Number(n.saldo || 0).toFixed(2)}`);
                 doc.moveDown(0.5);
             });
@@ -1559,20 +1585,22 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 activo: true,
                 sucursal: { id: session.sucursalId }
             },
-            relations: ['clientes', 'clientes.persona', 'sucursal']
+            relations: ['clientes', 'clientes.persona', 'sucursal', 'sucursal.ciudad']
         });
+
+        const branchDisplay = this.getSessionBranchDisplay(session);
 
         if (!rutas || rutas.length === 0) {
             // Check in other branches
             const allRutas = await this.rutaRepo.find({
                 where: { vendedor: { id: vendedorId }, activo: true },
-                relations: ['clientes', 'clientes.persona', 'sucursal']
+                relations: ['clientes', 'clientes.persona', 'sucursal', 'sucursal.ciudad']
             });
 
             if (allRutas.length > 0) {
                 let resp = `📍 *RUTAS ASIGNADAS - ASESOR COMERCIAL*\n👤 Asesor: *${userName}*\n\n`;
                 allRutas.forEach(r => {
-                    resp += `🗺️ *Ruta: ${r.nombre} (${r.sucursal?.nombre || 'Sucursal'})*\n`;
+                    resp += `🗺️ *Ruta: ${r.nombre} (${this.formatSucursalDisplay(r.sucursal)})*\n`;
                     resp += `* Total Clientes: ${r.clientes?.length || 0}\n`;
                     (r.clientes || []).slice(0, 10).forEach((c, idx) => {
                         const name = c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : 'Cliente';
@@ -1583,10 +1611,10 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 return resp;
             }
 
-            return `📍 *RUTAS ASIGNADAS*\n\nHola *${userName}*, actualmente no tienes rutas con clientes asignadas en *${session.sucursalNombre}*.\n\nComunícate con tu Jefe de Ventas para asignar tu ruta.`;
+            return `📍 *RUTAS ASIGNADAS*\n\nHola *${userName}*, actualmente no tienes rutas con clientes asignadas en *${branchDisplay}*.\n\nComunícate con tu Jefe de Ventas para asignar tu ruta.`;
         }
 
-        let resp = `📍 *TUS RUTAS Y CLIENTES ASIGNADOS (${session.sucursalNombre.toUpperCase()})*\n\n`;
+        let resp = `📍 *TUS RUTAS Y CLIENTES ASIGNADOS (${branchDisplay.toUpperCase()})*\n\n`;
 
         rutas.forEach(r => {
             resp += `🗺️ *Ruta: ${r.nombre}*\n`;
@@ -1614,12 +1642,11 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
     private async handleAdminDailySummary(targetSucursal: Sucursal | null, session?: BranchSession): Promise<string> {
         const todayStr = new Date().toISOString().substring(0, 10);
         const sucursalId = targetSucursal ? targetSucursal.id : (session ? session.sucursalId : null);
-        const sucursalNom = targetSucursal ? targetSucursal.nombre : (session ? session.sucursalNombre : null);
-        const ciudadNom = targetSucursal?.ciudad?.nombre || '';
 
         // 1. VENTAS
         const ventasQuery = this.notaRepo.createQueryBuilder('nota')
             .leftJoinAndSelect('nota.sucursal', 'sucursal')
+            .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
             .where('nota.tipo = :tipo', { tipo: TipoNota.VENTA })
             .andWhere('nota.activo = :activo', { activo: true })
             .andWhere('nota.estado = :estado', { estado: EstadoNota.CONFIRMADA })
@@ -1640,6 +1667,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const cobQuery = this.pagoCobranzaRepo.createQueryBuilder('pago')
             .leftJoinAndSelect('pago.nota', 'nota')
             .leftJoinAndSelect('nota.sucursal', 'sucursal')
+            .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
             .where('pago.activo = :activo', { activo: true })
             .andWhere('DATE(pago.fecha) = :today', { today: todayStr });
 
@@ -1669,6 +1697,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const pagosProvQuery = this.pagoProveedorRepo.createQueryBuilder('pago')
             .leftJoinAndSelect('pago.nota', 'nota')
             .leftJoinAndSelect('nota.sucursal', 'sucursal')
+            .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
             .where('pago.activo = :activo', { activo: true })
             .andWhere('DATE(pago.fecha) = :today', { today: todayStr });
         if (sucursalId) pagosProvQuery.andWhere('nota.sucursal.id = :sucursalId', { sucursalId });
@@ -1682,6 +1711,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
         const egrQuery = this.egresoRepo.createQueryBuilder('egreso')
             .leftJoinAndSelect('egreso.sucursal', 'sucursal')
+            .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
             .where('egreso.activo = :activo', { activo: true })
             .andWhere('DATE(egreso.fecha) = :today', { today: todayStr });
         if (sucursalId) egrQuery.andWhere('egreso.sucursal.id = :sucursalId', { sucursalId });
@@ -1698,9 +1728,9 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const flujoNeto = totalCobranzas - totalEgresos;
 
         const fechaFormateada = todayStr.split('-').reverse().join('/');
-        const ambitoStr = sucursalId 
-            ? `${sucursalNom || 'Sucursal'}${ciudadNom ? ` (${ciudadNom})` : ''}`
-            : 'Consolidado General (Todas las Sucursales)';
+        const ambitoStr = targetSucursal 
+            ? this.formatSucursalDisplay(targetSucursal)
+            : (session && sucursalId ? this.getSessionBranchDisplay(session) : 'Consolidado General (Todas las Sucursales)');
 
         let msg = `📊 *RESUMEN EJECUTIVO DIARIO - GIPAAF*\n` +
             `📍 Ámbito: *${ambitoStr}*\n` +
