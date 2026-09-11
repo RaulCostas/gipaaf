@@ -2,6 +2,16 @@ import axios from 'axios';
 
 export const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:3001';
 
+export const getFileUrl = (url?: string | null): string => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+        return url;
+    }
+    const cleanBase = API_BASE_URL.replace(/\/+$/, '');
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    return `${cleanBase}${cleanPath}`;
+};
+
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
     headers: {

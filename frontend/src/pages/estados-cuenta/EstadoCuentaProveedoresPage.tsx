@@ -1,3 +1,4 @@
+import { getFileUrl } from '../../api/apiClient';
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { purchaseService } from '../../api/purchaseService';
@@ -701,7 +702,7 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
                                                         {p.comprobanteUrl ? (
                                                             p.comprobanteUrl.toLowerCase().endsWith('.pdf') ? (
                                                                 <a 
-                                                                    href={`http://127.0.0.1:3001${p.comprobanteUrl}`} 
+                                                                    href={getFileUrl(p.comprobanteUrl)} 
                                                                     target="_blank" 
                                                                     rel="noopener noreferrer" 
                                                                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
@@ -711,14 +712,14 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
                                                                 </a>
                                                             ) : (
                                                                 <a
-                                                                    href={`http://127.0.0.1:3001${p.comprobanteUrl}`}
+                                                                    href={getFileUrl(p.comprobanteUrl)}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                     className="inline-flex items-center gap-1 p-0.5 rounded hover:ring-2 hover:ring-primary/40 transition-all"
                                                                     title="Ver comprobante de pago"
                                                                 >
                                                                     <img 
-                                                                        src={`http://127.0.0.1:3001${p.comprobanteUrl}`} 
+                                                                        src={getFileUrl(p.comprobanteUrl)} 
                                                                         alt="Voucher" 
                                                                         className="w-6 h-6 object-cover rounded border" 
                                                                     />

@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productService } from '../../api/productService';
 import type { Producto } from '../../api/productService';
+import { getFileUrl } from '../../api/apiClient';
 import { categoryService } from '../../api/categoryService';
 import { marcaService } from '../../api/marcaService';
 import { grupoService } from '../../api/grupoService';
@@ -515,7 +516,7 @@ const ProductosPage: React.FC = () => {
                                 {currentProduct.imagen ? (
                                     <div className="relative w-20 h-20 rounded-lg border bg-muted overflow-hidden group">
                                         <img
-                                            src={`http://127.0.0.1:3001${currentProduct.imagen}`}
+                                            src={getFileUrl(currentProduct.imagen)}
                                             alt="Preview"
                                             className="w-full h-full object-cover"
                                         />
@@ -643,7 +644,7 @@ const ProductosPage: React.FC = () => {
                                         <div className="w-10 h-10 rounded-lg border bg-background overflow-hidden flex items-center justify-center">
                                             {prod.imagen ? (
                                                  <img
-                                                     src={`http://127.0.0.1:3001${prod.imagen}`}
+                                                     src={getFileUrl(prod.imagen)}
                                                      alt={prod.nombre}
                                                      className="w-full h-full object-cover"
                                                  />

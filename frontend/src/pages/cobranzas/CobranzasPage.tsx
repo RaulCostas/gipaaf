@@ -1,3 +1,4 @@
+import { getFileUrl } from '../../api/apiClient';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cobranzaService, type PagoCobranza } from '../../api/cobranzaService';
@@ -848,7 +849,7 @@ const CobranzasPage: React.FC = () => {
                                             {p.comprobanteUrl ? (
                                                 p.comprobanteUrl.toLowerCase().endsWith('.pdf') ? (
                                                     <a 
-                                                        href={`http://127.0.0.1:3001${p.comprobanteUrl}`} 
+                                                        href={getFileUrl(p.comprobanteUrl)} 
                                                         target="_blank" 
                                                         rel="noopener noreferrer" 
                                                         className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
@@ -864,7 +865,7 @@ const CobranzasPage: React.FC = () => {
                                                         title="Ver comprobante de pago"
                                                     >
                                                         <img 
-                                                            src={`http://127.0.0.1:3001${p.comprobanteUrl}`} 
+                                                            src={getFileUrl(p.comprobanteUrl)} 
                                                             alt="Voucher" 
                                                             className="w-7 h-7 object-cover rounded border" 
                                                         />
@@ -1286,7 +1287,7 @@ const CobranzasPage: React.FC = () => {
                                             </div>
                                         ) : (
                                             <img 
-                                                src={`http://127.0.0.1:3001${formData.comprobanteUrl}`} 
+                                                src={getFileUrl(formData.comprobanteUrl)} 
                                                 alt="Comprobante" 
                                                 className="w-12 h-12 object-cover rounded-lg border shadow-sm" 
                                             />
@@ -1302,7 +1303,7 @@ const CobranzasPage: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <a
-                                            href={`http://127.0.0.1:3001${formData.comprobanteUrl}`}
+                                            href={getFileUrl(formData.comprobanteUrl)}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="px-2.5 py-1.5 text-xs font-bold bg-card border rounded-lg hover:bg-accent text-primary transition-all flex items-center gap-1 shadow-sm"
@@ -1389,14 +1390,14 @@ const CobranzasPage: React.FC = () => {
                     <div className="space-y-4">
                         <div className="border rounded-xl overflow-hidden bg-black/5 flex items-center justify-center p-2">
                             <img
-                                src={`http://127.0.0.1:3001${viewingComprobante}`}
+                                src={getFileUrl(viewingComprobante)}
                                 alt="Comprobante Completo"
                                 className="max-h-[70vh] object-contain rounded-lg shadow-md"
                             />
                         </div>
                         <div className="flex justify-between items-center pt-2">
                             <a
-                                href={`http://127.0.0.1:3001${viewingComprobante}`}
+                                href={getFileUrl(viewingComprobante)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-xs font-bold text-primary hover:underline flex items-center gap-1"

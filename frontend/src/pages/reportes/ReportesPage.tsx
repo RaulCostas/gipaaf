@@ -1,3 +1,4 @@
+import { getFileUrl } from '../../api/apiClient';
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cobranzaService } from '../../api/cobranzaService';
@@ -2060,7 +2061,7 @@ const ReportesPage: React.FC = () => {
                                                             <div className="w-8 h-8 rounded-lg border bg-background overflow-hidden flex items-center justify-center shrink-0">
                                                                 {p.imagen ? (
                                                                     <img
-                                                                        src={`http://127.0.0.1:3001${p.imagen}`}
+                                                                        src={getFileUrl(p.imagen)}
                                                                         alt={p.nombre}
                                                                         className="w-full h-full object-cover"
                                                                     />
@@ -2675,7 +2676,7 @@ const ReportesPage: React.FC = () => {
                                                         {p.comprobanteUrl ? (
                                                             p.comprobanteUrl.toLowerCase().endsWith('.pdf') ? (
                                                                 <a 
-                                                                    href={`http://127.0.0.1:3001${p.comprobanteUrl}`} 
+                                                                    href={getFileUrl(p.comprobanteUrl)} 
                                                                     target="_blank" 
                                                                     rel="noopener noreferrer" 
                                                                     className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
@@ -2691,7 +2692,7 @@ const ReportesPage: React.FC = () => {
                                                                     title="Ver comprobante de pago"
                                                                 >
                                                                     <img 
-                                                                        src={`http://127.0.0.1:3001${p.comprobanteUrl}`} 
+                                                                        src={getFileUrl(p.comprobanteUrl)} 
                                                                         alt="Voucher" 
                                                                         className="w-7 h-7 object-cover rounded border" 
                                                                     />
@@ -3234,7 +3235,7 @@ const ReportesPage: React.FC = () => {
                                                         {p.comprobanteUrl ? (
                                                             p.comprobanteUrl.toLowerCase().endsWith('.pdf') ? (
                                                                 <a 
-                                                                    href={`http://127.0.0.1:3001${p.comprobanteUrl}`} 
+                                                                    href={getFileUrl(p.comprobanteUrl)} 
                                                                     target="_blank" 
                                                                     rel="noopener noreferrer" 
                                                                     className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
@@ -3250,7 +3251,7 @@ const ReportesPage: React.FC = () => {
                                                                     title="Ver comprobante de pago"
                                                                 >
                                                                     <img 
-                                                                        src={`http://127.0.0.1:3001${p.comprobanteUrl}`} 
+                                                                        src={getFileUrl(p.comprobanteUrl)} 
                                                                         alt="Voucher" 
                                                                         className="w-7 h-7 object-cover rounded border" 
                                                                     />
@@ -3359,7 +3360,7 @@ const ReportesPage: React.FC = () => {
                 <div className="flex justify-center p-2">
                     {viewingComprobante && (
                         <img 
-                            src={`http://127.0.0.1:3001${viewingComprobante}`} 
+                            src={getFileUrl(viewingComprobante)} 
                             alt="Comprobante de Pago" 
                             className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-md" 
                         />

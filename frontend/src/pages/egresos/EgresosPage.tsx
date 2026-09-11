@@ -1,3 +1,4 @@
+import { getFileUrl } from '../../api/apiClient';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { egresoService, type Egreso, type CreateEgresoDto } from '../../api/egresoService';
@@ -732,7 +733,7 @@ const EgresosPage: React.FC = () => {
                                 <FileText className="w-16 h-16 text-red-500 mx-auto" />
                                 <p className="text-sm text-muted-foreground">Este comprobante es un documento PDF.</p>
                                 <a 
-                                    href={`http://127.0.0.1:3001${viewingComprobante}`} 
+                                    href={getFileUrl(viewingComprobante)} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-bold shadow-sm"
@@ -742,7 +743,7 @@ const EgresosPage: React.FC = () => {
                             </div>
                         ) : (
                             <img 
-                                src={`http://127.0.0.1:3001${viewingComprobante}`} 
+                                src={getFileUrl(viewingComprobante)} 
                                 alt="Comprobante" 
                                 className="max-h-[500px] w-auto object-contain rounded-lg border shadow-sm" 
                             />
@@ -824,7 +825,7 @@ const EgresosPage: React.FC = () => {
                                                 {egreso.comprobanteUrl ? (
                                                     egreso.comprobanteUrl.toLowerCase().endsWith('.pdf') ? (
                                                         <a 
-                                                            href={`http://127.0.0.1:3001${egreso.comprobanteUrl}`} 
+                                                            href={getFileUrl(egreso.comprobanteUrl)} 
                                                             target="_blank" 
                                                             rel="noopener noreferrer" 
                                                             className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
@@ -840,7 +841,7 @@ const EgresosPage: React.FC = () => {
                                                             title="Ver comprobante"
                                                         >
                                                             <img 
-                                                                src={`http://127.0.0.1:3001${egreso.comprobanteUrl}`} 
+                                                                src={getFileUrl(egreso.comprobanteUrl)} 
                                                                 alt="Comprobante" 
                                                                 className="w-7 h-7 object-cover rounded border" 
                                                             />
