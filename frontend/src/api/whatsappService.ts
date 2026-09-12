@@ -105,4 +105,48 @@ export const whatsappService = {
         });
         return response.data;
     },
+    sendProformaPdf: async (payload: { proformaId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-proforma', payload);
+        return response.data;
+    },
+    sendVentaPdf: async (payload: { ventaId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-venta', payload);
+        return response.data;
+    },
+    sendCobranzaPdf: async (payload: { pagoId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-cobranza', payload);
+        return response.data;
+    },
+    sendCompraPdf: async (payload: { compraId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-compra', payload);
+        return response.data;
+    },
+    sendPagoProveedorPdf: async (payload: { pagoId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-pago-proveedor', payload);
+        return response.data;
+    },
+    sendTraspasoPdf: async (payload: { traspasoId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-traspaso', payload);
+        return response.data;
+    },
+    sendDevolucionPdf: async (payload: { devolucionId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-devolucion', payload);
+        return response.data;
+    },
+    sendMuestraPdf: async (payload: { muestraId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-muestra', payload);
+        return response.data;
+    },
+    sendCarteraVendedorPdf: async (payload: { vendedorId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string; totalSaldo: number; totalClientes: number; totalNotas: number }>('/whatsapp/send-cartera-vendedor', payload);
+        return response.data;
+    },
+    sendEstadoCuentaClientePdf: async (payload: { clienteId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-estado-cuenta-cliente', payload);
+        return response.data;
+    },
+    sendEstadoCuentaVentaPdf: async (payload: { ventaId: number; phone?: string; sucursalId?: number; message?: string }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-estado-cuenta-venta', payload);
+        return response.data;
+    },
 };

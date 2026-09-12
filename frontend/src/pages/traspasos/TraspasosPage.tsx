@@ -9,13 +9,18 @@ import {
     Search, Plus, Trash2, ArrowLeftRight, 
     X, Save, ChevronLeft, ChevronRight,
     Printer, FileText, FileSpreadsheet, AlertTriangle,
-    Building2, Calendar, Eye, Truck, Package, CheckCircle2, XCircle, Filter
+    Building2, Calendar, Eye, Truck, Package, CheckCircle2, XCircle, Filter,
+    MessageCircle, Send, Loader2, ExternalLink
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import { toast } from 'sonner';
-import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { format } from 'date-fns';
 import { useFilters } from '../../context/FilterContext';
+import { useAuth } from '../../context/AuthContext';
+import { whatsappService } from '../../api/whatsappService';
 
 interface ItemForm {
     productoId: number;
@@ -28,6 +33,7 @@ interface ItemForm {
 }
 
 const TraspasosPage: React.FC = () => {
+    const { userPersonal } = useAuth();
     const { selectedSucursal, selectedCiudad } = useFilters();
     const queryClient = useQueryClient();
 
@@ -38,6 +44,56 @@ const TraspasosPage: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOrigenId, setSelectedOrigenId] = useState<string>('all');
     const [selectedDestinoId, setSelectedDestinoId] = useState<string>('all');
+
+    // WhatsApp State & Mutations
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 10000,
+    });
+
+    const [whatsappModalData, setWhatsappModalData] = useState<{
+        isOpen: boolean;
+        traspaso: Traspaso | null;
+        phone: string;
+        sucursalId: string;
+        customMessage: string;
+    }>({
+        isOpen: false,
+        traspaso: null,
+        phone: '',
+        sucursalId: '',
+        customMessage: ''
+    });
+
+    const sendWhatsAppMutation = useMutation({
+        mutationFn: (payload: { traspasoId: number; phone?: string; sucursalId?: number; message?: string }) =>
+            traspasoService.sendWhatsApp(payload.traspasoId, payload.phone, payload.sucursalId, payload.message),
+        onSuccess: (data) => {
+            toast.success(data.message || 'Guía de traspaso enviada exitosamente por WhatsApp');
+            setWhatsappModalData(prev => ({ ...prev, isOpen: false, traspaso: null }));
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Error al enviar guía de traspaso por WhatsApp');
+        }
+    });
+
+    const handleOpenWhatsAppModal = (traspaso: Traspaso) => {
+        const destPhone = (traspaso.sucursalDestino || traspaso.almacenDestino)?.telefono || '';
+        const initialSucursalId = (traspaso.sucursalOrigen || traspaso.almacenOrigen)?.id 
+            ? String((traspaso.sucursalOrigen || traspaso.almacenOrigen)?.id) 
+            : ((traspaso.sucursalDestino || traspaso.almacenDestino)?.id 
+                ? String((traspaso.sucursalDestino || traspaso.almacenDestino)?.id) 
+                : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : (sucursales && sucursales[0] ? String(sucursales[0].id) : '')));
+
+        setWhatsappModalData({
+            isOpen: true,
+            traspaso,
+            phone: destPhone,
+            sucursalId: initialSucursalId,
+            customMessage: ''
+        });
+    };
     const [statusFilter, setStatusFilter] = useState<'TODOS' | 'COMPLETADO' | 'ANULADO'>('TODOS');
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
@@ -491,6 +547,146 @@ const TraspasosPage: React.FC = () => {
         exportToExcel(getExportColumns(), mappedExportData, 'traspasos_sucursales_reporte');
     };
 
+    const handlePrintIndividualTraspaso = async (t: Traspaso) => {
+        const doc = new jsPDF();
+        try {
+            const logoBase64 = await getBase64ImageFromURL('/logo.jpeg');
+            doc.addImage(logoBase64, 'JPEG', 14, 10, 38, 16);
+        } catch (e) {
+            console.warn('Logo could not be loaded for PDF', e);
+        }
+
+        doc.setFontSize(14);
+        doc.setTextColor(40, 40, 40);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`GUÍA DE TRASPASO ENTRE SUCURSALES`, 196, 16, { align: 'right' });
+        doc.setFontSize(11);
+        doc.setTextColor(80, 80, 80);
+        doc.text(`N° ${t.codigo || 'TRS-' + t.id}`, 196, 22, { align: 'right' });
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(60, 60, 60);
+        let currentY = 36;
+
+        const sucOrigen = t.sucursalOrigen || t.almacenOrigen;
+        const sucDestino = t.sucursalDestino || t.almacenDestino;
+        const fechaFormatted = t.fecha ? String(t.fecha).split('T')[0].split('-').reverse().join('/') : '-';
+        const usuarioNombre = t.usuario?.persona ? `${t.usuario.persona.nombres} ${t.usuario.persona.apellidos || ''}`.trim() : (t.usuario?.username || 'Sistema');
+        const origenNombre = sucOrigen ? `${sucOrigen.nombre}${(sucOrigen as any)?.ciudad?.nombre ? ` (${(sucOrigen as any).ciudad.nombre})` : ''}` : '-';
+        const destinoNombre = sucDestino ? `${sucDestino.nombre}${(sucDestino as any)?.ciudad?.nombre ? ` (${(sucDestino as any).ciudad.nombre})` : ''}` : '-';
+
+        doc.text(`Fecha: ${fechaFormatted}`, 14, currentY);
+        doc.text(`Estado: ${t.estado}`, 110, currentY);
+        currentY += 5;
+
+        doc.text(`Sucursal Origen (Salida): ${origenNombre}`, 14, currentY);
+        currentY += 5;
+
+        doc.text(`Sucursal Destino (Ingreso): ${destinoNombre}`, 14, currentY);
+        currentY += 5;
+
+        const costoTxt = Number(t.costoTransporte) > 0 
+            ? `Bs. ${Number(t.costoTransporte).toLocaleString('es-BO', { minimumFractionDigits: 2 })} (Cargo: ${t.sucursalCargoCosto === 'DESTINO' ? 'Destino' : 'Origen'})`
+            : 'Bs. 0.00 (Sin Costo)';
+        doc.text(`Costo Transporte: ${costoTxt}`, 14, currentY);
+        doc.text(`Registrado por: ${usuarioNombre}`, 110, currentY);
+        currentY += 5;
+
+        if (t.motivo || t.observaciones) {
+            const obs = `${t.motivo ? `Motivo: ${t.motivo}` : ''}${t.motivo && t.observaciones ? ' | ' : ''}${t.observaciones ? `Obs: ${t.observaciones}` : ''}`;
+            doc.text(obs, 14, currentY, { maxWidth: 182 });
+            currentY += 6;
+        }
+
+        const tableColumn = ["#", "Código", "Producto", "Lote / Vencimiento", "Cantidad", "Observación"];
+        let totalUnidades = 0;
+
+        const tableRows = (t.detalles || []).map((det: any, idx: number) => {
+            const cantNum = Number(det.cantidad || 0);
+            totalUnidades += cantNum;
+
+            let loteVencStr = '-';
+            let lotesList: any[] = [];
+            if (det.lotesDetalle) {
+                try {
+                    lotesList = JSON.parse(det.lotesDetalle);
+                } catch (e) {
+                    lotesList = [];
+                }
+            }
+
+            if (lotesList.length > 0) {
+                loteVencStr = lotesList.map((lt: any) => {
+                    const venc = lt.fechaVencimiento ? String(lt.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') : '';
+                    return `Lote ${lt.numeroLote || 'S/N'} (${lt.cantidad} u.)${venc ? ' - Venc: ' + venc : ''}`;
+                }).join('\n');
+            } else if (det.numeroLote) {
+                const venc = det.fechaVencimiento ? String(det.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') : '';
+                loteVencStr = `Lote ${det.numeroLote}${venc ? ' - Venc: ' + venc : ''}`;
+            }
+
+            return [
+                (idx + 1).toString(),
+                det.producto?.codigo || '-',
+                det.producto?.nombre || '-',
+                loteVencStr,
+                `${cantNum} ${det.producto?.unidadMedida || 'u.'}`,
+                det.observacion || '-'
+            ];
+        });
+
+        autoTable(doc, {
+            startY: currentY + 3,
+            head: [tableColumn],
+            body: tableRows,
+            styles: {
+                font: 'helvetica',
+                fontSize: 8.5,
+                cellPadding: 2.5,
+            },
+            headStyles: {
+                fillColor: [59, 130, 246],
+                textColor: 255,
+                fontStyle: 'bold',
+                halign: 'center'
+            },
+            alternateRowStyles: {
+                fillColor: [248, 250, 252]
+            },
+            columnStyles: {
+                0: { halign: 'center', cellWidth: 10 },
+                1: { halign: 'center', cellWidth: 22 },
+                2: { halign: 'left', cellWidth: 55 },
+                3: { halign: 'left', cellWidth: 50 },
+                4: { halign: 'right', cellWidth: 25 },
+                5: { halign: 'left', cellWidth: 24 },
+            }
+        });
+
+        const finalY = (doc as any).lastAutoTable.finalY + 10;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(30, 41, 59);
+        doc.text(`Total Ítems: ${(t.detalles || []).length} | Total Unidades: ${totalUnidades.toLocaleString('es-BO')}`, 14, finalY);
+
+        const signY = finalY + 26 > 270 ? 270 : finalY + 26;
+        doc.setDrawColor(180, 180, 180);
+        doc.line(14, signY, 68, signY);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.text("Entregué Conforme\n(Sucursal Origen)", 41, signY + 4, { align: "center" });
+
+        doc.line(78, signY, 132, signY);
+        doc.text("Transporte / Chofer\n(Conformidad)", 105, signY + 4, { align: "center" });
+
+        doc.line(142, signY, 196, signY);
+        doc.text("Recibí Conforme\n(Sucursal Destino)", 169, signY + 4, { align: "center" });
+
+        window.open(doc.output('bloburl'), '_blank');
+    };
+
     if (isLoading) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando traspasos entre sucursales...</div>;
 
     return (
@@ -802,6 +998,20 @@ const TraspasosPage: React.FC = () => {
                                                     title="Ver Detalle de Traspaso"
                                                 >
                                                     <Eye className="w-3.5 h-3.5 text-primary" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handlePrintIndividualTraspaso(t)}
+                                                    className="px-2.5 py-1.5 bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                    title="Imprimir Guía de Traspaso"
+                                                >
+                                                    <Printer className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleOpenWhatsAppModal(t)}
+                                                    className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                                                    title="Enviar Guía de Traspaso por WhatsApp (PDF)"
+                                                >
+                                                    <MessageCircle className="w-3.5 h-3.5" />
                                                 </button>
                                                 {!isAnulado && (
                                                     <button
@@ -1425,15 +1635,32 @@ const TraspasosPage: React.FC = () => {
                         )}
 
                         <div className="flex justify-between items-center pt-3 border-t">
-                            {viewingTraspaso.estado === 'COMPLETADO' && (
+                            <div className="flex items-center gap-2">
+                                {viewingTraspaso.estado === 'COMPLETADO' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setAnularConfirmId(viewingTraspaso.id)}
+                                        className="px-3 py-2 bg-red-600/10 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" /> Anular Traspaso
+                                    </button>
+                                )}
                                 <button
                                     type="button"
-                                    onClick={() => setAnularConfirmId(viewingTraspaso.id)}
-                                    className="px-3 py-2 bg-red-600/10 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
+                                    onClick={() => handlePrintIndividualTraspaso(viewingTraspaso)}
+                                    className="px-3 py-2 bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                    title="Imprimir Guía de Traspaso"
                                 >
-                                    <Trash2 className="w-3.5 h-3.5" /> Anular Traspaso
+                                    <Printer className="w-3.5 h-3.5" /> Imprimir
                                 </button>
-                            )}
+                                <button
+                                    type="button"
+                                    onClick={() => handleOpenWhatsAppModal(viewingTraspaso)}
+                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                >
+                                    <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                                </button>
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => setViewingTraspaso(null)}
@@ -1485,6 +1712,186 @@ const TraspasosPage: React.FC = () => {
                         </button>
                     </div>
                 </div>
+            </Modal>
+
+            {/* Modal para Enviar Guía de Traspaso por WhatsApp */}
+            <Modal
+                isOpen={whatsappModalData.isOpen}
+                onClose={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false, traspaso: null }))}
+                title={
+                    <span className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <MessageCircle className="w-5 h-5" />
+                        Enviar Guía de Traspaso por WhatsApp
+                    </span>
+                }
+                className="max-w-lg"
+            >
+                {whatsappModalData.traspaso && (
+                    <div className="space-y-4">
+                        {/* Card resumen de traspaso */}
+                        <div className="p-3.5 bg-muted/40 border rounded-xl space-y-1 text-sm">
+                            <div className="flex justify-between items-center font-bold">
+                                <span className="text-foreground">Traspaso N° {whatsappModalData.traspaso.codigo || `TR-${whatsappModalData.traspaso.id}`}</span>
+                                <span className="text-primary text-base">
+                                    {whatsappModalData.traspaso.detalles?.reduce((acc, d) => acc + Number(d.cantidad || 0), 0) || 0} Unidades
+                                </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground flex justify-between items-center">
+                                <span>Origen: <strong className="text-foreground">{(whatsappModalData.traspaso.sucursalOrigen || whatsappModalData.traspaso.almacenOrigen)?.nombre || '-'}</strong></span>
+                                <span>Destino: <strong className="text-foreground">{(whatsappModalData.traspaso.sucursalDestino || whatsappModalData.traspaso.almacenDestino)?.nombre || '-'}</strong></span>
+                            </div>
+                            <div className="text-xs text-muted-foreground flex justify-between items-center pt-1 border-t border-border/40">
+                                <span>Fecha: {format(new Date(whatsappModalData.traspaso.fecha + 'T00:00:00'), 'dd/MM/yyyy')}</span>
+                                {Number(whatsappModalData.traspaso.costoTransporte) > 0 && (
+                                    <span>Flete: <strong className="text-foreground">Bs. {Number(whatsappModalData.traspaso.costoTransporte).toFixed(2)}</strong></span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Input de Teléfono */}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                <span>Número de WhatsApp Destinatario (Encargado / Chofer)</span>
+                                <span className="text-[10px] text-muted-foreground font-normal">Prefijo: +591 (Bolivia)</span>
+                            </label>
+                            <div className="flex rounded-lg border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary/20">
+                                <span className="px-3 py-2 bg-muted text-xs font-semibold text-muted-foreground flex items-center border-r">
+                                    🇧🇴 +591
+                                </span>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: 71234567"
+                                    value={whatsappModalData.phone}
+                                    onChange={(e) => setWhatsappModalData(prev => ({ ...prev, phone: e.target.value }))}
+                                    className="flex-1 px-3 py-2 text-sm bg-transparent outline-none font-medium"
+                                />
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                                El destinatario recibirá el documento PDF oficial de la guía de traspaso emitido por el sistema.
+                            </p>
+                        </div>
+
+                        {/* Canal de WhatsApp Automático de la Sucursal */}
+                        <div className="p-3 bg-muted/30 border rounded-xl flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                                    <Building2 className="w-4 h-4 text-primary" />
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                    <span className="text-[11px] text-muted-foreground font-medium">Canal de Envío (Sucursal):</span>
+                                    {(() => {
+                                        const sucursalTargetId = whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : (whatsappModalData.traspaso.sucursalOrigen?.id || whatsappModalData.traspaso.almacenOrigen?.id);
+                                        const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(sucursalTargetId));
+                                        const branchName = curBranch?.sucursalNombre || (whatsappModalData.traspaso.sucursalOrigen || whatsappModalData.traspaso.almacenOrigen)?.nombre || 'Sucursal Origen';
+                                        const ciudadNombre = curBranch?.ciudadNombre;
+                                        const branchDisplay = ciudadNombre ? `${branchName} (${ciudadNombre})` : branchName;
+                                        return (
+                                            <span className="text-xs font-bold text-foreground truncate">{branchDisplay}</span>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                            {(() => {
+                                const sucursalTargetId = whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : (whatsappModalData.traspaso.sucursalOrigen?.id || whatsappModalData.traspaso.almacenOrigen?.id);
+                                const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(sucursalTargetId));
+                                const isConn = curBranch?.status === 'CONNECTED';
+                                return (
+                                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 border shrink-0 transition-colors ${
+                                        isConn 
+                                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
+                                            : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                                    }`}>
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${isConn ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                        <span>{isConn ? 'Bot Conectado' : 'Bot No Conectado'}</span>
+                                    </span>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Mensaje adicional opcional */}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-muted-foreground">Mensaje o Nota Opcional (Pie del PDF)</label>
+                            <textarea
+                                rows={2}
+                                value={whatsappModalData.customMessage}
+                                onChange={(e) => setWhatsappModalData(prev => ({ ...prev, customMessage: e.target.value }))}
+                                placeholder="Escribe una nota personalizada si deseas acompañar la guía con un mensaje específico..."
+                                className="w-full p-2.5 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/60"
+                            />
+                        </div>
+
+                        {/* Botones de acción */}
+                        <div className="pt-3 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                            {(() => {
+                                const cleanDigits = (whatsappModalData.phone || '').replace(/\D/g, '');
+                                const phoneWithCountry = cleanDigits.length === 8 ? `591${cleanDigits}` : cleanDigits;
+                                const defaultText = encodeURIComponent(
+                                    `Hola, le enviamos la Guía de Traspaso N° ${whatsappModalData.traspaso.codigo || `TR-${whatsappModalData.traspaso.id}`}.`
+                                );
+                                const waLink = `https://wa.me/${phoneWithCountry}?text=${defaultText}`;
+
+                                return (
+                                    <a
+                                        href={phoneWithCountry ? waLink : '#'}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => {
+                                            if (!phoneWithCountry) {
+                                                e.preventDefault();
+                                                toast.error('Ingrese un número de teléfono para abrir WhatsApp Web');
+                                            }
+                                        }}
+                                        className={`px-3 py-2 border rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center gap-1.5 transition-colors ${!phoneWithCountry ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="Abrir chat directo en WhatsApp Web"
+                                    >
+                                        <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>WhatsApp Web</span>
+                                    </a>
+                                );
+                            })()}
+
+                            <div className="flex items-center gap-2 justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false, traspaso: null }))}
+                                    className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={sendWhatsAppMutation.isPending || !whatsappModalData.phone.trim()}
+                                    onClick={() => {
+                                        if (!whatsappModalData.traspaso) return;
+                                        if (!whatsappModalData.phone.trim()) {
+                                            toast.error('Ingrese el número de teléfono de destino');
+                                            return;
+                                        }
+                                        sendWhatsAppMutation.mutate({
+                                            traspasoId: whatsappModalData.traspaso.id,
+                                            phone: whatsappModalData.phone.trim(),
+                                            sucursalId: whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : undefined,
+                                            message: whatsappModalData.customMessage.trim() || undefined
+                                        });
+                                    }}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {sendWhatsAppMutation.isPending ? (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            Enviando PDF...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="w-3.5 h-3.5" />
+                                            Enviar PDF
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );

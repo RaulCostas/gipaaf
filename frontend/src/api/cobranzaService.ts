@@ -52,5 +52,14 @@ export const cobranzaService = {
             },
         });
         return response.data;
+    },
+    sendWhatsApp: async (pagoId: number, phone?: string, message?: string, sucursalId?: number) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-cobranza', {
+            pagoId,
+            phone,
+            message,
+            sucursalId
+        });
+        return response.data;
     }
 };

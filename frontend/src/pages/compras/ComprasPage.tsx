@@ -10,7 +10,7 @@ import { getCiudades } from '../../api/ciudadService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
 import { CostoImportacionModal } from '../../components/compras/CostoImportacionModal';
-import { X, Search, Plus, Trash2, CheckCircle, CheckCircle2, Check, Package, Calculator, Calendar, ChevronRight, Eye, Edit, Ban, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Users, Lock, Info } from 'lucide-react';
+import { X, Search, Plus, Trash2, CheckCircle, CheckCircle2, Check, Package, Calculator, Calendar, ChevronRight, Eye, Edit, Ban, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Users, Lock, Info, MessageSquare, Send, Loader2, ExternalLink, Globe, MessageCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
@@ -18,9 +18,63 @@ import { format } from 'date-fns';
 import { formatDate } from '../../utils/dateUtils';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
+import { whatsappService } from '../../api/whatsappService';
+
+const COUNTRY_CODES = [
+    { code: '+591', label: 'Bolivia (+591)', flag: '🇧🇴' },
+    { code: '+54', label: 'Argentina (+54)', flag: '🇦🇷' },
+    { code: '+56', label: 'Chile (+56)', flag: '🇨🇱' },
+    { code: '+51', label: 'Perú (+51)', flag: '🇵🇪' },
+    { code: '+55', label: 'Brasil (+55)', flag: '🇧🇷' },
+    { code: '+595', label: 'Paraguay (+595)', flag: '🇵🇾' },
+    { code: '+598', label: 'Uruguay (+598)', flag: '🇺🇾' },
+    { code: '+57', label: 'Colombia (+57)', flag: '🇨🇴' },
+    { code: '+52', label: 'México (+52)', flag: '🇲🇽' },
+    { code: '+1', label: 'EE.UU. / Canadá (+1)', flag: '🇺🇸' },
+    { code: '+86', label: 'China (+86)', flag: '🇨🇳' },
+    { code: '+34', label: 'España (+34)', flag: '🇪🇸' },
+    { code: '+49', label: 'Alemania (+49)', flag: '🇩🇪' },
+    { code: '+91', label: 'India (+91)', flag: '🇮🇳' },
+    { code: 'custom', label: 'Otro / Directo', flag: '🌐' },
+];
+
+const parsePhoneAndCountry = (rawPhone: string) => {
+    const clean = (rawPhone || '').replace(/\D/g, '');
+    if (!clean) return { countryCode: '+591', phoneNumber: '' };
+
+    for (const item of COUNTRY_CODES) {
+        if (item.code === 'custom') continue;
+        const prefixDigits = item.code.replace('+', '');
+        if (clean.startsWith(prefixDigits) && clean.length > prefixDigits.length) {
+            return {
+                countryCode: item.code,
+                phoneNumber: clean.slice(prefixDigits.length),
+            };
+        }
+    }
+
+    if (clean.length === 8) {
+        return { countryCode: '+591', phoneNumber: clean };
+    }
+
+    return { countryCode: 'custom', phoneNumber: clean };
+};
+
+const getFullPhoneNumber = (countryCode: string, phone: string) => {
+    const cleanPhone = (phone || '').replace(/\D/g, '');
+    if (!cleanPhone) return '';
+    if (countryCode === 'custom') {
+        return cleanPhone;
+    }
+    const prefixDigits = countryCode.replace('+', '');
+    if (cleanPhone.startsWith(prefixDigits)) {
+        return cleanPhone;
+    }
+    return `${prefixDigits}${cleanPhone}`;
+};
 
 const ComprasPage: React.FC = () => {
-    const { isAdmin, hasAction } = useAuth();
+    const { isAdmin, hasAction, userPersonal } = useAuth();
     const canCreate = isAdmin || hasAction('COMPRAS', 'CREAR');
     const canEdit = isAdmin || hasAction('COMPRAS', 'EDITAR');
     const canConfirm = isAdmin || hasAction('COMPRAS', 'CONFIRMAR');
@@ -42,6 +96,60 @@ const ComprasPage: React.FC = () => {
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [error, setError] = useState<string | null>(null);
+
+    // WhatsApp State & Mutations
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 10000,
+    });
+
+    const [whatsappModalData, setWhatsappModalData] = useState<{
+        isOpen: boolean;
+        compra: any | null;
+        countryCode: string;
+        phone: string;
+        sucursalId: string;
+        customMessage: string;
+    }>({
+        isOpen: false,
+        compra: null,
+        countryCode: '+591',
+        phone: '',
+        sucursalId: '',
+        customMessage: ''
+    });
+
+    const sendWhatsAppMutation = useMutation({
+        mutationFn: (payload: { compraId: number; phone?: string; sucursalId?: number; message?: string }) =>
+            purchaseService.sendWhatsApp(payload.compraId, payload.phone, payload.sucursalId, payload.message),
+        onSuccess: (data) => {
+            toast.success(data.message || 'Orden de compra enviada exitosamente por WhatsApp');
+            setWhatsappModalData(prev => ({ ...prev, isOpen: false, compra: null }));
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Error al enviar orden de compra por WhatsApp');
+        }
+    });
+
+    const handleOpenWhatsAppModal = (compra: any) => {
+        const rawPhone = compra.proveedor?.persona?.telefono || compra.proveedor?.telefono || '';
+        const { countryCode, phoneNumber } = parsePhoneAndCountry(rawPhone);
+        const initialSucursalId = compra.sucursal?.id 
+            ? String(compra.sucursal.id) 
+            : (compra.almacen?.sucursal?.id 
+                ? String(compra.almacen.sucursal.id) 
+                : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : (sucursales && sucursales[0] ? String(sucursales[0].id) : '')));
+
+        setWhatsappModalData({
+            isOpen: true,
+            compra,
+            countryCode,
+            phone: phoneNumber,
+            sucursalId: initialSucursalId,
+            customMessage: ''
+        });
+    };
 
     // Form State
     const [newNota, setNewNota] = useState<any>({
@@ -683,6 +791,13 @@ const ComprasPage: React.FC = () => {
                                         >
                                             <Eye className="w-3" /> Ver
                                         </button>
+                                        <button
+                                            onClick={() => handleOpenWhatsAppModal(p)}
+                                            className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
+                                            title="Enviar Orden de Compra en PDF por WhatsApp"
+                                        >
+                                            <MessageCircle className="w-3" /> WhatsApp
+                                        </button>
                                         {canCostosImportacion && p.estado === EstadoNota.CONFIRMADA && (() => {
                                             const hasImportCost = Boolean(
                                                 p.costoImportacion && (
@@ -1006,13 +1121,25 @@ const ComprasPage: React.FC = () => {
                             </button>
                             
                             {isViewing && (
-                                <button
-                                    type="button"
-                                    onClick={handlePrintIndividualCompra}
-                                    className="px-6 py-2.5 bg-secondary text-secondary-foreground rounded-xl text-sm font-bold shadow-md hover:bg-secondary/90 transition-all active:scale-95 flex items-center gap-2"
-                                >
-                                    <Printer className="w-4 h-4" /> Imprimir
-                                </button>
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={handlePrintIndividualCompra}
+                                        className="px-6 py-2.5 bg-secondary text-secondary-foreground rounded-xl text-sm font-bold shadow-md hover:bg-secondary/90 transition-all active:scale-95 flex items-center gap-2"
+                                    >
+                                        <Printer className="w-4 h-4" /> Imprimir
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const currentComp = purchases?.find(p => p.id === newNota.id) || newNota;
+                                            handleOpenWhatsAppModal(currentComp);
+                                        }}
+                                        className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-md hover:scale-[1.02] transition-all active:scale-95 flex items-center gap-2"
+                                    >
+                                        <MessageCircle className="w-4 h-4" /> WhatsApp
+                                    </button>
+                                </>
                             )}
 
                             {!isViewing && (
@@ -1085,6 +1212,198 @@ const ComprasPage: React.FC = () => {
                     queryClient.invalidateQueries({ queryKey: ['products'] });
                 }}
             />
+
+            {/* Modal para Enviar Orden de Compra por WhatsApp */}
+            <Modal
+                isOpen={whatsappModalData.isOpen}
+                onClose={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false, compra: null }))}
+                title={
+                    <span className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-lg">
+                        <MessageCircle className="w-5 h-5 text-emerald-600" />
+                        Enviar Orden de Compra por WhatsApp
+                    </span>
+                }
+                className="max-w-lg"
+            >
+                {whatsappModalData.compra && (
+                    <div className="space-y-4">
+                        {/* Card resumen de la Orden de Compra */}
+                        <div className="p-3.5 bg-muted/40 border rounded-xl space-y-1 text-sm">
+                            <div className="flex justify-between items-center font-bold">
+                                <span className="text-foreground">Orden de Compra N° {whatsappModalData.compra.numero || whatsappModalData.compra.id}</span>
+                                <span className="text-primary text-base">
+                                    {formatCurrency(whatsappModalData.compra.total, whatsappModalData.compra.moneda)}
+                                </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground flex justify-between items-center">
+                                <span>Proveedor: {whatsappModalData.compra.proveedor?.empresa || (whatsappModalData.compra.proveedor?.persona ? `${whatsappModalData.compra.proveedor.persona.nombres} ${whatsappModalData.compra.proveedor.persona.apellidos}` : 'Proveedor')}</span>
+                                <span>{formatDate(whatsappModalData.compra.fecha)}</span>
+                            </div>
+                            {whatsappModalData.compra.proveedor?.persona && (
+                                <div className="text-xs text-muted-foreground pt-1 border-t border-border/40">
+                                    Contacto: {whatsappModalData.compra.proveedor.persona.nombres} {whatsappModalData.compra.proveedor.persona.apellidos} {whatsappModalData.compra.proveedor.persona.telefono ? `(${whatsappModalData.compra.proveedor.persona.telefono})` : ''}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Campo Número Destinatario con Código de País Internacional */}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                <span>Número de WhatsApp Proveedor</span>
+                                <span className="text-[10px] text-muted-foreground font-normal">Nacional o Exterior</span>
+                            </label>
+                            <div className="flex rounded-lg border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary/20">
+                                <select
+                                    value={whatsappModalData.countryCode}
+                                    onChange={(e) => setWhatsappModalData(prev => ({ ...prev, countryCode: e.target.value }))}
+                                    className="px-2.5 py-2 bg-muted text-xs font-semibold text-foreground border-r outline-none cursor-pointer"
+                                >
+                                    {COUNTRY_CODES.map((c) => (
+                                        <option key={c.code} value={c.code}>
+                                            {c.flag} {c.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="text"
+                                    value={whatsappModalData.phone}
+                                    onChange={(e) => setWhatsappModalData(prev => ({ ...prev, phone: e.target.value }))}
+                                    placeholder={whatsappModalData.countryCode === '+591' ? 'Ej. 70012345' : 'Ej. 9 11 2345 6789'}
+                                    className="flex-1 px-3 py-2 text-sm bg-transparent outline-none font-medium"
+                                />
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                                <span>
+                                    Número final: <strong className="font-mono text-emerald-700 dark:text-emerald-400">+{getFullPhoneNumber(whatsappModalData.countryCode, whatsappModalData.phone) || '...'}</strong>
+                                </span>
+                                {whatsappModalData.countryCode === '+591' && (
+                                    <span>Bolivia (+591 auto)</span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Canal de WhatsApp Automático de la Sucursal */}
+                        <div className="p-3 bg-muted/30 border rounded-xl flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                                    <Building2 className="w-4 h-4 text-primary" />
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                    <span className="text-[11px] text-muted-foreground font-medium">Canal de Envío (Sucursal):</span>
+                                    {(() => {
+                                        const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(whatsappModalData.sucursalId));
+                                        const foundSucursal = sucursales?.find(s => String(s.id) === String(whatsappModalData.sucursalId));
+                                        const ciudadNombre = curBranch?.ciudadNombre || (foundSucursal?.ciudad as any)?.nombre;
+                                        const branchName = curBranch?.sucursalNombre || foundSucursal?.nombre || 'Sucursal Central';
+                                        const branchDisplay = ciudadNombre ? `${branchName} (${ciudadNombre})` : branchName;
+                                        return (
+                                            <span className="text-xs font-bold text-foreground truncate">{branchDisplay}</span>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                            {(() => {
+                                const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(whatsappModalData.sucursalId));
+                                const isConn = curBranch?.status === 'CONNECTED';
+                                return (
+                                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 border shrink-0 transition-colors ${
+                                        isConn 
+                                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
+                                            : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                                    }`}>
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${isConn ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                        <span>{isConn ? 'Bot Conectado' : 'Bot No Conectado'}</span>
+                                    </span>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Mensaje adicional opcional */}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-muted-foreground">Mensaje o Nota Opcional (Pie del PDF)</label>
+                            <textarea
+                                rows={2}
+                                value={whatsappModalData.customMessage}
+                                onChange={(e) => setWhatsappModalData(prev => ({ ...prev, customMessage: e.target.value }))}
+                                placeholder="Escribe una nota personalizada si deseas acompañar el PDF con un mensaje específico..."
+                                className="w-full p-2.5 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/60"
+                            />
+                        </div>
+
+                        {/* Botones de acción */}
+                        <div className="pt-3 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                            {/* Fallback WhatsApp Web */}
+                            {(() => {
+                                const fullPhone = getFullPhoneNumber(whatsappModalData.countryCode, whatsappModalData.phone);
+                                const defaultText = encodeURIComponent(
+                                    `Estimado(s) *${whatsappModalData.compra.proveedor?.empresa || 'Proveedor'}*, le enviamos la Orden de Compra N° ${whatsappModalData.compra.numero || whatsappModalData.compra.id} emitida por GIPAAF.`
+                                );
+                                const waLink = `https://wa.me/${fullPhone}?text=${defaultText}`;
+
+                                return (
+                                    <a
+                                        href={fullPhone ? waLink : '#'}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => {
+                                            if (!fullPhone) {
+                                                e.preventDefault();
+                                                toast.error('Ingrese un número de teléfono para abrir WhatsApp Web');
+                                            }
+                                        }}
+                                        className={`px-3 py-2 border rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center gap-1.5 transition-colors ${!fullPhone ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="Abrir chat directo en WhatsApp Web"
+                                    >
+                                        <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>WhatsApp Web</span>
+                                    </a>
+                                );
+                            })()}
+
+                            <div className="flex items-center gap-2 justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false, compra: null }))}
+                                    className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={sendWhatsAppMutation.isPending || !whatsappModalData.phone.trim()}
+                                    onClick={() => {
+                                        if (!whatsappModalData.compra) return;
+                                        const fullPhone = getFullPhoneNumber(whatsappModalData.countryCode, whatsappModalData.phone);
+                                        if (!fullPhone) {
+                                            toast.error('Ingrese el número de teléfono del proveedor');
+                                            return;
+                                        }
+                                        sendWhatsAppMutation.mutate({
+                                            compraId: whatsappModalData.compra.id,
+                                            phone: fullPhone,
+                                            sucursalId: whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : undefined,
+                                            message: whatsappModalData.customMessage.trim() || undefined
+                                        });
+                                    }}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {sendWhatsAppMutation.isPending ? (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            Enviando PDF...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="w-3.5 h-3.5" />
+                                            Enviar PDF
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };

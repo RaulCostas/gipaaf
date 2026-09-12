@@ -29,4 +29,13 @@ export const returnService = {
         const response = await apiClient.put<Nota>(`/notas/${id}/anular`);
         return response.data;
     },
+    sendWhatsApp: async (id: number, phone?: string, sucursalId?: number, message?: string) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-devolucion', {
+            devolucionId: id,
+            phone,
+            sucursalId,
+            message,
+        });
+        return response.data;
+    },
 };

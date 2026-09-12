@@ -24,6 +24,281 @@ export class SendTestDto {
     usuarioId?: any;
 }
 
+export class SendProformaDto {
+    @ApiProperty({ description: 'ID de la proforma / cotización' })
+    @IsNumber()
+    @IsNotEmpty()
+    proformaId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendVentaDto {
+    @ApiProperty({ description: 'ID de la nota de venta' })
+    @IsNumber()
+    @IsNotEmpty()
+    ventaId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendCobranzaDto {
+    @ApiProperty({ description: 'ID del pago de cobranza' })
+    @IsNumber()
+    @IsNotEmpty()
+    pagoId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendCompraDto {
+    @ApiProperty({ description: 'ID de la nota de compra' })
+    @IsNumber()
+    @IsNotEmpty()
+    compraId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendPagoProveedorDto {
+    @ApiProperty({ description: 'ID del pago a proveedor' })
+    @IsNumber()
+    @IsNotEmpty()
+    pagoId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendTraspasoDto {
+    @ApiProperty({ description: 'ID del traspaso entre sucursales' })
+    @IsNumber()
+    @IsNotEmpty()
+    traspasoId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendDevolucionDto {
+    @ApiProperty({ description: 'ID de la nota de devolución' })
+    @IsNumber()
+    @IsNotEmpty()
+    devolucionId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendMuestraDto {
+    @ApiProperty({ description: 'ID de la muestra de productos' })
+    @IsNumber()
+    @IsNotEmpty()
+    muestraId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendCarteraVendedorDto {
+    @ApiProperty({ description: 'ID del personal / vendedor' })
+    @IsNumber()
+    @IsNotEmpty()
+    vendedorId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendEstadoCuentaClienteDto {
+    @ApiProperty({ description: 'ID del cliente' })
+    @IsNumber()
+    @IsNotEmpty()
+    clienteId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
+export class SendEstadoCuentaVentaDto {
+    @ApiProperty({ description: 'ID de la venta / nota' })
+    @IsNumber()
+    @IsNotEmpty()
+    ventaId: number;
+
+    @ApiProperty({ required: false, description: 'Número de teléfono o JID destinatario' })
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @ApiProperty({ required: false, description: 'ID de la sucursal de WhatsApp emisora' })
+    @IsOptional()
+    @IsNumber()
+    sucursalId?: number;
+
+    @ApiProperty({ required: false, description: 'Mensaje o pie personalizado que acompaña al PDF' })
+    @IsOptional()
+    @IsString()
+    message?: string;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
 export class ConnectBranchDto {
     @ApiProperty({ required: false, description: 'ID de la sucursal' })
     @IsOptional()
@@ -162,5 +437,68 @@ export class WhatsAppController {
         const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
         await this.whatsAppService.sendTestMessage(body.phone, body.message, sId);
         return { message: 'Mensaje de prueba enviado exitosamente' };
+    }
+
+    @Post('send-proforma')
+    async sendProforma(@Body() body: SendProformaDto) {
+        const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
+        return await this.whatsAppService.sendProformaPdf(body.proformaId, body.phone, sId, body.message);
+    }
+
+    @Post('send-venta')
+    async sendVenta(@Body() body: SendVentaDto) {
+        const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
+        return await this.whatsAppService.sendVentaPdf(body.ventaId, body.phone, sId, body.message);
+    }
+
+    @Post('send-cobranza')
+    async sendCobranza(@Body() body: SendCobranzaDto) {
+        const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
+        return await this.whatsAppService.sendCobranzaPdf(body.pagoId, body.phone, sId, body.message);
+    }
+
+    @Post('send-compra')
+    async sendCompra(@Body() body: SendCompraDto) {
+        const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
+        return await this.whatsAppService.sendCompraPdf(body.compraId, body.phone, sId, body.message);
+    }
+
+    @Post('send-pago-proveedor')
+    async sendPagoProveedor(@Body() body: SendPagoProveedorDto) {
+        const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
+        return await this.whatsAppService.sendPagoProveedorPdf(body.pagoId, body.phone, sId, body.message);
+    }
+
+    @Post('send-traspaso')
+    async sendTraspaso(@Body() body: SendTraspasoDto) {
+        const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
+        return await this.whatsAppService.sendTraspasoPdf(body.traspasoId, body.phone, sId, body.message);
+    }
+
+    @Post('send-devolucion')
+    async sendDevolucion(@Body() body: SendDevolucionDto) {
+        const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
+        return await this.whatsAppService.sendDevolucionPdf(body.devolucionId, body.phone, sId, body.message);
+    }
+
+    @Post('send-muestra')
+    async sendMuestra(@Body() body: SendMuestraDto) {
+        const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
+        return await this.whatsAppService.sendMuestraPdf(body.muestraId, body.phone, sId, body.message);
+    }
+
+    @Post('send-cartera-vendedor')
+    async sendCarteraVendedor(@Body() body: SendCarteraVendedorDto) {
+        return await this.whatsAppService.sendCarteraVendedorPdf(body);
+    }
+
+    @Post('send-estado-cuenta-cliente')
+    async sendEstadoCuentaCliente(@Body() body: SendEstadoCuentaClienteDto) {
+        return await this.whatsAppService.sendEstadoCuentaClientePdf(body);
+    }
+
+    @Post('send-estado-cuenta-venta')
+    async sendEstadoCuentaVenta(@Body() body: SendEstadoCuentaVentaDto) {
+        return await this.whatsAppService.sendEstadoCuentaVentaPdf(body);
     }
 }

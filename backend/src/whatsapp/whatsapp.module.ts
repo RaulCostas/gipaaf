@@ -17,6 +17,7 @@ import { Sucursal } from '../sucursales/sucursal.entity';
 import { PagoProveedor } from '../pagos-proveedores/pago-proveedor.entity';
 import { CostoImportacion } from '../notas/costo-importacion.entity';
 import { Traspaso } from '../traspasos/traspaso.entity';
+import { Muestra } from '../muestras/muestra.entity';
 
 @Module({
     imports: [
@@ -34,6 +35,7 @@ import { Traspaso } from '../traspasos/traspaso.entity';
             PagoProveedor,
             CostoImportacion,
             Traspaso,
+            Muestra,
         ]),
     ],
     controllers: [WhatsAppController],

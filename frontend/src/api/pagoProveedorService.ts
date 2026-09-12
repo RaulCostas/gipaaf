@@ -52,5 +52,14 @@ export const pagoProveedorService = {
             },
         });
         return response.data;
-    }
+    },
+    sendWhatsApp: async (id: number, phone?: string, sucursalId?: number, message?: string) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-pago-proveedor', {
+            pagoId: id,
+            phone,
+            sucursalId,
+            message,
+        });
+        return response.data;
+    },
 };

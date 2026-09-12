@@ -115,4 +115,14 @@ export const muestraService = {
         const response = await apiClient.put<Muestra>(`/muestras/${id}/anular`);
         return response.data;
     },
+
+    sendWhatsApp: async (muestraId: number, phone?: string, sucursalId?: number, message?: string) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-muestra', {
+            muestraId,
+            phone,
+            sucursalId,
+            message,
+        });
+        return response.data;
+    },
 };

@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesService } from '../../api/salesService';
+import { whatsappService } from '../../api/whatsappService';
 import { EstadoNota, TipoNota } from '../../api/purchaseService';
 import { clientService } from '../../api/clientService';
 import { personalService } from '../../api/personalService';
@@ -13,7 +14,7 @@ import { getCiudades } from '../../api/ciudadService';
 
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
-import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, User, Package, Calendar, X, Eye, Edit, AlertTriangle, FileText, Receipt, Building2, Info, CreditCard, Clock, FileSpreadsheet, Filter, Lock } from 'lucide-react';
+import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, User, Package, Calendar, X, Eye, Edit, AlertTriangle, FileText, Receipt, Building2, Info, CreditCard, Clock, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -147,6 +148,54 @@ const ventasPage: React.FC = () => {
         mutationFn: salesService.anular,
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sales'] })
     });
+
+    // WhatsApp State & Mutations
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 10000,
+    });
+
+    const [whatsappModalData, setWhatsappModalData] = useState<{
+        isOpen: boolean;
+        venta: any | null;
+        phone: string;
+        sucursalId: string;
+        customMessage: string;
+    }>({
+        isOpen: false,
+        venta: null,
+        phone: '',
+        sucursalId: '',
+        customMessage: ''
+    });
+
+    const sendWhatsAppMutation = useMutation({
+        mutationFn: (payload: { ventaId: number; phone?: string; sucursalId?: number; message?: string }) =>
+            salesService.sendWhatsApp(payload),
+        onSuccess: (data) => {
+            toast.success(data.message || 'Nota de venta enviada exitosamente por WhatsApp');
+            setWhatsappModalData(prev => ({ ...prev, isOpen: false, venta: null }));
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Error al enviar nota de venta por WhatsApp');
+        }
+    });
+
+    const handleOpenWhatsAppModal = (venta: any) => {
+        const clientPhone = venta.cliente?.persona?.telefono || '';
+        const initialSucursalId = venta.sucursal?.id 
+            ? String(venta.sucursal.id) 
+            : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : (sucursales && sucursales[0] ? String(sucursales[0].id) : ''));
+
+        setWhatsappModalData({
+            isOpen: true,
+            venta,
+            phone: clientPhone,
+            sucursalId: initialSucursalId,
+            customMessage: ''
+        });
+    };
 
     
     const resetForm = () => {
@@ -818,6 +867,13 @@ const ventasPage: React.FC = () => {
                                         >
                                             <Eye className="w-3" /> Ver
                                         </button>
+                                        <button
+                                            onClick={() => handleOpenWhatsAppModal(s)}
+                                            className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
+                                            title="Enviar Nota de Venta en PDF por WhatsApp"
+                                        >
+                                            <MessageCircle className="w-3" /> WhatsApp
+                                        </button>
                                         {s.estado !== EstadoNota.ANULADA && (
                                             <button
                                                 onClick={() => handleEdit(s)}
@@ -1295,13 +1351,37 @@ const ventasPage: React.FC = () => {
                             </button>
                             
                             {isViewing && (
-                                <button
-                                    type="button"
-                                    onClick={handlePrintIndividualVenta}
-                                    className="px-6 py-2.5 bg-secondary text-secondary-foreground rounded-xl text-sm font-bold shadow-md hover:bg-secondary/90 transition-all active:scale-95 flex items-center gap-2"
-                                >
-                                    <Printer className="w-4 h-4" /> Imprimir
-                                </button>
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={handlePrintIndividualVenta}
+                                        className="px-6 py-2.5 bg-secondary text-secondary-foreground rounded-xl text-sm font-bold shadow-md hover:bg-secondary/90 transition-all active:scale-95 flex items-center gap-2"
+                                    >
+                                        <Printer className="w-4 h-4" /> Imprimir
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const currentVenta = ventas?.find(v => v.id === editingId) || {
+                                                id: editingId,
+                                                numero: newVenta.numero,
+                                                total: calculateTotals().total,
+                                                cliente: clients?.find(c => c.id.toString() === newVenta.clienteId),
+                                                sucursal: sucursales?.find((s: any) => s.id.toString() === newVenta.sucursalId),
+                                                vendedor: vendedores?.find(v => v.id.toString() === newVenta.vendedorId),
+                                                fecha: newVenta.fecha,
+                                                observaciones: newVenta.observaciones,
+                                                conFactura: newVenta.conFactura,
+                                                numeroFactura: newVenta.numeroFactura
+                                            };
+                                            handleOpenWhatsAppModal(currentVenta);
+                                        }}
+                                        className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-md hover:bg-emerald-700 transition-all active:scale-95 flex items-center gap-2"
+                                        title="Enviar Nota de Venta en PDF por WhatsApp"
+                                    >
+                                        <MessageCircle className="w-4 h-4" /> WhatsApp
+                                    </button>
+                                </>
                             )}
 
                             {!isViewing && (
@@ -1356,6 +1436,178 @@ const ventasPage: React.FC = () => {
                         </button>
                     </div>
                 </div>
+            </Modal>
+
+            {/* Modal de Envío de Nota de Venta por WhatsApp */}
+            <Modal
+                isOpen={whatsappModalData.isOpen}
+                onClose={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false }))}
+                title={
+                    <span className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-lg">
+                        <MessageCircle className="w-5 h-5 text-emerald-600" />
+                        Enviar Nota de Venta por WhatsApp
+                    </span>
+                }
+                className="max-w-lg"
+            >
+                {whatsappModalData.venta && (
+                    <div className="space-y-4">
+                        {/* Card resumen de venta */}
+                        <div className="p-3.5 bg-muted/40 border rounded-xl space-y-1 text-sm">
+                            <div className="flex justify-between items-center font-bold">
+                                <span className="text-foreground">Nota de Venta N° {whatsappModalData.venta.numero || whatsappModalData.venta.id}</span>
+                                <span className="text-primary text-base">{formatCurrency(whatsappModalData.venta.total)}</span>
+                            </div>
+                            <div className="text-xs text-muted-foreground flex justify-between items-center">
+                                <span>Cliente: {whatsappModalData.venta.cliente?.persona ? `${whatsappModalData.venta.cliente.persona.nombres} ${whatsappModalData.venta.cliente.persona.apellidos}` : 'Cliente Final'}</span>
+                                <span>{whatsappModalData.venta.fecha ? String(whatsappModalData.venta.fecha).split('T')[0].split('-').reverse().join('/') : '-'}</span>
+                            </div>
+                        </div>
+
+                        {/* Input de Teléfono */}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                <span>Número de WhatsApp Destinatario</span>
+                                <span className="text-[10px] text-muted-foreground font-normal">Prefijo: +591 (Bolivia)</span>
+                            </label>
+                            <div className="flex rounded-lg border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary/20">
+                                <span className="px-3 py-2 bg-muted text-xs font-semibold text-muted-foreground flex items-center border-r">
+                                    🇧🇴 +591
+                                </span>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: 71234567"
+                                    value={whatsappModalData.phone}
+                                    onChange={(e) => setWhatsappModalData(prev => ({ ...prev, phone: e.target.value }))}
+                                    className="flex-1 px-3 py-2 text-sm bg-transparent outline-none font-medium"
+                                />
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                                El cliente recibirá el comprobante de venta en PDF oficial generado por el sistema.
+                            </p>
+                        </div>
+
+                        {/* Canal de WhatsApp Automático de la Sucursal */}
+                        <div className="p-3 bg-muted/30 border rounded-xl flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                                    <Building2 className="w-4 h-4 text-primary" />
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                    <span className="text-[11px] text-muted-foreground font-medium">Canal de Envío (Sucursal):</span>
+                                    {(() => {
+                                        const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(whatsappModalData.sucursalId));
+                                        const foundSucursal = sucursales?.find(s => String(s.id) === String(whatsappModalData.sucursalId));
+                                        const ciudadNombre = curBranch?.ciudadNombre || (foundSucursal?.ciudad as any)?.nombre;
+                                        const branchName = curBranch?.sucursalNombre || foundSucursal?.nombre || 'Sucursal Central';
+                                        const branchDisplay = ciudadNombre ? `${branchName} (${ciudadNombre})` : branchName;
+                                        return (
+                                            <span className="text-xs font-bold text-foreground truncate">{branchDisplay}</span>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                            {(() => {
+                                const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(whatsappModalData.sucursalId));
+                                const isConn = curBranch?.status === 'CONNECTED';
+                                return (
+                                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 border shrink-0 transition-colors ${
+                                        isConn 
+                                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
+                                            : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                                    }`}>
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${isConn ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                        <span>{isConn ? 'Bot Conectado' : 'Bot No Conectado'}</span>
+                                    </span>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Mensaje adicional opcional */}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-muted-foreground">Mensaje o Nota Opcional (Pie del PDF)</label>
+                            <textarea
+                                rows={2}
+                                value={whatsappModalData.customMessage}
+                                onChange={(e) => setWhatsappModalData(prev => ({ ...prev, customMessage: e.target.value }))}
+                                placeholder="Escribe una nota personalizada si deseas acompañar el PDF con un mensaje específico..."
+                                className="w-full p-2.5 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/60"
+                            />
+                        </div>
+
+                        {/* Botones de acción */}
+                        <div className="pt-3 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                            {/* Fallback WhatsApp Web */}
+                            {(() => {
+                                const cleanPhone = (whatsappModalData.phone || '').replace(/\D/g, '');
+                                const phoneWithCountry = cleanPhone.length === 8 ? `591${cleanPhone}` : cleanPhone;
+                                const clienteNombre = whatsappModalData.venta.cliente?.persona ? `${whatsappModalData.venta.cliente.persona.nombres || ''} ${whatsappModalData.venta.cliente.persona.apellidos || ''}`.trim() : 'Cliente';
+                                const webText = encodeURIComponent(
+                                    `Hola ${clienteNombre}, te compartimos el comprobante de tu Nota de Venta N° ${whatsappModalData.venta.numero || whatsappModalData.venta.id} emitida por GIPAAF por un total de Bs. ${Number(whatsappModalData.venta.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}. ¡Muchas gracias por tu compra!`
+                                );
+                                const waLink = `https://wa.me/${phoneWithCountry}?text=${webText}`;
+
+                                return (
+                                    <a
+                                        href={phoneWithCountry ? waLink : '#'}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => {
+                                            if (!phoneWithCountry) {
+                                                e.preventDefault();
+                                                toast.error('Ingrese un número de teléfono para abrir WhatsApp Web');
+                                            }
+                                        }}
+                                        className={`px-3 py-2 border rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center gap-1.5 transition-colors ${!phoneWithCountry ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="Abrir chat directo en WhatsApp Web"
+                                    >
+                                        <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>WhatsApp Web</span>
+                                    </a>
+                                );
+                            })()}
+
+                            <div className="flex items-center gap-2 justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false }))}
+                                    className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={sendWhatsAppMutation.isPending || !whatsappModalData.phone.trim()}
+                                    onClick={() => {
+                                        if (!whatsappModalData.phone.trim()) {
+                                            toast.error('Ingrese el número de teléfono del cliente');
+                                            return;
+                                        }
+                                        sendWhatsAppMutation.mutate({
+                                            ventaId: whatsappModalData.venta.id,
+                                            phone: whatsappModalData.phone.trim(),
+                                            sucursalId: whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : undefined,
+                                            message: whatsappModalData.customMessage.trim() || undefined
+                                        });
+                                    }}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {sendWhatsAppMutation.isPending ? (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            Enviando PDF...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="w-3.5 h-3.5" />
+                                            Enviar PDF
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );
