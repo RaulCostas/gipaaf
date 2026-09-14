@@ -8,7 +8,7 @@ import { productService } from '../../api/productService';
 import { format } from 'date-fns';
 import { 
     Search, History, FileText, FileSpreadsheet, Printer, 
-    X, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, RefreshCw, Filter, Calendar, Package
+    X, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, RefreshCw, Filter, Calendar, Package, Loader2
 } from 'lucide-react';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { formatQuantity } from '../../utils/currencyUtils';
@@ -29,21 +29,25 @@ const MovimientosPage: React.FC = () => {
     const { data: movimientos, isLoading } = useQuery({
         queryKey: ['movimientos'],
         queryFn: movimientoService.getAll,
+        staleTime: 30000,
     });
 
     const { data: productos } = useQuery({
         queryKey: ['productosList'],
         queryFn: () => productService.getAll(),
+        staleTime: 60000,
     });
 
     const { data: sucursales } = useQuery({
         queryKey: ['sucursalesList'],
         queryFn: sucursalService.getAll,
+        staleTime: 60000,
     });
 
     const { data: ciudades } = useQuery({
         queryKey: ['ciudadesList'],
         queryFn: getCiudades,
+        staleTime: 60000,
     });
 
     const selectedProduct = useMemo(() => {
@@ -597,8 +601,11 @@ const MovimientosPage: React.FC = () => {
                         <tbody className="divide-y">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={12} className="p-8 text-center text-muted-foreground animate-pulse text-sm">
-                                        Cargando movimientos de inventario...
+                                    <td colSpan={12} className="p-12 text-center text-muted-foreground">
+                                        <div className="flex flex-col items-center justify-center gap-2.5">
+                                            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                                            <span className="text-sm font-medium">Cargando movimientos de inventario...</span>
+                                        </div>
                                     </td>
                                 </tr>
                             ) : paginatedMovimientos.length === 0 ? (

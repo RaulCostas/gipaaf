@@ -1456,48 +1456,62 @@ const EstadoCuentaClientesPage: React.FC = () => {
                             );
                         })()}
 
-                        <div className="flex items-center gap-2 justify-end">
-                            <button
-                                type="button"
-                                onClick={() => setWhatsappCarteraModalData(prev => ({ ...prev, isOpen: false }))}
-                                className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                disabled={sendCarteraMutation.isPending || !whatsappCarteraModalData.vendedorId || !whatsappCarteraModalData.phone.trim()}
-                                onClick={() => {
-                                    if (!whatsappCarteraModalData.vendedorId) {
-                                        toast.error('Seleccione un vendedor');
-                                        return;
-                                    }
-                                    if (!whatsappCarteraModalData.phone.trim()) {
-                                        toast.error('Ingrese el teléfono del vendedor');
-                                        return;
-                                    }
-                                    sendCarteraMutation.mutate({
-                                        vendedorId: Number(whatsappCarteraModalData.vendedorId),
-                                        phone: whatsappCarteraModalData.phone.trim(),
-                                        sucursalId: whatsappCarteraModalData.sucursalId ? Number(whatsappCarteraModalData.sucursalId) : undefined,
-                                        message: whatsappCarteraModalData.customMessage.trim() || undefined
-                                    });
-                                }}
-                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                            >
-                                {sendCarteraMutation.isPending ? (
-                                    <>
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        Enviando Planilla...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Send className="w-3.5 h-3.5" />
-                                        Enviar Planilla PDF
-                                    </>
-                                )}
-                            </button>
-                        </div>
+                        {(() => {
+                            const targetVend = personalList?.find(p => String(p.id) === String(whatsappCarteraModalData.vendedorId));
+                            const sucursalTargetId = whatsappCarteraModalData.sucursalId ? Number(whatsappCarteraModalData.sucursalId) : (targetVend?.sucursal?.id || userPersonal?.sucursal?.id);
+                            const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(sucursalTargetId));
+                            const isConn = curBranch?.status === 'CONNECTED';
+
+                            return (
+                                <div className="flex items-center gap-2 justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => setWhatsappCarteraModalData(prev => ({ ...prev, isOpen: false }))}
+                                        className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={sendCarteraMutation.isPending || !whatsappCarteraModalData.vendedorId || !whatsappCarteraModalData.phone.trim() || !isConn}
+                                        title={!isConn ? 'El bot de WhatsApp no está conectado en esta sucursal' : undefined}
+                                        onClick={() => {
+                                            if (!whatsappCarteraModalData.vendedorId) {
+                                                toast.error('Seleccione un vendedor');
+                                                return;
+                                            }
+                                            if (!isConn) {
+                                                toast.error('El bot de WhatsApp de esta sucursal no está conectado');
+                                                return;
+                                            }
+                                            if (!whatsappCarteraModalData.phone.trim()) {
+                                                toast.error('Ingrese el teléfono del vendedor');
+                                                return;
+                                            }
+                                            sendCarteraMutation.mutate({
+                                                vendedorId: Number(whatsappCarteraModalData.vendedorId),
+                                                phone: whatsappCarteraModalData.phone.trim(),
+                                                sucursalId: whatsappCarteraModalData.sucursalId ? Number(whatsappCarteraModalData.sucursalId) : undefined,
+                                                message: whatsappCarteraModalData.customMessage.trim() || undefined
+                                            });
+                                        }}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                    >
+                                        {sendCarteraMutation.isPending ? (
+                                            <>
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                Enviando Planilla...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send className="w-3.5 h-3.5" />
+                                                Enviar Planilla PDF
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
             </Modal>
@@ -1655,45 +1669,58 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 );
                             })()}
 
-                            <div className="flex items-center gap-2 justify-end">
-                                <button
-                                    type="button"
-                                    onClick={() => setWhatsappVentaModalData(prev => ({ ...prev, isOpen: false, venta: null }))}
-                                    className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={sendEstadoCuentaVentaMutation.isPending || !whatsappVentaModalData.phone.trim()}
-                                    onClick={() => {
-                                        if (!whatsappVentaModalData.venta) return;
-                                        if (!whatsappVentaModalData.phone.trim()) {
-                                            toast.error('Ingrese el número de teléfono');
-                                            return;
-                                        }
-                                        sendEstadoCuentaVentaMutation.mutate({
-                                            ventaId: whatsappVentaModalData.venta.id,
-                                            phone: whatsappVentaModalData.phone.trim(),
-                                            sucursalId: whatsappVentaModalData.sucursalId ? Number(whatsappVentaModalData.sucursalId) : undefined,
-                                            message: whatsappVentaModalData.customMessage.trim() || undefined
-                                        });
-                                    }}
-                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                >
-                                    {sendEstadoCuentaVentaMutation.isPending ? (
-                                        <>
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                            Enviando Extracto...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Send className="w-3.5 h-3.5" />
-                                            Enviar Extracto PDF
-                                        </>
-                                    )}
-                                </button>
-                            </div>
+                            {(() => {
+                                const sucursalTargetId = whatsappVentaModalData.sucursalId ? Number(whatsappVentaModalData.sucursalId) : (whatsappVentaModalData.venta.sucursal?.id || whatsappVentaModalData.venta.cliente?.sucursal?.id);
+                                const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(sucursalTargetId));
+                                const isConn = curBranch?.status === 'CONNECTED';
+
+                                return (
+                                    <div className="flex items-center gap-2 justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => setWhatsappVentaModalData(prev => ({ ...prev, isOpen: false, venta: null }))}
+                                            className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={sendEstadoCuentaVentaMutation.isPending || !whatsappVentaModalData.phone.trim() || !isConn}
+                                            title={!isConn ? 'El bot de WhatsApp no está conectado en esta sucursal' : undefined}
+                                            onClick={() => {
+                                                if (!whatsappVentaModalData.venta) return;
+                                                if (!isConn) {
+                                                    toast.error('El bot de WhatsApp de esta sucursal no está conectado');
+                                                    return;
+                                                }
+                                                if (!whatsappVentaModalData.phone.trim()) {
+                                                    toast.error('Ingrese el número de teléfono');
+                                                    return;
+                                                }
+                                                sendEstadoCuentaVentaMutation.mutate({
+                                                    ventaId: whatsappVentaModalData.venta.id,
+                                                    phone: whatsappVentaModalData.phone.trim(),
+                                                    sucursalId: whatsappVentaModalData.sucursalId ? Number(whatsappVentaModalData.sucursalId) : undefined,
+                                                    message: whatsappVentaModalData.customMessage.trim() || undefined
+                                                });
+                                            }}
+                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                        >
+                                            {sendEstadoCuentaVentaMutation.isPending ? (
+                                                <>
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    Enviando Extracto...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Send className="w-3.5 h-3.5" />
+                                                    Enviar Extracto PDF
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 )}
@@ -1845,48 +1872,60 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 );
                             })()}
 
-                            <div className="flex items-center gap-2 justify-end">
-                                <button
-                                    type="button"
-                                    onClick={() => setWhatsappClienteModalData(prev => ({ ...prev, isOpen: false }))}
-                                    className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={sendClienteEstadoCuentaMutation.isPending || !whatsappClienteModalData.clienteId || !whatsappClienteModalData.phone.trim()}
-                                    onClick={() => {
-                                        if (!whatsappClienteModalData.clienteId) {
-                                            toast.error('Seleccione un cliente');
-                                            return;
-                                        }
-                                        if (!whatsappClienteModalData.phone.trim()) {
-                                            toast.error('Ingrese el número de teléfono');
-                                            return;
-                                        }
-                                        sendClienteEstadoCuentaMutation.mutate({
-                                            clienteId: Number(whatsappClienteModalData.clienteId),
-                                            phone: whatsappClienteModalData.phone.trim(),
-                                            sucursalId: whatsappClienteModalData.sucursalId ? Number(whatsappClienteModalData.sucursalId) : undefined,
-                                            message: whatsappClienteModalData.customMessage.trim() || undefined
-                                        });
-                                    }}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                >
-                                    {sendClienteEstadoCuentaMutation.isPending ? (
-                                        <>
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                            Enviando Estado de Cuenta...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Send className="w-3.5 h-3.5" />
-                                            Enviar Estado de Cuenta PDF
-                                        </>
-                                    )}
-                                </button>
-                            </div>
+                            {(() => {
+                                const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(whatsappClienteModalData.sucursalId));
+                                const isConn = curBranch?.status === 'CONNECTED';
+
+                                return (
+                                    <div className="flex items-center gap-2 justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => setWhatsappClienteModalData(prev => ({ ...prev, isOpen: false }))}
+                                            className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={sendClienteEstadoCuentaMutation.isPending || !whatsappClienteModalData.clienteId || !whatsappClienteModalData.phone.trim() || !isConn}
+                                            title={!isConn ? 'El bot de WhatsApp no está conectado en esta sucursal' : undefined}
+                                            onClick={() => {
+                                                if (!whatsappClienteModalData.clienteId) {
+                                                    toast.error('Seleccione un cliente');
+                                                    return;
+                                                }
+                                                if (!isConn) {
+                                                    toast.error('El bot de WhatsApp de esta sucursal no está conectado');
+                                                    return;
+                                                }
+                                                if (!whatsappClienteModalData.phone.trim()) {
+                                                    toast.error('Ingrese el número de teléfono');
+                                                    return;
+                                                }
+                                                sendClienteEstadoCuentaMutation.mutate({
+                                                    clienteId: Number(whatsappClienteModalData.clienteId),
+                                                    phone: whatsappClienteModalData.phone.trim(),
+                                                    sucursalId: whatsappClienteModalData.sucursalId ? Number(whatsappClienteModalData.sucursalId) : undefined,
+                                                    message: whatsappClienteModalData.customMessage.trim() || undefined
+                                                });
+                                            }}
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                        >
+                                            {sendClienteEstadoCuentaMutation.isPending ? (
+                                                <>
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    Enviando Estado de Cuenta...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Send className="w-3.5 h-3.5" />
+                                                    Enviar Estado de Cuenta PDF
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 )}

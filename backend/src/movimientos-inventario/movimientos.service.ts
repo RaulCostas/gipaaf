@@ -153,17 +153,36 @@ export class MovimientosInventarioService implements OnModuleInit {
     }
 
     async findAll() {
-        await this.syncHistoricalNotas();
-        return this.repo.find({
-            order: { creadoEn: 'DESC' }
-        });
+        return this.repo.createQueryBuilder('mov')
+            .leftJoinAndSelect('mov.inventario', 'inventario')
+            .leftJoinAndSelect('inventario.producto', 'producto')
+            .leftJoinAndSelect('producto.categoria', 'categoria')
+            .leftJoinAndSelect('producto.marca', 'marca')
+            .leftJoinAndSelect('producto.grupo', 'grupo')
+            .leftJoinAndSelect('inventario.sucursal', 'sucursal')
+            .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
+            .leftJoinAndSelect('mov.usuario', 'usuario')
+            .leftJoinAndSelect('usuario.persona', 'persona')
+            .orderBy('mov.creadoEn', 'DESC')
+            .addOrderBy('mov.id', 'DESC')
+            .getMany();
     }
 
     findByInventario(inventarioId: number) {
-        return this.repo.find({
-            where: { inventario: { id: inventarioId } },
-            order: { creadoEn: 'DESC' }
-        });
+        return this.repo.createQueryBuilder('mov')
+            .leftJoinAndSelect('mov.inventario', 'inventario')
+            .leftJoinAndSelect('inventario.producto', 'producto')
+            .leftJoinAndSelect('producto.categoria', 'categoria')
+            .leftJoinAndSelect('producto.marca', 'marca')
+            .leftJoinAndSelect('producto.grupo', 'grupo')
+            .leftJoinAndSelect('inventario.sucursal', 'sucursal')
+            .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
+            .leftJoinAndSelect('mov.usuario', 'usuario')
+            .leftJoinAndSelect('usuario.persona', 'persona')
+            .where('inventario.id = :inventarioId', { inventarioId })
+            .orderBy('mov.creadoEn', 'DESC')
+            .addOrderBy('mov.id', 'DESC')
+            .getMany();
     }
 
     create(data: Partial<MovimientoInventario>) {

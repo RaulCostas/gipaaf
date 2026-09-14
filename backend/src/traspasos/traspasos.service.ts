@@ -31,17 +31,33 @@ export class TraspasosService {
     ) {}
 
     async findAll(): Promise<Traspaso[]> {
-        return this.traspasoRepo.find({
-            relations: ['sucursalOrigen', 'sucursalOrigen.ciudad', 'sucursalDestino', 'sucursalDestino.ciudad', 'usuario', 'egreso', 'detalles', 'detalles.producto'],
-            order: { creadoEn: 'DESC' },
-        });
+        return this.traspasoRepo.createQueryBuilder('traspaso')
+            .leftJoinAndSelect('traspaso.sucursalOrigen', 'sucursalOrigen')
+            .leftJoinAndSelect('sucursalOrigen.ciudad', 'origenCiudad')
+            .leftJoinAndSelect('traspaso.sucursalDestino', 'sucursalDestino')
+            .leftJoinAndSelect('sucursalDestino.ciudad', 'destinoCiudad')
+            .leftJoinAndSelect('traspaso.usuario', 'usuario')
+            .leftJoinAndSelect('traspaso.egreso', 'egreso')
+            .leftJoinAndSelect('traspaso.detalles', 'detalles')
+            .leftJoinAndSelect('detalles.producto', 'producto')
+            .orderBy('traspaso.fecha', 'DESC')
+            .addOrderBy('traspaso.id', 'DESC')
+            .getMany();
     }
 
     async findOne(id: number): Promise<Traspaso> {
-        const traspaso = await this.traspasoRepo.findOne({
-            where: { id },
-            relations: ['sucursalOrigen', 'sucursalOrigen.ciudad', 'sucursalDestino', 'sucursalDestino.ciudad', 'usuario', 'egreso', 'detalles', 'detalles.producto'],
-        });
+        const traspaso = await this.traspasoRepo.createQueryBuilder('traspaso')
+            .leftJoinAndSelect('traspaso.sucursalOrigen', 'sucursalOrigen')
+            .leftJoinAndSelect('sucursalOrigen.ciudad', 'origenCiudad')
+            .leftJoinAndSelect('traspaso.sucursalDestino', 'sucursalDestino')
+            .leftJoinAndSelect('sucursalDestino.ciudad', 'destinoCiudad')
+            .leftJoinAndSelect('traspaso.usuario', 'usuario')
+            .leftJoinAndSelect('traspaso.egreso', 'egreso')
+            .leftJoinAndSelect('traspaso.detalles', 'detalles')
+            .leftJoinAndSelect('detalles.producto', 'producto')
+            .where('traspaso.id = :id', { id })
+            .getOne();
+
         if (!traspaso) {
             throw new NotFoundException(`Traspaso #${id} no encontrado`);
         }

@@ -17,7 +17,7 @@ export class DetalleTraspaso {
     })
     traspaso: Traspaso;
 
-    @ManyToOne(() => Producto, { eager: true, nullable: false })
+    @ManyToOne(() => Producto, { nullable: false })
     producto: Producto;
 
     @Column({ type: 'decimal', precision: 12, scale: 2 })

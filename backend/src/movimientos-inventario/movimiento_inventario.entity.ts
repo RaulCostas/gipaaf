@@ -7,7 +7,7 @@ export class MovimientoInventario {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @ManyToOne(() => Inventario, { eager: true, onDelete: 'CASCADE' })
+    @ManyToOne(() => Inventario, { onDelete: 'CASCADE' })
     inventario: Inventario;
 
     @Column({ length: 50 })
@@ -28,7 +28,7 @@ export class MovimientoInventario {
     @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true, default: 0 })
     costoUnitario: number;
 
-    @ManyToOne(() => Usuario, { eager: true, nullable: true })
+    @ManyToOne(() => Usuario, { nullable: true })
     usuario: Usuario;
 
     @CreateDateColumn()

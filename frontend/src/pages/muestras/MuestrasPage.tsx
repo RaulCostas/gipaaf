@@ -1713,45 +1713,58 @@ const MuestrasPage: React.FC = () => {
                                 );
                             })()}
 
-                            <div className="flex items-center gap-2 justify-end">
-                                <button
-                                    type="button"
-                                    onClick={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false, muestra: null }))}
-                                    className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={sendWhatsAppMutation.isPending || !whatsappModalData.phone.trim()}
-                                    onClick={() => {
-                                        if (!whatsappModalData.muestra) return;
-                                        if (!whatsappModalData.phone.trim()) {
-                                            toast.error('Ingrese el número de teléfono del cliente');
-                                            return;
-                                        }
-                                        sendWhatsAppMutation.mutate({
-                                            muestraId: whatsappModalData.muestra.id,
-                                            phone: whatsappModalData.phone.trim(),
-                                            sucursalId: whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : undefined,
-                                            message: whatsappModalData.customMessage.trim() || undefined
-                                        });
-                                    }}
-                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {sendWhatsAppMutation.isPending ? (
-                                        <>
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                            Enviando PDF...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Send className="w-3.5 h-3.5" />
-                                            Enviar PDF
-                                        </>
-                                    )}
-                                </button>
-                            </div>
+                            {(() => {
+                                const sucursalTargetId = whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : (whatsappModalData.muestra.sucursal?.id || whatsappModalData.muestra.cliente?.sucursal?.id);
+                                const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(sucursalTargetId));
+                                const isConn = curBranch?.status === 'CONNECTED';
+
+                                return (
+                                    <div className="flex items-center gap-2 justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false, muestra: null }))}
+                                            className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={sendWhatsAppMutation.isPending || !whatsappModalData.phone.trim() || !isConn}
+                                            title={!isConn ? 'El bot de WhatsApp no está conectado en esta sucursal' : undefined}
+                                            onClick={() => {
+                                                if (!whatsappModalData.muestra) return;
+                                                if (!isConn) {
+                                                    toast.error('El bot de WhatsApp de esta sucursal no está conectado');
+                                                    return;
+                                                }
+                                                if (!whatsappModalData.phone.trim()) {
+                                                    toast.error('Ingrese el número de teléfono del cliente');
+                                                    return;
+                                                }
+                                                sendWhatsAppMutation.mutate({
+                                                    muestraId: whatsappModalData.muestra.id,
+                                                    phone: whatsappModalData.phone.trim(),
+                                                    sucursalId: whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : undefined,
+                                                    message: whatsappModalData.customMessage.trim() || undefined
+                                                });
+                                            }}
+                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {sendWhatsAppMutation.isPending ? (
+                                                <>
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    Enviando PDF...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Send className="w-3.5 h-3.5" />
+                                                    Enviar PDF
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 )}

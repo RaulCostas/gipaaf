@@ -34,10 +34,10 @@ export class Traspaso {
     @Column({ type: 'date' })
     fecha: string;
 
-    @ManyToOne(() => Sucursal, { eager: true, nullable: true })
+    @ManyToOne(() => Sucursal, { nullable: true })
     sucursalOrigen: Sucursal;
 
-    @ManyToOne(() => Sucursal, { eager: true, nullable: true })
+    @ManyToOne(() => Sucursal, { nullable: true })
     sucursalDestino: Sucursal;
 
     @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
@@ -50,7 +50,7 @@ export class Traspaso {
     })
     sucursalCargoCosto: CargoCostoTraspaso; // Sucursal que asume el costo de transporte (ORIGEN o DESTINO)
 
-    @ManyToOne(() => Egreso, { nullable: true, onDelete: 'SET NULL', eager: true })
+    @ManyToOne(() => Egreso, { nullable: true, onDelete: 'SET NULL' })
     @JoinColumn()
     egreso: Egreso;
 
@@ -67,12 +67,11 @@ export class Traspaso {
     })
     estado: EstadoTraspaso;
 
-    @ManyToOne(() => Usuario, { eager: true, nullable: true })
+    @ManyToOne(() => Usuario, { nullable: true })
     usuario: Usuario;
 
     @OneToMany(() => DetalleTraspaso, (detalle) => detalle.traspaso, {
         cascade: true,
-        eager: true,
     })
     detalles: DetalleTraspaso[];
 
