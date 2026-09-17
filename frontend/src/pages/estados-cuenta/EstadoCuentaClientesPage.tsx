@@ -12,13 +12,14 @@ import {
     Printer, FileText, FileSpreadsheet,
     Users, ShoppingCart, DollarSign, Calendar, Receipt,
     CheckCircle2, Clock, AlertTriangle, Eye, Lock,
-    MessageCircle, Send, Loader2, ExternalLink, Building2, User
+    MessageCircle, Send, Loader2, ExternalLink, Building2, User, Store
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
 import { toast } from 'sonner';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { format } from 'date-fns';
+import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 import { whatsappService } from '../../api/whatsappService';
@@ -280,15 +281,36 @@ const EstadoCuentaClientesPage: React.FC = () => {
         });
     };
 
-    // Filter clients available for vendor
+    // Filter clients available for vendor and branch/city
     const availableClients = useMemo(() => {
         if (!clientsList) return [];
-        if (!isRestrictedVendor) return clientsList;
-        return clientsList.filter(c => 
-            (c.ruta?.vendedor?.id === userPersonal.id) ||
-            salesList?.some(s => s.vendedor?.id === userPersonal.id && s.cliente?.id === c.id)
-        );
-    }, [clientsList, isRestrictedVendor, userPersonal, salesList]);
+        let list = clientsList;
+        if (selectedSucursal) {
+            list = list.filter(c => 
+                c.sucursal?.id === Number(selectedSucursal) || 
+                c.ruta?.sucursal?.id === Number(selectedSucursal) ||
+                (selectedClienteId && c.id.toString() === selectedClienteId)
+            );
+        } else if (selectedCiudad) {
+            list = list.filter(c => 
+                c.sucursal?.ciudad?.id === Number(selectedCiudad) || 
+                c.ruta?.sucursal?.ciudad?.id === Number(selectedCiudad) ||
+                (selectedClienteId && c.id.toString() === selectedClienteId)
+            );
+        }
+        if (isRestrictedVendor) {
+            list = list.filter(c => 
+                (c.ruta?.vendedor?.id === userPersonal.id) ||
+                salesList?.some(s => s.vendedor?.id === userPersonal.id && s.cliente?.id === c.id) ||
+                (selectedClienteId && c.id.toString() === selectedClienteId)
+            );
+        }
+        return list.sort((a, b) => {
+            const na = getClientDisplayName(a);
+            const nb = getClientDisplayName(b);
+            return na.localeCompare(nb);
+        });
+    }, [clientsList, selectedSucursal, selectedCiudad, isRestrictedVendor, userPersonal, salesList, selectedClienteId]);
 
     // Filter sales by global filters, client, date range, status, invoice type, and search term
     const filteredVentas = useMemo(() => {
@@ -346,14 +368,14 @@ const EstadoCuentaClientesPage: React.FC = () => {
             filtered = filtered.filter(item => {
                 const num = (item.numero || '').toLowerCase();
                 const numFac = (item.numeroFactura || '').toLowerCase();
-                const cliName = item.cliente?.persona 
-                    ? `${item.cliente.persona.nombres} ${item.cliente.persona.apellidos}`.toLowerCase()
-                    : '';
+                const cliName = (item.cliente?.nombreTienda ? `${item.cliente.nombreTienda} ` : '') + (item.cliente?.persona 
+                    ? `${item.cliente.persona.nombres} ${item.cliente.persona.apellidos}`
+                    : '');
                 const vendName = item.vendedor
                     ? `${item.vendedor.nombres || ''} ${item.vendedor.apellidos || ''}`.toLowerCase()
                     : '';
                 const obs = (item.observaciones || '').toLowerCase();
-                return num.includes(s) || numFac.includes(s) || cliName.includes(s) || vendName.includes(s) || obs.includes(s);
+                return num.includes(s) || numFac.includes(s) || cliName.toLowerCase().includes(s) || vendName.includes(s) || obs.includes(s);
             });
         }
 
@@ -446,9 +468,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
             const total = Number(v.total) || 0;
             const saldo = Number(v.saldo) || 0;
             const cobrado = Math.max(0, total - saldo);
-            const cliName = v.cliente?.persona 
-                ? `${v.cliente.persona.nombres} ${v.cliente.persona.apellidos}` 
-                : 'Cliente';
+            const cliName = getClientDisplayName(v.cliente);
             const vendedorNombre = v.vendedor 
                 ? `${v.vendedor.nombres || ''} ${v.vendedor.apellidos || ''}`.trim() 
                 : '---';
@@ -490,7 +510,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
         if (selectedClienteId) {
             const cli = clientsList?.find(c => String(c.id) === String(selectedClienteId));
             if (cli) {
-                const nombre = cli.persona ? `${cli.persona.nombres} ${cli.persona.apellidos}`.trim() : 'Cliente';
+                const nombre = getClientDisplayName(cli);
                 texts.push(`Cliente: ${nombre}`);
             }
         }
@@ -720,7 +740,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                         >
                             <option value="">Todos los Clientes</option>
                             {availableClients.map(c => {
-                                const nombre = c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : 'Cliente';
+                                const nombre = getClientDisplayName(c);
                                 return (
                                     <option key={c.id} value={c.id}>
                                         {nombre} {c.plazoCreditoDias ? `(Límite: ${c.plazoCreditoDias}d)` : ''}
@@ -959,8 +979,24 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                             </button>
                                         </td>
                                         {!selectedClienteId && (
-                                            <td className="p-4 text-sm font-semibold text-foreground">
-                                                {cliLabel}
+                                            <td className="p-4">
+                                                <div className="flex flex-col">
+                                                    {v.cliente?.nombreTienda ? (
+                                                        <>
+                                                            <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                                <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                                {v.cliente.nombreTienda}
+                                                            </span>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {getClientPersonName(v.cliente)}
+                                                            </span>
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-sm font-semibold text-foreground">
+                                                            {getClientPersonName(v.cliente)}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                         )}
                                         {!selectedVendedorId && (
@@ -1114,7 +1150,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                             <div>
                                 <span className="text-muted-foreground block">Cliente:</span>
                                 <span className="font-bold text-foreground">
-                                    {viewingNota.cliente?.persona ? `${viewingNota.cliente.persona.nombres} ${viewingNota.cliente.persona.apellidos}` : 'Cliente'}
+                                    {getClientDisplayName(viewingNota.cliente)}
                                 </span>
                             </div>
                             <div>

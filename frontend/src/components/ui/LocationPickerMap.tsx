@@ -106,13 +106,22 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
             } else {
                 markerRef.current.setLatLng(pos);
             }
+
+            const currentCenter = map.getCenter();
+            const dist = Math.hypot(currentCenter.lat - pos[0], currentCenter.lng - pos[1]);
+            if (dist > 0.0001) {
+                map.flyTo(pos, Math.max(map.getZoom(), 16), { animate: true, duration: 1.2 });
+            }
         } else {
             if (markerRef.current) {
                 markerRef.current.remove();
                 markerRef.current = null;
             }
+            if (defaultCenter) {
+                map.setView(defaultCenter, defaultZoom);
+            }
         }
-    }, [latitud, longitud, hasValidCoords, onChange]);
+    }, [latitud, longitud, hasValidCoords, onChange, defaultCenter, defaultZoom]);
 
     const handleUseCurrentLocation = () => {
         if (!navigator.geolocation) {

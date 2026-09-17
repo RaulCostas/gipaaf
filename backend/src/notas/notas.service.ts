@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, EntityManager } from 'typeorm';
 import { Nota, TipoNota, EstadoNota } from './nota.entity';
 import { DetalleNota } from './detalle-nota.entity';
 import { Inventario } from '../inventario/inventario.entity';
@@ -26,6 +26,38 @@ export class NotasService {
         @InjectRepository(CostoImportacion) private costoImportacionRepo: Repository<CostoImportacion>,
         private dataSource: DataSource,
     ) { }
+
+    async generarSiguienteNumero(manager: EntityManager, tipo: TipoNota): Promise<string> {
+        const prefix = (tipo || 'NOT').substring(0, 3).toUpperCase();
+        const todasNotas = await manager
+            .createQueryBuilder(Nota, 'nota')
+            .withDeleted()
+            .where('nota.numero LIKE :prefix', { prefix: `${prefix}-%` })
+            .select(['nota.numero'])
+            .getMany();
+
+        let maxNum = 0;
+        for (const n of todasNotas) {
+            if (n.numero) {
+                const parts = n.numero.split('-');
+                if (parts.length === 2) {
+                    const parsed = parseInt(parts[1], 10);
+                    if (!isNaN(parsed) && parsed > maxNum) {
+                        maxNum = parsed;
+                    }
+                }
+            }
+        }
+
+        let next = maxNum + 1;
+        let candidate = `${prefix}-${String(next).padStart(6, '0')}`;
+        while (await manager.findOne(Nota, { where: { numero: candidate }, withDeleted: true })) {
+            next++;
+            candidate = `${prefix}-${String(next).padStart(6, '0')}`;
+        }
+
+        return candidate;
+    }
 
     async findAll(tipo?: TipoNota, vendedorId?: number) {
         const qb = this.notaRepo.createQueryBuilder('nota')
@@ -77,8 +109,7 @@ export class NotasService {
         try {
             return await this.dataSource.transaction(async (manager) => {
                 // Generate unique number
-                const count = await manager.count(Nota);
-                const numero = `${data.tipo?.substring(0, 3)}-${String(count + 1).padStart(6, '0')}`;
+                const numero = await this.generarSiguienteNumero(manager, data.tipo || TipoNota.VENTA);
 
                                 let subtotalGeneral = 0;
                 const detallesConSubtotal = (data.detalles || []).map(det => {
@@ -88,13 +119,19 @@ export class NotasService {
                 });
 
                 const descPorc1 = Number(data.descuentoPorcentaje || 0);
+                const aplicaDescFijo = data.aplicaDescuentoFijo !== undefined ? Boolean(data.aplicaDescuentoFijo) : (Number(data.descuentoFijoPorcentaje || 0) > 0);
+                const descPorcFijo = aplicaDescFijo ? (Number(data.descuentoFijoPorcentaje) || 3) : 0;
                 const descPorc2 = Number(data.descuentoPromocionPorcentaje || 0);
                 
                 const descuento1 = (subtotalGeneral * descPorc1) / 100;
                 const subtotalDespuesDesc1 = subtotalGeneral - descuento1;
-                const descuento2 = (subtotalDespuesDesc1 * descPorc2) / 100;
                 
-                const total = subtotalDespuesDesc1 - descuento2;
+                const descuentoFijo = (subtotalDespuesDesc1 * descPorcFijo) / 100;
+                const subtotalDespuesDescFijo = subtotalDespuesDesc1 - descuentoFijo;
+                
+                const descuento2 = (subtotalDespuesDescFijo * descPorc2) / 100;
+                
+                const total = subtotalDespuesDescFijo - descuento2;
 
                 let fechaVencimiento: Date | null = null;
                 if (data.fechaVencimiento) {
@@ -115,6 +152,9 @@ export class NotasService {
                     total: total,
                     saldo: data.saldo !== undefined ? data.saldo : total,
                     descuento: descuento1,
+                    descuentoFijo: descuentoFijo,
+                    descuentoFijoPorcentaje: descPorcFijo,
+                    aplicaDescuentoFijo: aplicaDescFijo,
                     descuentoPromocion: descuento2,
                     descuentoPorcentaje: descPorc1,
                     descuentoPromocionPorcentaje: descPorc2,
@@ -257,12 +297,18 @@ export class NotasService {
                 }
 
                 const descPorc1 = Number(data.descuentoPorcentaje !== undefined ? data.descuentoPorcentaje : (nota.descuentoPorcentaje || 0));
+                const aplicaDescFijo = data.aplicaDescuentoFijo !== undefined ? Boolean(data.aplicaDescuentoFijo) : (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) > 0 : Boolean(nota.aplicaDescuentoFijo));
+                const descPorcFijo = aplicaDescFijo ? (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) : (Number(nota.descuentoFijoPorcentaje) || 3)) : 0;
                 const descPorc2 = Number(data.descuentoPromocionPorcentaje !== undefined ? data.descuentoPromocionPorcentaje : (nota.descuentoPromocionPorcentaje || 0));
                 
                 const descuento1 = (subtotalGeneral * descPorc1) / 100;
                 const subtotalDespuesDesc1 = subtotalGeneral - descuento1;
-                const descuento2 = (subtotalDespuesDesc1 * descPorc2) / 100;
-                const nuevoTotal = subtotalDespuesDesc1 - descuento2;
+                
+                const descuentoFijo = (subtotalDespuesDesc1 * descPorcFijo) / 100;
+                const subtotalDespuesDescFijo = subtotalDespuesDesc1 - descuentoFijo;
+                
+                const descuento2 = (subtotalDespuesDescFijo * descPorc2) / 100;
+                const nuevoTotal = subtotalDespuesDescFijo - descuento2;
 
                 if (montoPagadoOCobrado > 0 && nuevoTotal < montoPagadoOCobrado) {
                     throw new BadRequestException(
@@ -422,6 +468,9 @@ export class NotasService {
                 data.total = nuevoTotal;
                 data.saldo = nuevoSaldo;
                 data.descuento = descuento1;
+                data.descuentoFijo = descuentoFijo;
+                data.descuentoFijoPorcentaje = descPorcFijo;
+                data.aplicaDescuentoFijo = aplicaDescFijo;
                 data.descuentoPromocion = descuento2;
                 data.descuentoPorcentaje = descPorc1;
                 data.descuentoPromocionPorcentaje = descPorc2;
@@ -442,19 +491,28 @@ export class NotasService {
                 });
 
                 const descPorc1 = Number(data.descuentoPorcentaje !== undefined ? data.descuentoPorcentaje : (nota.descuentoPorcentaje || 0));
+                const aplicaDescFijo = data.aplicaDescuentoFijo !== undefined ? Boolean(data.aplicaDescuentoFijo) : (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) > 0 : Boolean(nota.aplicaDescuentoFijo));
+                const descPorcFijo = aplicaDescFijo ? (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) : (Number(nota.descuentoFijoPorcentaje) || 3)) : 0;
                 const descPorc2 = Number(data.descuentoPromocionPorcentaje !== undefined ? data.descuentoPromocionPorcentaje : (nota.descuentoPromocionPorcentaje || 0));
                 
                 const descuento1 = (subtotalGeneral * descPorc1) / 100;
                 const subtotalDespuesDesc1 = subtotalGeneral - descuento1;
-                const descuento2 = (subtotalDespuesDesc1 * descPorc2) / 100;
                 
-                const total = subtotalDespuesDesc1 - descuento2;
+                const descuentoFijo = (subtotalDespuesDesc1 * descPorcFijo) / 100;
+                const subtotalDespuesDescFijo = subtotalDespuesDesc1 - descuentoFijo;
+                
+                const descuento2 = (subtotalDespuesDescFijo * descPorc2) / 100;
+                
+                const total = subtotalDespuesDescFijo - descuento2;
 
                 data.detalles = detallesConSubtotal as any;
                 data.subtotal = subtotalGeneral;
                 data.total = total;
                 data.saldo = total;
                 data.descuento = descuento1;
+                data.descuentoFijo = descuentoFijo;
+                data.descuentoFijoPorcentaje = descPorcFijo;
+                data.aplicaDescuentoFijo = aplicaDescFijo;
                 data.descuentoPromocion = descuento2;
                 data.descuentoPorcentaje = descPorc1;
                 data.descuentoPromocionPorcentaje = descPorc2;
@@ -942,18 +1000,64 @@ export class NotasService {
 
     async convertirVenta(id: number) {
         return this.dataSource.transaction(async (manager) => {
-            const nota = await manager.findOne(Nota, { where: { id } });
-            if (!nota) throw new NotFoundException(`Nota ${id} no encontrada`);
-            if (nota.tipo !== TipoNota.PROFORMA) throw new BadRequestException('Solo se pueden convertir proformas');
+            const proforma = await manager.findOne(Nota, { 
+                where: { id },
+                relations: ['detalles', 'detalles.producto', 'sucursal', 'cliente', 'vendedor', 'usuario']
+            });
+            if (!proforma) throw new NotFoundException(`Nota ${id} no encontrada`);
+            if (proforma.tipo !== TipoNota.PROFORMA) throw new BadRequestException('Solo se pueden convertir proformas');
+            if (proforma.estado !== EstadoNota.CONFIRMADA) throw new BadRequestException('Solo se pueden convertir a venta las proformas que hayan sido confirmadas previamente');
             
-            // Generar nuevo número de venta
-            const count = await manager.count(Nota, { where: { tipo: TipoNota.VENTA } });
-            const numero = `VEN-${String(count + 1).padStart(6, '0')}`;
+            // Generar nuevo número de venta correlativo y seguro
+            const numeroVenta = await this.generarSiguienteNumero(manager, TipoNota.VENTA);
             
-            nota.tipo = TipoNota.VENTA;
-            nota.numero = numero;
-            
-            return manager.save(nota);
+            // Crear nueva Nota de tipo VENTA con la fecha actual
+            const nuevaVenta = manager.create(Nota, {
+                numero: numeroVenta,
+                tipo: TipoNota.VENTA,
+                estado: EstadoNota.PENDIENTE,
+                fecha: new Date(),
+                cliente: proforma.cliente || undefined,
+                sucursal: proforma.sucursal || undefined,
+                vendedor: proforma.vendedor || undefined,
+                usuario: proforma.usuario || undefined,
+                moneda: proforma.moneda || Moneda.BOB,
+                tipoCambio: proforma.tipoCambio || 1,
+                conFactura: proforma.conFactura || false,
+                tipoPago: proforma.tipoPago || 'CONTADO',
+                diasCredito: proforma.diasCredito || 0,
+                fechaVencimiento: proforma.fechaVencimiento || undefined,
+                subtotal: proforma.subtotal,
+                descuento: proforma.descuento,
+                descuentoPorcentaje: proforma.descuentoPorcentaje,
+                descuentoPromocion: proforma.descuentoPromocion,
+                descuentoPromocionPorcentaje: proforma.descuentoPromocionPorcentaje,
+                impuesto: proforma.impuesto,
+                total: proforma.total,
+                saldo: proforma.saldo !== undefined ? proforma.saldo : proforma.total,
+                observaciones: proforma.observaciones 
+                    ? `${proforma.observaciones} (Generada desde Proforma ${proforma.numero})` 
+                    : `Generada desde Proforma ${proforma.numero}`,
+                detalles: (proforma.detalles || []).map(d => manager.create(DetalleNota, {
+                    producto: d.producto,
+                    cantidad: d.cantidad,
+                    precioUnitario: d.precioUnitario,
+                    subtotal: d.subtotal,
+                    numeroLote: d.numeroLote || undefined,
+                    fechaVencimiento: d.fechaVencimiento || undefined,
+                }))
+            });
+
+            const savedVenta = await manager.save(nuevaVenta);
+
+            // Actualizar la proforma original a estado CONVERTIDA
+            proforma.estado = EstadoNota.CONVERTIDA;
+            proforma.observaciones = proforma.observaciones 
+                ? `${proforma.observaciones} -> Convertida a Venta [${numeroVenta}]` 
+                : `Convertida a Venta [${numeroVenta}]`;
+            await manager.save(proforma);
+
+            return savedVenta;
         });
     }
 

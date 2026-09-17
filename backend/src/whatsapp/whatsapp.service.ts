@@ -761,6 +761,16 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         return await this.sendMessage(phone, message, sucursalId);
     }
 
+    public formatClienteDisplay(cliente: any): string {
+        if (!cliente) return 'Cliente Final';
+        const persona = cliente.persona;
+        const personaNombre = persona ? `${persona.nombres || ''} ${persona.apellidos || ''}`.trim() : '';
+        if (cliente.nombreTienda && cliente.nombreTienda.trim()) {
+            return personaNombre ? `${cliente.nombreTienda.trim()} (${personaNombre})` : cliente.nombreTienda.trim();
+        }
+        return personaNombre || 'Cliente Final';
+    }
+
     // ==========================================
     // ENVÍO DE PROFORMAS EN PDF POR WHATSAPP
     // ==========================================
@@ -826,9 +836,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const branchDisplay = this.formatSucursalDisplay(proforma.sucursal);
         const pdfBuffer = await this.generateProformaPdfInMemory(proforma, branchDisplay);
 
-        const clienteNombre = proforma.cliente?.persona 
-            ? `${proforma.cliente.persona.nombres || ''} ${proforma.cliente.persona.apellidos || ''}`.trim() 
-            : 'Estimado/a Cliente';
+        const clienteNombre = this.formatClienteDisplay(proforma.cliente);
         const totalFormatted = Number(proforma.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const fechaFormatted = proforma.fecha ? String(proforma.fecha).split('T')[0].split('-').reverse().join('/') : '-';
 
@@ -935,9 +943,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const branchDisplay = this.formatSucursalDisplay(venta.sucursal);
         const pdfBuffer = await this.generateVentaPdfInMemory(venta, branchDisplay);
 
-        const clienteNombre = venta.cliente?.persona 
-            ? `${venta.cliente.persona.nombres || ''} ${venta.cliente.persona.apellidos || ''}`.trim() 
-            : 'Estimado/a Cliente';
+        const clienteNombre = this.formatClienteDisplay(venta.cliente);
         const totalFormatted = Number(venta.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const fechaFormatted = venta.fecha ? String(venta.fecha).split('T')[0].split('-').reverse().join('/') : '-';
 
@@ -998,9 +1004,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 ? String(venta.fecha).split('T')[0].split('-').reverse().join('/') 
                 : new Date().toLocaleDateString('es-BO');
 
-            const clientName = venta.cliente?.persona 
-                ? `${venta.cliente.persona.nombres || ''} ${venta.cliente.persona.apellidos || ''}`.trim() 
-                : 'Cliente Final';
+            const clientName = this.formatClienteDisplay(venta.cliente);
             const vendedorName = venta.vendedor 
                 ? `${venta.vendedor.nombres || ''} ${venta.vendedor.apellidos || ''}`.trim() 
                 : 'Sin asignar';
@@ -1199,9 +1203,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 ? String(proforma.fecha).split('T')[0].split('-').reverse().join('/') 
                 : new Date().toLocaleDateString('es-BO');
 
-            const clientName = proforma.cliente?.persona 
-                ? `${proforma.cliente.persona.nombres || ''} ${proforma.cliente.persona.apellidos || ''}`.trim() 
-                : 'Cliente Final';
+            const clientName = this.formatClienteDisplay(proforma.cliente);
             const vendedorName = proforma.vendedor 
                 ? `${proforma.vendedor.nombres || ''} ${proforma.vendedor.apellidos || ''}`.trim() 
                 : 'Sin asignar';
@@ -1429,9 +1431,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const pdfBuffer = await this.generateCobranzaPdfInMemory(pago, branchDisplay);
 
         const folio = `REC-${String(pago.id).padStart(6, '0')}`;
-        const clienteNombre = pago.cliente?.persona 
-            ? `${pago.cliente.persona.nombres || ''} ${pago.cliente.persona.apellidos || ''}`.trim() 
-            : 'Estimado/a Cliente';
+        const clienteNombre = this.formatClienteDisplay(pago.cliente);
         const isUSD = pago.moneda === 'USD';
         const simbolo = isUSD ? '$us' : 'Bs.';
         const montoFormatted = Number(pago.monto || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1497,9 +1497,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 ? String(pago.fecha).split('T')[0].split('-').reverse().join('/') 
                 : new Date().toLocaleDateString('es-BO');
 
-            const clientName = pago.cliente?.persona 
-                ? `${pago.cliente.persona.nombres || ''} ${pago.cliente.persona.apellidos || ''}`.trim() 
-                : 'Cliente Final';
+            const clientName = this.formatClienteDisplay(pago.cliente);
             const nitCi = pago.cliente?.persona?.ci || '-';
             const tel = pago.cliente?.persona?.telefono || '-';
             const vendedorName = pago.nota?.vendedor 
@@ -2550,9 +2548,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const branchDisplay = this.formatSucursalDisplay(devolucion.sucursal);
         const pdfBuffer = await this.generateDevolucionPdfInMemory(devolucion, branchDisplay);
 
-        const clientName = devolucion.cliente?.persona 
-            ? `${devolucion.cliente.persona.nombres || ''} ${devolucion.cliente.persona.apellidos || ''}`.trim() 
-            : 'Estimado/a Cliente';
+        const clientName = this.formatClienteDisplay(devolucion.cliente);
         const fechaFormatted = devolucion.fecha ? String(devolucion.fecha).split('T')[0].split('-').reverse().join('/') : '-';
         const devueltosCount = devolucion.detalles?.filter(d => d.tipoMovimiento !== 'SALIDA_REPOSICION').reduce((acc, d) => acc + Number(d.cantidad || 0), 0) || 0;
         const repuestosCount = devolucion.detalles?.filter(d => d.tipoMovimiento === 'SALIDA_REPOSICION').reduce((acc, d) => acc + Number(d.cantidad || 0), 0) || 0;
@@ -2616,9 +2612,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 ? String(devolucion.fecha).split('T')[0].split('-').reverse().join('/') 
                 : new Date().toLocaleDateString('es-BO');
 
-            const clientName = devolucion.cliente?.persona 
-                ? `${devolucion.cliente.persona.nombres || ''} ${devolucion.cliente.persona.apellidos || ''}`.trim() 
-                : 'Cliente General';
+            const clientName = this.formatClienteDisplay(devolucion.cliente);
             const nitCi = devolucion.cliente?.persona?.ci || '-';
             const tel = devolucion.cliente?.persona?.telefono || '-';
             const vendedorName = devolucion.vendedor 
@@ -2933,9 +2927,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const branchDisplay = this.formatSucursalDisplay(muestra.sucursal);
         const pdfBuffer = await this.generateMuestraPdfInMemory(muestra, branchDisplay);
 
-        const clientName = muestra.cliente?.persona 
-            ? `${muestra.cliente.persona.nombres || ''} ${muestra.cliente.persona.apellidos || ''}`.trim() 
-            : 'Estimado/a Cliente';
+        const clientName = this.formatClienteDisplay(muestra.cliente);
         const fechaFormatted = muestra.fecha ? String(muestra.fecha).split('T')[0].split('-').reverse().join('/') : '-';
         const fechaEstFormatted = muestra.fechaEstimadaDevolucion ? String(muestra.fechaEstimadaDevolucion).split('T')[0].split('-').reverse().join('/') : 'Sin definir';
         const totalEntregados = muestra.detalles?.reduce((acc, d) => acc + Number(d.cantidadEntregada || 0), 0) || 0;
@@ -3008,9 +3000,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 ? String(muestra.fechaDevolucion).split('T')[0].split('-').reverse().join('/') 
                 : null;
 
-            const clientName = muestra.cliente?.persona 
-                ? `${muestra.cliente.persona.nombres || ''} ${muestra.cliente.persona.apellidos || ''}`.trim() 
-                : 'Cliente General';
+            const clientName = this.formatClienteDisplay(muestra.cliente);
             const nitCi = muestra.cliente?.persona?.ci || '-';
             const tel = muestra.cliente?.persona?.telefono || '-';
             const vendedorName = muestra.vendedor 
@@ -4113,7 +4103,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         const jid = `${phoneWithCountry}@s.whatsapp.net`;
 
         const branchDisplay = session.sucursalNombre + (session.ciudadNombre ? ` (${session.ciudadNombre})` : '');
-        const clientName = cliente.persona ? `${cliente.persona.nombres} ${cliente.persona.apellidos}`.trim() : 'Cliente';
+        const clientName = this.formatClienteDisplay(cliente);
 
         let saldoTotalBOB = 0;
         notas.forEach(n => {
@@ -5161,7 +5151,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 year: 'numeric'
             });
 
-            const clientName = cliente.persona ? `${cliente.persona.nombres} ${cliente.persona.apellidos}`.trim() : 'Cliente';
+            const clientName = this.formatClienteDisplay(cliente);
 
             const drawHeaderAndBanner = (isFirstPage: boolean) => {
                 // Banner superior azul oscuro corporativo (#0b132b)

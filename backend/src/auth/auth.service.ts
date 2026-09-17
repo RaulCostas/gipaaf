@@ -18,12 +18,16 @@ export class AuthService {
         const { email, password } = loginDto;
         const usuario = await this.usuarioRepository.findOne({
             where: { email, activo: true },
-            relations: ['roles', 'roles.permisos', 'persona', 'sucursal', 'personal'],
+            relations: ['roles', 'roles.permisos', 'persona', 'sucursal', 'sucursal.ciudad', 'personal', 'personal.sucursal', 'personal.sucursal.ciudad'],
         });
 
         if (!usuario) throw new UnauthorizedException('Credenciales incorrectas');
         const esValido = await bcrypt.compare(password, usuario.password);
         if (!esValido) throw new UnauthorizedException('Credenciales incorrectas');
+
+        if (usuario.sucursal && usuario.personal) {
+            usuario.personal.sucursal = usuario.sucursal;
+        }
 
         const payload = {
             sub: usuario.id,
@@ -48,10 +52,14 @@ export class AuthService {
     }
 
     async validateUsuario(id: number): Promise<Usuario | null> {
-        return this.usuarioRepository.findOne({ 
+        const u = await this.usuarioRepository.findOne({ 
             where: { id, activo: true },
-            relations: ['roles', 'roles.permisos', 'persona', 'sucursal', 'personal']
+            relations: ['roles', 'roles.permisos', 'persona', 'sucursal', 'sucursal.ciudad', 'personal', 'personal.sucursal', 'personal.sucursal.ciudad']
         });
+        if (u && u.sucursal && u.personal) {
+            u.personal.sucursal = u.sucursal;
+        }
+        return u;
     }
 
     async changePassword(userId: number, currentPassword: string, newPassword: string) {

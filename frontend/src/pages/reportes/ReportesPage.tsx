@@ -22,7 +22,7 @@ import {
     Search, Printer, FileText, FileSpreadsheet,
     Wallet, ShoppingCart, ShoppingBag, PieChart as PieChartIcon, ChevronLeft, ChevronRight,
     Users, CreditCard, DollarSign, Calendar, X, Eye, User, Building2, Tag, Receipt, Package, HandCoins,
-    TrendingUp, BarChart3, Activity, Award, Percent, Boxes, ImageIcon, Layers
+    TrendingUp, BarChart3, Activity, Award, Percent, Boxes, ImageIcon, Layers, Store
 } from 'lucide-react';
 import {
     ResponsiveContainer,
@@ -43,6 +43,7 @@ import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { formatCurrency } from '../../utils/currencyUtils';
+import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import { format, subDays, startOfMonth, startOfYear } from 'date-fns';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
@@ -240,8 +241,8 @@ const ReportesPage: React.FC = () => {
     const clientesUnicos = useMemo(() => {
         if (clientesList && clientesList.length > 0) {
             return [...clientesList].sort((a, b) => {
-                const na = a.persona ? `${a.persona.nombres} ${a.persona.apellidos}` : '';
-                const nb = b.persona ? `${b.persona.nombres} ${b.persona.apellidos}` : '';
+                const na = getClientDisplayName(a);
+                const nb = getClientDisplayName(b);
                 return na.localeCompare(nb);
             });
         }
@@ -685,6 +686,7 @@ const ReportesPage: React.FC = () => {
             filtered = filtered.filter(p => 
                 p.numero?.toLowerCase().includes(term) ||
                 (p.numeroFactura && p.numeroFactura.toLowerCase().includes(term)) ||
+                p.cliente?.nombreTienda?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.nombres?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.apellidos?.toLowerCase().includes(term) ||
                 p.vendedor?.nombres?.toLowerCase().includes(term) ||
@@ -721,7 +723,7 @@ const ReportesPage: React.FC = () => {
                 numero: s.numero || '-',
                 documentoTipo: docInfo,
                 fechaFormatted: s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '-',
-                clienteNombre: s.cliente?.persona ? `${s.cliente.persona.nombres || ''} ${s.cliente.persona.apellidos || ''}`.trim() : ((s.cliente as any)?.razonSocial || 'Cliente Final'),
+                clienteNombre: getClientDisplayName(s.cliente),
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : '---',
                 observaciones: s.observaciones || '-',
                 sucursalNombre: sucursalTexto,
@@ -746,7 +748,7 @@ const ReportesPage: React.FC = () => {
         if (filtroVentaCliente) {
             const cli = clientesUnicos.find(c => String(c.id) === filtroVentaCliente);
             if (cli) {
-                const nombre = cli.persona ? `${cli.persona.nombres} ${cli.persona.apellidos}`.trim() : ((cli as any)?.razonSocial || 'Cliente');
+                const nombre = getClientDisplayName(cli);
                 texts.push(`Cliente: ${nombre}`);
             }
         }
@@ -838,9 +840,9 @@ const ReportesPage: React.FC = () => {
         if (cobranzaSearchTerm) {
             const s = cobranzaSearchTerm.toLowerCase();
             filtered = filtered.filter(p => {
-                const clienteNombre = p.cliente?.persona 
-                    ? `${p.cliente.persona.nombres} ${p.cliente.persona.apellidos}`.toLowerCase() 
-                    : ((p.cliente as any)?.razonSocial || '').toLowerCase();
+                const clienteNombre = (p.cliente?.nombreTienda ? `${p.cliente.nombreTienda} ` : '') + (p.cliente?.persona 
+                    ? `${p.cliente.persona.nombres} ${p.cliente.persona.apellidos}` 
+                    : ((p.cliente as any)?.razonSocial || ''));
                 const vendedorNombre = (p.nota?.vendedor
                     ? `${p.nota.vendedor.nombres || ''} ${p.nota.vendedor.apellidos || ''}`
                     : (p.nota?.usuario?.persona 
@@ -850,7 +852,7 @@ const ReportesPage: React.FC = () => {
                 const ref = (p.referencia || '').toLowerCase();
                 const metodo = (p.metodoPago || '').toLowerCase();
 
-                return clienteNombre.includes(s) || vendedorNombre.includes(s) || ventaNum.includes(s) || ref.includes(s) || metodo.includes(s);
+                return clienteNombre.toLowerCase().includes(s) || vendedorNombre.includes(s) || ventaNum.includes(s) || ref.includes(s) || metodo.includes(s);
             });
         }
 
@@ -886,7 +888,7 @@ const ReportesPage: React.FC = () => {
             const notaVenta = p.nota?.observaciones || p.observaciones || '-';
             return {
                 ...p,
-                clienteNombre: p.cliente?.persona ? `${p.cliente.persona.nombres} ${p.cliente.persona.apellidos}` : ((p.cliente as any)?.razonSocial || 'Cliente'),
+                clienteNombre: getClientDisplayName(p.cliente),
                 vendedorNombre,
                 notaVenta,
                 notaNumero: p.nota?.numero || '-',
@@ -911,7 +913,7 @@ const ReportesPage: React.FC = () => {
         if (filtroCobranzaCliente) {
             const cli = clientesUnicos.find(c => String(c.id) === filtroCobranzaCliente);
             if (cli) {
-                const nombre = cli.persona ? `${cli.persona.nombres} ${cli.persona.apellidos}`.trim() : ((cli as any)?.razonSocial || 'Cliente');
+                const nombre = getClientDisplayName(cli);
                 texts.push(`Cliente: ${nombre}`);
             }
         }
@@ -2174,10 +2176,9 @@ const ReportesPage: React.FC = () => {
                                     className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
                                 >
                                     <option value="">Todos los Clientes</option>
-                                    {clientesUnicos.map(c => {
-                                        const nombre = c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : ((c as any)?.razonSocial || 'Cliente');
-                                        return <option key={c.id} value={c.id}>{nombre}</option>;
-                                    })}
+                                    {clientesUnicos.map(c => (
+                                        <option key={c.id} value={c.id}>{getClientDisplayName(c)}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="space-y-1">
@@ -2354,9 +2355,23 @@ const ReportesPage: React.FC = () => {
                                                     {!filtroVentaCliente && (
                                                         <td className="p-4 text-sm">
                                                             <div className="flex flex-col">
-                                                                <span className="font-semibold text-foreground">{cliLabel}</span>
-                                                                {s.cliente?.persona?.ci && (
-                                                                    <span className="text-[11px] text-muted-foreground">CI: {s.cliente.persona.ci}</span>
+                                                                {s.cliente?.nombreTienda ? (
+                                                                    <>
+                                                                        <span className="font-bold text-foreground flex items-center gap-1">
+                                                                            <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                                            {s.cliente.nombreTienda}
+                                                                        </span>
+                                                                        <span className="text-xs text-muted-foreground">
+                                                                            {getClientPersonName(s.cliente)} {s.cliente?.persona?.ci ? `• CI: ${s.cliente.persona.ci}` : ''}
+                                                                        </span>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <span className="font-semibold text-foreground">{getClientPersonName(s.cliente)}</span>
+                                                                        {s.cliente?.persona?.ci && (
+                                                                            <span className="text-[11px] text-muted-foreground">CI: {s.cliente.persona.ci}</span>
+                                                                        )}
+                                                                    </>
                                                                 )}
                                                             </div>
                                                         </td>
@@ -2464,10 +2479,9 @@ const ReportesPage: React.FC = () => {
                                     className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
                                 >
                                     <option value="">Todos los Clientes</option>
-                                    {clientesUnicos.map(c => {
-                                        const nombre = c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : ((c as any)?.razonSocial || 'Cliente');
-                                        return <option key={c.id} value={c.id}>{nombre}</option>;
-                                    })}
+                                    {clientesUnicos.map(c => (
+                                        <option key={c.id} value={c.id}>{getClientDisplayName(c)}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="space-y-1">
@@ -2647,7 +2661,21 @@ const ReportesPage: React.FC = () => {
                                                     </td>
                                                     {!filtroCobranzaCliente && (
                                                         <td className="p-4 text-sm font-semibold text-foreground">
-                                                            {cliLabel}
+                                                            <div className="flex flex-col">
+                                                                {p.cliente?.nombreTienda ? (
+                                                                    <>
+                                                                        <span className="font-bold text-foreground flex items-center gap-1">
+                                                                            <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                                            {p.cliente.nombreTienda}
+                                                                        </span>
+                                                                        <span className="text-xs text-muted-foreground">
+                                                                            {getClientPersonName(p.cliente)}
+                                                                        </span>
+                                                                    </>
+                                                                ) : (
+                                                                    <span>{getClientPersonName(p.cliente)}</span>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                     )}
                                                     {filtroCobranzaVendedor === 'TODOS' && (

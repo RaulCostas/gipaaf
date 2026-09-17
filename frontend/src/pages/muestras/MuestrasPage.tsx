@@ -17,12 +17,14 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { whatsappService } from '../../api/whatsappService';
+import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import {
     Search, Plus, Eye, Edit, Trash2, RotateCcw,
     Printer, FileText, FileSpreadsheet, X, Save,
     ChevronLeft, ChevronRight, Check, Ban, Tag,
     User, Building2, Briefcase, Package, Calendar,
-    AlertTriangle, ArrowLeft, MessageCircle, Send, Loader2, ExternalLink
+    AlertTriangle, ArrowLeft, MessageCircle, Send, Loader2, ExternalLink,
+    Store
 } from 'lucide-react';
 
 const MuestrasPage: React.FC = () => {
@@ -33,7 +35,7 @@ const MuestrasPage: React.FC = () => {
     const canAnular = isAdmin || hasAction('MUESTRAS', 'ANULAR');
 
     const queryClient = useQueryClient();
-    const { selectedSucursal, selectedCiudad } = useFilters();
+    const { selectedSucursal, selectedCiudad, isRestrictedToBranch, userSucursal, userCiudad } = useFilters();
 
     // Modal / Sheet states
     const [isCreating, setIsCreating] = useState(false);
@@ -52,7 +54,7 @@ const MuestrasPage: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
-    // Selected item
+    // Active selection for view / edit / return
     const [currentMuestra, setCurrentMuestra] = useState<Muestra | null>(null);
 
     // WhatsApp State & Mutations
@@ -80,11 +82,11 @@ const MuestrasPage: React.FC = () => {
         mutationFn: (payload: { muestraId: number; phone?: string; sucursalId?: number; message?: string }) =>
             muestraService.sendWhatsApp(payload.muestraId, payload.phone, payload.sucursalId, payload.message),
         onSuccess: (data) => {
-            toast.success(data.message || 'Acta de entrega de muestras enviada exitosamente por WhatsApp');
+            toast.success(data.message || 'Muestra enviada exitosamente por WhatsApp');
             setWhatsappModalData(prev => ({ ...prev, isOpen: false, muestra: null }));
         },
         onError: (err: any) => {
-            toast.error(err.response?.data?.message || 'Error al enviar acta de muestras por WhatsApp');
+            toast.error(err.response?.data?.message || 'Error al enviar muestra por WhatsApp');
         }
     });
 
@@ -153,6 +155,30 @@ const MuestrasPage: React.FC = () => {
         queryKey: ['clientsList'],
         queryFn: () => clientService.getAll(),
     });
+
+    const availableClients = useMemo(() => {
+        if (!clientes) return [];
+        const activeSucursal = formSucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
+        const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
+
+        if (activeSucursal) {
+            return clientes.filter(c => 
+                c.sucursal?.id === Number(activeSucursal) || 
+                c.ruta?.sucursal?.id === Number(activeSucursal) ||
+                (formClienteId && c.id.toString() === formClienteId) ||
+                (clienteFilter !== 'all' && c.id.toString() === clienteFilter)
+            );
+        }
+        if (activeCiudad) {
+            return clientes.filter(c => 
+                c.sucursal?.ciudad?.id === Number(activeCiudad) || 
+                c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) || 
+                (formClienteId && c.id.toString() === formClienteId) ||
+                (clienteFilter !== 'all' && c.id.toString() === clienteFilter)
+            );
+        }
+        return clientes;
+    }, [clientes, formSucursalId, selectedSucursal, userSucursal?.id, selectedCiudad, userCiudad?.id, formClienteId, clienteFilter]);
 
     const { data: productos } = useQuery({
         queryKey: ['productsList'],
@@ -228,13 +254,14 @@ const MuestrasPage: React.FC = () => {
                 const term = searchTerm.toLowerCase();
                 const num = (m.numero || '').toLowerCase();
                 const clienteNombre = `${m.cliente?.persona?.nombres || ''} ${m.cliente?.persona?.apellidos || ''}`.toLowerCase();
+                const clienteTienda = (m.cliente?.nombreTienda || '').toLowerCase();
                 const vendedorNombre = `${m.vendedor?.nombres || ''} ${m.vendedor?.apellidos || ''}`.toLowerCase();
                 const hasProduct = m.detalles?.some(d =>
                     (d.producto?.nombre || '').toLowerCase().includes(term) ||
                     (d.producto?.codigo || '').toLowerCase().includes(term) ||
                     (d.numeroLote || '').toLowerCase().includes(term)
                 );
-                return num.includes(term) || clienteNombre.includes(term) || vendedorNombre.includes(term) || hasProduct;
+                return num.includes(term) || clienteNombre.includes(term) || clienteTienda.includes(term) || vendedorNombre.includes(term) || hasProduct;
             }
             return true;
         });
@@ -303,10 +330,11 @@ const MuestrasPage: React.FC = () => {
 
     // Reset Form
     const resetForm = () => {
+        const defaultSucId = selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : (filteredSucursales[0]?.id?.toString() || ''));
         setFormFecha(format(new Date(), 'yyyy-MM-dd'));
         setFormFechaEstimada('');
         setFormClienteId('');
-        setFormSucursalId(selectedSucursal || (filteredSucursales[0]?.id?.toString() || ''));
+        setFormSucursalId(defaultSucId);
         setFormVendedorId('');
         setFormObservaciones('');
         setFormDetalles([]);
@@ -321,6 +349,8 @@ const MuestrasPage: React.FC = () => {
         resetForm();
         if (selectedSucursal) {
             setFormSucursalId(selectedSucursal);
+        } else if (userSucursal?.id) {
+            setFormSucursalId(String(userSucursal.id));
         } else if (filteredSucursales.length > 0) {
             setFormSucursalId(filteredSucursales[0].id.toString());
         }
@@ -494,7 +524,7 @@ const MuestrasPage: React.FC = () => {
             return {
                 numero: m.numero,
                 fecha: m.fecha ? m.fecha.split('T')[0] : '',
-                cliente_nombre: m.cliente?.persona ? `${m.cliente.persona.nombres} ${m.cliente.persona.apellidos}` : 'Cliente Final',
+                cliente_nombre: getClientDisplayName(m.cliente),
                 vendedor_nombre: m.vendedor ? `${m.vendedor.nombres} ${m.vendedor.apellidos}` : 'No asignado',
                 sucursal_nombre: sucursalNombre,
                 fechaEstimadaDevolucion: m.fechaEstimadaDevolucion ? m.fechaEstimadaDevolucion.split('T')[0] : '-',
@@ -528,7 +558,7 @@ const MuestrasPage: React.FC = () => {
 
         if (clienteFilter !== 'all') {
             const cli = clientes?.find((cl: any) => cl.id === Number(clienteFilter));
-            const cliName = cli?.persona ? `${cli.persona.nombres} ${cli.persona.apellidos}`.trim() : 'Cliente';
+            const cliName = getClientDisplayName(cli);
             texts.push(`Cliente: ${cliName}`);
         }
 
@@ -594,7 +624,7 @@ const MuestrasPage: React.FC = () => {
         const fechaEstimada = m.fechaEstimadaDevolucion ? m.fechaEstimadaDevolucion.split('T')[0].split('-').reverse().join('/') : 'No definida';
         const fechaDev = m.fechaDevolucion ? m.fechaDevolucion.split('T')[0].split('-').reverse().join('/') : '-';
 
-        const clienteNom = m.cliente?.persona ? `${m.cliente.persona.nombres} ${m.cliente.persona.apellidos}` : 'Cliente Final';
+        const clienteNom = getClientDisplayName(m.cliente);
         const vendedorNom = m.vendedor ? `${m.vendedor.nombres} ${m.vendedor.apellidos}` : 'No asignado';
         const sucursalNom = m.sucursal ? `${m.sucursal.nombre}${(m.sucursal.ciudad as any)?.nombre ? ` (${(m.sucursal.ciudad as any).nombre})` : ''}` : '-';
 
@@ -758,9 +788,9 @@ const MuestrasPage: React.FC = () => {
                         className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[180px]"
                     >
                         <option value="all" className="bg-background text-foreground">Todos los Clientes</option>
-                        {clientes?.map(c => (
+                        {availableClients?.map(c => (
                             <option key={c.id} value={c.id} className="bg-background text-foreground">
-                                {c.persona.nombres} {c.persona.apellidos}
+                                {getClientDisplayName(c)}
                             </option>
                         ))}
                     </select>
@@ -865,7 +895,26 @@ const MuestrasPage: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="p-4 text-sm font-medium">
-                                            {m.cliente?.persona ? `${m.cliente.persona.nombres} ${m.cliente.persona.apellidos}` : 'Cliente Final'}
+                                            {m.cliente?.nombreTienda ? (
+                                                <div>
+                                                    <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                                        <Store className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                                        <span>{m.cliente.nombreTienda}</span>
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground font-normal">
+                                                        {getClientPersonName(m.cliente)} {m.cliente.persona?.ci ? `• CI: ${m.cliente.persona.ci}` : ''}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div>
+                                                    <div className="font-semibold text-foreground">{getClientPersonName(m.cliente)}</div>
+                                                    {m.cliente?.persona?.ci && (
+                                                        <div className="text-xs text-muted-foreground font-normal">
+                                                            CI: {m.cliente.persona.ci}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                             {m.cliente?.persona?.telefono && (
                                                 <div className="text-xs text-muted-foreground font-normal">
                                                     Tel: {m.cliente.persona.telefono}
@@ -1056,9 +1105,9 @@ const MuestrasPage: React.FC = () => {
                                         className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm appearance-none"
                                     >
                                         <option value="">Selecciona Cliente...</option>
-                                        {clientes?.map(c => (
+                                        {availableClients?.map(c => (
                                             <option key={c.id} value={c.id}>
-                                                {c.persona.nombres} {c.persona.apellidos}
+                                                {getClientDisplayName(c)}
                                             </option>
                                         ))}
                                     </select>
@@ -1071,9 +1120,10 @@ const MuestrasPage: React.FC = () => {
                                     <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors pointer-events-none" />
                                     <select
                                         required
+                                        disabled={isRestrictedToBranch}
                                         value={formSucursalId}
                                         onChange={(e) => setFormSucursalId(e.target.value)}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm appearance-none"
+                                        className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm appearance-none ${isRestrictedToBranch ? 'opacity-80 bg-muted/50 cursor-not-allowed' : ''}`}
                                     >
                                         <option value="">Selecciona Sucursal...</option>
                                         {filteredSucursales.map(s => (
@@ -1273,7 +1323,7 @@ const MuestrasPage: React.FC = () => {
                             <div>
                                 <span className="text-xs text-muted-foreground block">Cliente</span>
                                 <span className="text-sm font-semibold text-foreground">
-                                    {currentMuestra?.cliente?.persona ? `${currentMuestra.cliente.persona.nombres} ${currentMuestra.cliente.persona.apellidos}` : '-'}
+                                    {getClientDisplayName(currentMuestra?.cliente)}
                                 </span>
                             </div>
                             <div>
@@ -1439,7 +1489,7 @@ const MuestrasPage: React.FC = () => {
                             <div>
                                 <span className="text-muted-foreground block">Cliente</span>
                                 <span className="font-semibold text-foreground">
-                                    {currentMuestra.cliente?.persona ? `${currentMuestra.cliente.persona.nombres} ${currentMuestra.cliente.persona.apellidos}` : 'Cliente Final'}
+                                    {getClientDisplayName(currentMuestra.cliente)}
                                 </span>
                             </div>
                             <div>
@@ -1601,7 +1651,7 @@ const MuestrasPage: React.FC = () => {
                                 })()}
                             </div>
                             <div className="text-xs text-muted-foreground flex justify-between items-center">
-                                <span>Cliente: <strong className="text-foreground">{whatsappModalData.muestra.cliente?.persona ? `${whatsappModalData.muestra.cliente.persona.nombres} ${whatsappModalData.muestra.cliente.persona.apellidos}` : 'Cliente'}</strong></span>
+                                <span>Cliente: <strong className="text-foreground">{getClientDisplayName(whatsappModalData.muestra.cliente)}</strong></span>
                                 <span>{whatsappModalData.muestra.fecha ? format(new Date(String(whatsappModalData.muestra.fecha).substring(0, 10) + 'T00:00:00'), 'dd/MM/yyyy') : '-'}</span>
                             </div>
                             {whatsappModalData.muestra.vendedor && (
@@ -1688,8 +1738,9 @@ const MuestrasPage: React.FC = () => {
                             {(() => {
                                 const cleanDigits = (whatsappModalData.phone || '').replace(/\D/g, '');
                                 const phoneWithCountry = cleanDigits.length === 8 ? `591${cleanDigits}` : cleanDigits;
+                                const clienteNom = getClientDisplayName(whatsappModalData.muestra.cliente);
                                 const defaultText = encodeURIComponent(
-                                    `Hola *${whatsappModalData.muestra.cliente?.persona ? `${whatsappModalData.muestra.cliente.persona.nombres} ${whatsappModalData.muestra.cliente.persona.apellidos}` : 'Cliente'}*, le enviamos el comprobante del Acta de Entrega de Muestras N° ${whatsappModalData.muestra.numero || whatsappModalData.muestra.id}.`
+                                    `Hola *${clienteNom}*, le enviamos el comprobante del Acta de Entrega de Muestras N° ${whatsappModalData.muestra.numero || whatsappModalData.muestra.id}.`
                                 );
                                 const waLink = `https://wa.me/${phoneWithCountry}?text=${defaultText}`;
 

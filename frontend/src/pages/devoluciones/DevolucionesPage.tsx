@@ -16,12 +16,13 @@ import {
     Printer, FileText, FileSpreadsheet, Eye, Edit, 
     Ban, AlertTriangle, Users, ArrowRightLeft, Sparkles,
     ShieldAlert, RefreshCw, Check, AlertCircle, ArrowDownLeft, ArrowUpRight,
-    Undo2, MessageCircle, Send, Loader2, ExternalLink
+    Undo2, MessageCircle, Send, Loader2, ExternalLink, Store
 } from 'lucide-react';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
+import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 import { whatsappService } from '../../api/whatsappService';
@@ -48,12 +49,14 @@ const DevolucionesPage: React.FC = () => {
     const canEdit = isAdmin || hasAction('DEVOLUCIONES', 'EDITAR') || hasAction('DEVOLUCIONES', 'CREAR');
     const canAnular = isAdmin || hasAction('DEVOLUCIONES', 'ANULAR');
 
-    const { selectedSucursal, selectedCiudad } = useFilters();
+    const { selectedSucursal, selectedCiudad, isRestrictedToBranch, userSucursal, userCiudad } = useFilters();
     const queryClient = useQueryClient();
     const [isCreating, setIsCreating] = useState(false);
     const [isViewing, setIsViewing] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [anularConfirmId, setAnularConfirmId] = useState<number | null>(null);
+
+    // Filter and search state
     const [search, setSearch] = useState('');
     const [selectedClientFilter, setSelectedClientFilter] = useState('all');
     const [fechaDesde, setFechaDesde] = useState('');
@@ -136,6 +139,30 @@ const DevolucionesPage: React.FC = () => {
         queryFn: () => clientService.getAll(),
     });
 
+    const availableClients = useMemo(() => {
+        if (!clients) return [];
+        const activeSucursal = newReturn.sucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
+        const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
+
+        if (activeSucursal) {
+            return clients.filter(c => 
+                c.sucursal?.id === Number(activeSucursal) || 
+                c.ruta?.sucursal?.id === Number(activeSucursal) ||
+                (newReturn.clienteId && c.id.toString() === newReturn.clienteId) ||
+                (selectedClientFilter !== 'all' && c.id.toString() === selectedClientFilter)
+            );
+        }
+        if (activeCiudad) {
+            return clients.filter(c => 
+                c.sucursal?.ciudad?.id === Number(activeCiudad) || 
+                c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) || 
+                (newReturn.clienteId && c.id.toString() === newReturn.clienteId) ||
+                (selectedClientFilter !== 'all' && c.id.toString() === selectedClientFilter)
+            );
+        }
+        return clients;
+    }, [clients, newReturn.sucursalId, selectedSucursal, userSucursal?.id, selectedCiudad, userCiudad?.id, newReturn.clienteId, selectedClientFilter]);
+
     const { data: products } = useQuery({
         queryKey: ['products'],
         queryFn: () => productService.getAll(),
@@ -217,11 +244,13 @@ const DevolucionesPage: React.FC = () => {
     });
 
     const resetForm = () => {
+        const firstSucInCiudad = selectedCiudad ? sucursales?.find((s: any) => s.ciudad?.id === Number(selectedCiudad))?.id?.toString() : '';
+        const defaultSucId = selectedSucursal ? String(selectedSucursal) : (userSucursal?.id ? String(userSucursal.id) : (firstSucInCiudad || (filteredSucursales.length > 0 ? String(filteredSucursales[0].id) : '')));
         setNewReturn({
             id: null,
             numero: '',
             clienteId: '',
-            sucursalId: selectedSucursal ? String(selectedSucursal) : (filteredSucursales.length > 0 ? String(filteredSucursales[0].id) : ''),
+            sucursalId: defaultSucId,
             fecha: format(new Date(), 'yyyy-MM-dd'),
             observaciones: '',
             detallesDevueltos: [],
@@ -524,9 +553,9 @@ const DevolucionesPage: React.FC = () => {
         let clienteNombre = 'Cliente Final';
         if (newReturn.clienteId) {
             const c = clients?.find(cl => cl.id.toString() === newReturn.clienteId.toString());
-            if (c) clienteNombre = `${c.persona.nombres} ${c.persona.apellidos}`;
-        } else if (newReturn.cliente?.persona) {
-            clienteNombre = `${newReturn.cliente.persona.nombres} ${newReturn.cliente.persona.apellidos}`;
+            if (c) clienteNombre = getClientDisplayName(c);
+        } else if (newReturn.cliente) {
+            clienteNombre = getClientDisplayName(newReturn.cliente);
         }
         doc.text(`Cliente: ${clienteNombre}`, 14, currentY);
         doc.text(`Tipo: Cambio / Reposición por Garantía (Sin Dinero)`, 105, currentY);
@@ -671,9 +700,9 @@ const DevolucionesPage: React.FC = () => {
             const s = search.toLowerCase();
             filtered = filtered.filter(r => {
                 const num = r.numero?.toLowerCase() || '';
-                const cliNombre = r.cliente?.persona ? `${r.cliente.persona.nombres} ${r.cliente.persona.apellidos}`.toLowerCase() : '';
+                const cliNombre = (r.cliente?.nombreTienda ? `${r.cliente.nombreTienda} ` : '') + (r.cliente?.persona ? `${r.cliente.persona.nombres} ${r.cliente.persona.apellidos}` : '');
                 const obs = (r.observaciones || '').toLowerCase();
-                return num.includes(s) || cliNombre.includes(s) || obs.includes(s);
+                return num.includes(s) || cliNombre.toLowerCase().includes(s) || obs.includes(s);
             });
         }
 
@@ -711,7 +740,7 @@ const DevolucionesPage: React.FC = () => {
             return {
                 numero: r.numero || '-',
                 fecha: r.fecha ? String(r.fecha).substring(0, 10) : '-',
-                cliente_nombre: r.cliente?.persona ? `${r.cliente.persona.nombres} ${r.cliente.persona.apellidos}` : 'Cliente Final',
+                cliente_nombre: getClientDisplayName(r.cliente),
                 sucursal_nombre: sucursalNombre,
                 cant_devuelta: totalDevCant.toString(),
                 cant_repuesta: totalRepCant.toString(),
@@ -735,7 +764,7 @@ const DevolucionesPage: React.FC = () => {
 
         if (selectedClientFilter !== 'all') {
             const cli = clients?.find(cl => cl.id === Number(selectedClientFilter));
-            const cliName = cli?.persona ? `${cli.persona.nombres} ${cli.persona.apellidos}`.trim() : 'Cliente Seleccionado';
+            const cliName = getClientDisplayName(cli);
             texts.push(`Cliente: ${cliName}`);
         }
 
@@ -835,14 +864,11 @@ const DevolucionesPage: React.FC = () => {
                         className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm"
                     >
                         <option value="all" className="bg-background text-foreground">Todos los Clientes</option>
-                        {clients?.map(c => {
-                            const cName = c.persona ? `${c.persona.nombres} ${c.persona.apellidos}`.trim() : '';
-                            return (
-                                <option key={c.id} value={c.id} className="bg-background text-foreground">
-                                    {cName || 'Cliente Final'}
-                                </option>
-                            );
-                        })}
+                        {availableClients?.map(c => (
+                            <option key={c.id} value={c.id} className="bg-background text-foreground">
+                                {getClientDisplayName(c)}
+                            </option>
+                        ))}
                     </select>
                 </div>
 
@@ -929,10 +955,24 @@ const DevolucionesPage: React.FC = () => {
                                     </td>
                                     <td className="p-4">
                                         <div className="flex flex-col">
-                                            <span className="font-semibold text-foreground">
-                                                {r.cliente?.persona ? `${r.cliente.persona.nombres} ${r.cliente.persona.apellidos}` : 'Cliente Final'}
-                                            </span>
-                                            {r.cliente?.persona?.ci && <span className="text-[10px] text-muted-foreground font-mono">CI: {r.cliente.persona.ci}</span>}
+                                            {r.cliente?.nombreTienda ? (
+                                                <>
+                                                    <span className="font-bold text-foreground text-xs flex items-center gap-1">
+                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                        {r.cliente.nombreTienda}
+                                                    </span>
+                                                    <span className="text-[11px] text-muted-foreground">
+                                                        {getClientPersonName(r.cliente)} {r.cliente?.persona?.ci ? `• CI: ${r.cliente.persona.ci}` : ''}
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="font-semibold text-foreground">
+                                                        {getClientPersonName(r.cliente)}
+                                                    </span>
+                                                    {r.cliente?.persona?.ci && <span className="text-[10px] text-muted-foreground font-mono">CI: {r.cliente.persona.ci}</span>}
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                     {!selectedSucursal && (
@@ -1073,10 +1113,10 @@ const DevolucionesPage: React.FC = () => {
                                 <Building2 className="w-3.5 h-3.5 text-primary" /> Sucursal
                             </label>
                             <select
-                                disabled={isViewing}
+                                disabled={isViewing || isRestrictedToBranch}
                                 value={newReturn.sucursalId}
                                 onChange={(e) => setNewReturn({ ...newReturn, sucursalId: e.target.value })}
-                                className="w-full p-2.5 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-75"
+                                className={`w-full p-2.5 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-75 ${isRestrictedToBranch ? 'opacity-80 bg-muted/50 cursor-not-allowed' : ''}`}
                             >
                                 <option value="">Seleccione sucursal...</option>
                                 {filteredSucursales?.map(s => (
@@ -1099,9 +1139,9 @@ const DevolucionesPage: React.FC = () => {
                                 className="w-full p-2.5 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-75"
                             >
                                 <option value="">Cliente Final (Sin registrar)</option>
-                                {clients?.map(c => (
+                                {availableClients?.map(c => (
                                     <option key={c.id} value={c.id}>
-                                        {c.persona.nombres} {c.persona.apellidos} {c.persona.ci ? `(CI: ${c.persona.ci})` : ''}
+                                        {getClientDisplayName(c)}
                                     </option>
                                 ))}
                             </select>

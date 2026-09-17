@@ -30,8 +30,7 @@ export const proformaService = {
         return response.data;
     },
     convertirAVenta: async (id: number) => {
-        // Asumiendo que el backend tiene un endpoint para esto, o lo convertiremos manualmente si no.
-        const response = await apiClient.post<Nota>(`/notas/${id}/convertir-venta`);
+        const response = await apiClient.put<Nota>(`/notas/${id}/convertir-venta`);
         return response.data;
     },
     sendWhatsApp: async (payload: { proformaId: number; phone?: string; sucursalId?: number; message?: string }) => {

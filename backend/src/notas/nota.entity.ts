@@ -33,6 +33,7 @@ export enum EstadoNota {
     PENDIENTE = 'PENDIENTE',
     CONFIRMADA = 'CONFIRMADA',
     ANULADA = 'ANULADA',
+    CONVERTIDA = 'CONVERTIDA',
 }
 
 @Entity('notas')
@@ -60,6 +61,15 @@ export class Nota {
 
     @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
     descuentoPorcentaje: number;
+
+    @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
+    descuentoFijoPorcentaje: number;
+
+    @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+    descuentoFijo: number;
+
+    @Column({ type: 'boolean', default: false })
+    aplicaDescuentoFijo: boolean;
 
     @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
     descuentoPromocionPorcentaje: number;

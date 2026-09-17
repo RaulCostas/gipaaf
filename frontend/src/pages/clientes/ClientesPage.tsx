@@ -9,7 +9,7 @@ import {
     Search, Plus, Pencil, Trash2, Users, 
     X, Save, ChevronLeft, ChevronRight, Check,
     Printer, FileText, FileSpreadsheet, User, Phone, MapPin, CreditCard, Mail, FileBadge, Building2, Barcode, Calendar, Map,
-    Compass, ExternalLink
+    Compass, ExternalLink, Store, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
@@ -18,11 +18,12 @@ import { useFilters } from '../../context/FilterContext';
 import LocationPickerMap from '../../components/ui/LocationPickerMap';
 
 const ClientesPage: React.FC = () => {
-    const { selectedCiudad, selectedSucursal } = useFilters();
+    const { selectedCiudad, selectedSucursal, isRestrictedToBranch, userSucursal } = useFilters();
     const queryClient = useQueryClient();
     const [isEditing, setIsEditing] = useState(false);
     const [currentClient, setCurrentClient] = useState<Partial<Cliente>>({
         persona: { nombres: '', apellidos: '', ci: '', telefono: '', direccion: '', email: '', activo: true } as any,
+        nombreTienda: '',
         codigo: '',
         plazoCreditoDias: 0,
         limiteCredito: 0,
@@ -33,8 +34,14 @@ const ClientesPage: React.FC = () => {
     });
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const [itemsPerPage] = useState(10);
     const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+
+    // Geocoding & Address search state
+    const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+    const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [lastSelectedAddress, setLastSelectedAddress] = useState<string>('');
 
     const { data: clients, isLoading } = useQuery({
         queryKey: ['clients'],
@@ -51,8 +58,33 @@ const ClientesPage: React.FC = () => {
         queryFn: sucursalService.getAll,
     });
 
+    const cityCenterCoords: Record<string, [number, number]> = {
+        'LA PAZ': [-16.5000, -68.1500],
+        'COCHABAMBA': [-17.3895, -66.1568],
+        'SANTA CRUZ': [-17.7833, -63.1821],
+        'EL ALTO': [-16.5047, -68.1634],
+        'ORURO': [-17.9647, -67.1060],
+        'POTOSI': [-19.5836, -65.7531],
+        'POTOSÍ': [-19.5836, -65.7531],
+        'SUCRE': [-19.0333, -65.2627],
+        'TARIJA': [-21.5355, -64.7296],
+        'BENI': [-14.8333, -64.9000],
+        'TRINIDAD': [-14.8333, -64.9000],
+        'PANDO': [-11.0267, -68.7692],
+        'COBIJA': [-11.0267, -68.7692],
+    };
+
+    const mapDefaultCenter = useMemo<[number, number]>(() => {
+        const cityName = (currentClient.sucursal?.ciudad?.nombre || (sucursales?.find(s => s.id === currentClient.sucursal?.id)?.ciudad?.nombre) || userSucursal?.ciudad?.nombre || '').toUpperCase().trim();
+        for (const [key, coords] of Object.entries(cityCenterCoords)) {
+            if (cityName.includes(key)) return coords;
+        }
+        return [-16.5000, -68.1500];
+    }, [currentClient.sucursal, sucursales, userSucursal]);
+
     const exportColumns = [
         { header: 'CI/NIT', dataKey: 'ci' },
+        { header: 'Tienda / Negocio', dataKey: 'nombreTienda' },
         { header: 'Nombres', dataKey: 'nombres' },
         { header: 'Apellidos', dataKey: 'apellidos' },
         { header: 'Celular', dataKey: 'telefono' },
@@ -73,6 +105,7 @@ const ClientesPage: React.FC = () => {
         return filteredClients.map(c => ({
             id: c.id,
             ci: c.persona?.ci || '-',
+            nombreTienda: c.nombreTienda || '-',
             nombres: c.persona?.nombres || '-',
             apellidos: c.persona?.apellidos || '-',
             telefono: c.persona?.telefono || '-',
@@ -131,8 +164,10 @@ const ClientesPage: React.FC = () => {
     });
 
     const resetForm = () => {
+        const defaultSucursal = sucursales?.find(s => s.id === Number(selectedSucursal)) || userSucursal || undefined;
         setCurrentClient({
             persona: { nombres: '', apellidos: '', ci: '', telefono: '', direccion: '', email: '', activo: true } as any,
+            nombreTienda: '',
             codigo: '',
             plazoCreditoDias: 0,
             limiteCredito: 0,
@@ -140,9 +175,74 @@ const ClientesPage: React.FC = () => {
             observaciones: '',
             latitud: null,
             longitud: null,
+            sucursal: defaultSucursal,
             activo: true
         });
+        setAddressSuggestions([]);
+        setShowSuggestions(false);
+        setLastSelectedAddress('');
+        setIsSearchingAddress(false);
     };
+
+    // Automatic geocoding & map centering when typing in address
+    useEffect(() => {
+        const direccion = currentClient.persona?.direccion?.trim();
+        if (!isEditing || !direccion || direccion.length < 3) {
+            setAddressSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        if (direccion === lastSelectedAddress) {
+            return;
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(async () => {
+            setIsSearchingAddress(true);
+            try {
+                const cityName = currentClient.sucursal?.ciudad?.nombre || (sucursales?.find(s => s.id === currentClient.sucursal?.id)?.ciudad?.nombre) || userSucursal?.ciudad?.nombre || '';
+                let query = direccion;
+                if (cityName && !query.toLowerCase().includes(cityName.toLowerCase())) {
+                    query = `${query}, ${cityName}`;
+                }
+
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=bo&limit=5&addressdetails=1`;
+                const res = await fetch(url, {
+                    signal: controller.signal,
+                    headers: { 'Accept-Language': 'es' }
+                });
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    setAddressSuggestions(data);
+                    setShowSuggestions(true);
+                    const top = data[0];
+                    const lat = parseFloat(top.lat);
+                    const lon = parseFloat(top.lon);
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        setCurrentClient(prev => ({
+                            ...prev,
+                            latitud: Number(lat.toFixed(7)),
+                            longitud: Number(lon.toFixed(7))
+                        }));
+                    }
+                } else {
+                    setAddressSuggestions([]);
+                }
+            } catch (err: any) {
+                if (err.name !== 'AbortError') {
+                    console.error('Error buscando dirección en mapa:', err);
+                }
+            } finally {
+                setIsSearchingAddress(false);
+            }
+        }, 650);
+
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
+    }, [currentClient.persona?.direccion, isEditing, currentClient.sucursal, sucursales, userSucursal, lastSelectedAddress]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -195,12 +295,13 @@ const ClientesPage: React.FC = () => {
         filtered = filtered.filter(c => 
             c.persona?.nombres?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             c.persona?.apellidos?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            c.nombreTienda?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             c.persona?.ci?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             c.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             c.persona?.telefono?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             c.persona?.direccion?.toLowerCase().includes(searchTerm.toLowerCase())
         );
-        return filtered.sort((a, b) => (a.persona?.nombres || '').localeCompare(b.persona?.nombres || ''));
+        return filtered.sort((a, b) => ((a.nombreTienda || a.persona?.nombres) || '').localeCompare((b.nombreTienda || b.persona?.nombres) || ''));
     }, [clients, searchTerm, selectedCiudad, selectedSucursal]);
 
     const totalPages = Math.ceil(filteredClients.length / itemsPerPage) || 1;
@@ -273,6 +374,20 @@ const ClientesPage: React.FC = () => {
                 }>
                 <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto px-1.5 py-1 custom-scrollbar">
                     <div className="space-y-4">
+                        <div className="space-y-1.5">
+                            <label className="text-sm font-semibold text-foreground">Nombre de la Tienda / Negocio</label>
+                            <div className="relative group">
+                                <Store className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Ferretería María"
+                                    value={currentClient.nombreTienda || ''}
+                                    onChange={(e) => setCurrentClient({ ...currentClient, nombreTienda: e.target.value })}
+                                    className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm font-medium"
+                                />
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-foreground">Nombres <span className="text-destructive">*</span></label>
@@ -347,26 +462,91 @@ const ClientesPage: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="text-sm font-semibold text-foreground">Dirección</label>
+                        <div className="space-y-1.5 relative">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                                    <MapPin className="w-4 h-4 text-primary" /> Dirección
+                                </label>
+                                {isSearchingAddress && (
+                                    <span className="text-xs text-primary flex items-center gap-1 animate-pulse">
+                                        <Loader2 className="w-3 h-3 animate-spin" /> Buscando en mapa...
+                                    </span>
+                                )}
+                            </div>
                             <div className="relative group">
                                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                                 <input
                                     type="text"
-                                    placeholder="Ej: Av. 6 de Agosto #456, Zona Sur"
+                                    placeholder="Ej: Av. América y Pando, Cochabamba"
                                     value={currentClient.persona?.direccion || ''}
-                                    onChange={(e) => setCurrentClient({ ...currentClient, persona: { ...currentClient.persona!, direccion: e.target.value }})}
-                                    className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                    onChange={(e) => {
+                                        setLastSelectedAddress('');
+                                        setCurrentClient({ ...currentClient, persona: { ...currentClient.persona!, direccion: e.target.value }});
+                                    }}
+                                    onFocus={() => { if (addressSuggestions.length > 0) setShowSuggestions(true); }}
+                                    className="w-full pl-10 pr-9 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
                                 />
+                                {isSearchingAddress ? (
+                                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary animate-spin" />
+                                ) : (currentClient.latitud && currentClient.longitud) ? (
+                                    <span title="Ubicación encontrada en el mapa" className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+                                        <Check className="w-4 h-4 text-emerald-500" />
+                                    </span>
+                                ) : null}
                             </div>
+
+                            {/* Autocomplete Suggestions Dropdown */}
+                            {showSuggestions && addressSuggestions.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border/80 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto custom-scrollbar">
+                                    <div className="p-1.5 space-y-0.5">
+                                        <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                                            <span>Sugerencias en Bolivia</span>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setShowSuggestions(false)}
+                                                className="text-muted-foreground hover:text-foreground text-[11px]"
+                                            >
+                                                Cerrar
+                                            </button>
+                                        </div>
+                                        {addressSuggestions.map((item, idx) => (
+                                            <button
+                                                key={item.place_id || idx}
+                                                type="button"
+                                                onClick={() => {
+                                                    const lat = parseFloat(item.lat);
+                                                    const lon = parseFloat(item.lon);
+                                                    const chosenAddress = item.name || item.display_name.split(',')[0] || item.display_name;
+                                                    setLastSelectedAddress(chosenAddress);
+                                                    setShowSuggestions(false);
+                                                    setCurrentClient(prev => ({
+                                                        ...prev,
+                                                        persona: { ...prev.persona!, direccion: chosenAddress },
+                                                        latitud: Number(lat.toFixed(7)),
+                                                        longitud: Number(lon.toFixed(7))
+                                                    }));
+                                                }}
+                                                className="w-full text-left px-2.5 py-2 hover:bg-accent rounded-md text-xs transition-colors flex items-start gap-2 cursor-pointer"
+                                            >
+                                                <MapPin className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                                                <div className="flex flex-col min-w-0 flex-1">
+                                                    <span className="font-semibold text-foreground truncate">{item.name || item.display_name.split(',')[0]}</span>
+                                                    <span className="text-[11px] text-muted-foreground truncate">{item.display_name}</span>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <LocationPickerMap
                             latitud={currentClient.latitud}
                             longitud={currentClient.longitud}
+                            defaultCenter={mapDefaultCenter}
                             onChange={(lat, lng) => setCurrentClient(prev => ({ ...prev, latitud: lat, longitud: lng }))}
                             title="Ubicación en Mapa"
-                            description="Haz clic en el mapa para marcar la ubicación exacta del cliente / taller."
+                            description="Haz clic o escribe tu dirección para marcar la ubicación exacta del cliente / taller."
                         />
 
                         <div className="grid grid-cols-2 gap-4">
@@ -418,6 +598,7 @@ const ClientesPage: React.FC = () => {
                                 <div className="relative group">
                                     <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                                     <select
+                                        disabled={isRestrictedToBranch}
                                         value={currentClient.sucursal?.id || ''}
                                         onChange={(e) => {
                                             const val = e.target.value;
@@ -427,7 +608,7 @@ const ClientesPage: React.FC = () => {
                                                 sucursal: found ? found : undefined 
                                             });
                                         }}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer text-sm"
+                                        className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer text-sm ${isRestrictedToBranch ? 'opacity-80 bg-muted/50 cursor-not-allowed' : ''}`}
                                     >
                                         <option value="">-- Sin Sucursal Asignada --</option>
                                         {sucursales?.filter(s => s.activo !== false || s.id === currentClient.sucursal?.id).map(s => (
@@ -511,6 +692,7 @@ const ClientesPage: React.FC = () => {
                             <tr className="bg-muted/50 border-b">
                                 <th className="p-4 text-sm font-semibold text-muted-foreground w-16">#</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground w-28">Código</th>
+                                <th className="p-4 text-sm font-semibold text-muted-foreground">Tienda / Negocio</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Cliente / CI</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Contacto</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Ruta / Vendedor</th>
@@ -521,12 +703,22 @@ const ClientesPage: React.FC = () => {
                         </thead>
                         <tbody className="divide-y">
                             {paginatedClients.length === 0 ? (
-                                <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">No se encontraron clientes.</td></tr>
+                                <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">No se encontraron clientes.</td></tr>
                             ) : paginatedClients.map((client, index) => (
                                 <tr key={client.id} className="hover:bg-accent/30 transition-colors group">
                                     <td className="p-4 text-sm font-mono text-muted-foreground">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                                     <td className="p-4 text-sm font-bold text-foreground">
                                         {client.codigo || '-'}
+                                    </td>
+                                    <td className="p-4">
+                                        {client.nombreTienda ? (
+                                            <div className="flex items-center gap-1.5 font-bold text-sm text-foreground">
+                                                <Store className="w-4 h-4 text-primary shrink-0" />
+                                                <span>{client.nombreTienda}</span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground/60 italic">Sin tienda</span>
+                                        )}
                                     </td>
                                     <td className="p-4">
                                         <div className="flex flex-col">

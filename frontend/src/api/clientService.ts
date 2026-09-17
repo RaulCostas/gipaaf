@@ -16,6 +16,7 @@ export interface Persona {
 export interface Cliente {
     id: number;
     persona: Persona;
+    nombreTienda?: string;
     creditoDisponible: number;
     deudaActual?: number;
     codigo?: string;

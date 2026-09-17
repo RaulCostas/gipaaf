@@ -14,19 +14,20 @@ import { getCiudades } from '../../api/ciudadService';
 
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
-import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, User, Package, Calendar, X, Eye, Edit, AlertTriangle, FileText, Receipt, Building2, Info, CreditCard, Clock, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2 } from 'lucide-react';
+import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, User, Package, Calendar, X, Eye, Edit, AlertTriangle, FileText, Receipt, Building2, Info, CreditCard, Clock, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store } from 'lucide-react';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { numeroALetras } from '../../utils/currencyUtils';
+import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 
 const ventasPage: React.FC = () => {
     const { isAdmin, isVendedor, isJefeVentas, userPersonal } = useAuth();
     const isRestrictedVendor = isVendedor && !isAdmin && !isJefeVentas && !!userPersonal;
-    const { selectedSucursal, selectedCiudad } = useFilters();
+    const { selectedSucursal, selectedCiudad, isRestrictedToBranch, userSucursal, userCiudad } = useFilters();
     const queryClient = useQueryClient();
     const [isCreating, setIsCreating] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -41,13 +42,14 @@ const ventasPage: React.FC = () => {
     // Form State
     const [newVenta, setNewVenta] = useState<any>({
         clienteId: '',
-        sucursalId: isRestrictedVendor && userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : '',
+        sucursalId: selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : '')),
         vendedorId: isRestrictedVendor && userPersonal?.id ? String(userPersonal.id) : '',
         fecha: format(new Date(), 'yyyy-MM-dd'),
         conFactura: false,
         numeroFactura: '',
         observaciones: '',
         descuentoPorcentaje: 0,
+        aplicaDescuentoFijo: false,
         descuentoPromocionPorcentaje: 0,
         detalles: []
     });
@@ -70,6 +72,28 @@ const ventasPage: React.FC = () => {
         queryKey: ['clients'],
         queryFn: () => clientService.getAll(),
     });
+
+    const availableClients = useMemo(() => {
+        if (!clients) return [];
+        const activeSucursal = newVenta.sucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
+        const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
+
+        if (activeSucursal) {
+            return clients.filter(c => 
+                c.sucursal?.id === Number(activeSucursal) || 
+                c.ruta?.sucursal?.id === Number(activeSucursal) ||
+                (newVenta.clienteId && c.id.toString() === newVenta.clienteId)
+            );
+        }
+        if (activeCiudad) {
+            return clients.filter(c => 
+                c.sucursal?.ciudad?.id === Number(activeCiudad) ||
+                c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) ||
+                (newVenta.clienteId && c.id.toString() === newVenta.clienteId)
+            );
+        }
+        return clients;
+    }, [clients, newVenta.sucursalId, selectedSucursal, userSucursal?.id, selectedCiudad, userCiudad?.id, newVenta.clienteId]);
 
     
     const { data: sucursales } = useQuery({ queryKey: ['sucursales'], queryFn: sucursalService.getAll });
@@ -201,12 +225,16 @@ const ventasPage: React.FC = () => {
     const resetForm = () => {
         setEditingId(null);
         setIsViewing(false);
+        const firstSucInCiudad = selectedCiudad ? sucursales?.find((s: any) => s.ciudad?.id === Number(selectedCiudad))?.id?.toString() : '';
+        const defaultSucId = selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : (firstSucInCiudad || '')));
+        const defaultSucNombre = sucursales?.find((s: any) => s.id.toString() === defaultSucId)?.nombre || userSucursal?.nombre || userPersonal?.sucursal?.nombre || '';
+
         setNewVenta({
             numero: '',
             clienteId: '',
-            sucursalId: isRestrictedVendor && userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : '',
+            sucursalId: defaultSucId,
             vendedorId: isRestrictedVendor && userPersonal?.id ? String(userPersonal.id) : '',
-            sucursal: isRestrictedVendor && userPersonal?.sucursal?.nombre ? userPersonal.sucursal.nombre : '',
+            sucursal: defaultSucNombre,
             fecha: format(new Date(), 'yyyy-MM-dd'),
             tipoPago: 'CONTADO',
             diasCredito: 0,
@@ -219,6 +247,7 @@ const ventasPage: React.FC = () => {
             montoQr: 0,
             montoTarjeta: 0,
             descuentoPorcentaje: 0,
+            aplicaDescuentoFijo: false,
             descuentoPromocionPorcentaje: 0
         });
         setError(null);
@@ -244,6 +273,7 @@ const ventasPage: React.FC = () => {
             tipoDocumento: venta.tipoDocumento || 'NOTA_VENTA',
             observaciones: venta.observaciones || '',
             descuentoPorcentaje: Number(venta.descuentoPorcentaje || 0),
+            aplicaDescuentoFijo: Boolean(venta.aplicaDescuentoFijo) || Number(venta.descuentoFijoPorcentaje || 0) > 0,
             descuentoPromocionPorcentaje: Number(venta.descuentoPromocionPorcentaje || 0),
             detalles: venta.detalles?.map((d: any) => ({
                 productoId: d.producto.id,
@@ -282,6 +312,7 @@ const ventasPage: React.FC = () => {
             tipoDocumento: venta.tipoDocumento || 'NOTA_VENTA',
             observaciones: venta.observaciones || '',
             descuentoPorcentaje: Number(venta.descuentoPorcentaje || 0),
+            aplicaDescuentoFijo: Boolean(venta.aplicaDescuentoFijo) || Number(venta.descuentoFijoPorcentaje || 0) > 0,
             descuentoPromocionPorcentaje: Number(venta.descuentoPromocionPorcentaje || 0),
             detalles: venta.detalles?.map((d: any) => ({
                 productoId: d.producto.id,
@@ -328,7 +359,7 @@ const ventasPage: React.FC = () => {
         let clienteNombre = 'Cliente Final';
         if (newVenta.clienteId) {
             const c = clients?.find(c => c.id.toString() === newVenta.clienteId.toString());
-            if (c) clienteNombre = `${c.persona.nombres} ${c.persona.apellidos}`;
+            if (c) clienteNombre = getClientDisplayName(c);
         }
         doc.text(`Cliente: ${clienteNombre}`, 14, currentY);
         
@@ -395,6 +426,10 @@ const ventasPage: React.FC = () => {
             doc.text(`Descuento (${newVenta.descuentoPorcentaje}%): -${formatCurrency(totals.desc1)}`, 196, currentTotalY, { align: 'right' });
             currentTotalY += 6;
         }
+        if (totals.descFijo > 0) {
+            doc.text(`Descuento Fijo (3%): -${formatCurrency(totals.descFijo)}`, 196, currentTotalY, { align: 'right' });
+            currentTotalY += 6;
+        }
         if (totals.desc2 > 0) {
             doc.text(`Promoción (${newVenta.descuentoPromocionPorcentaje}%): -${formatCurrency(totals.desc2)}`, 196, currentTotalY, { align: 'right' });
             currentTotalY += 6;
@@ -458,11 +493,22 @@ const ventasPage: React.FC = () => {
 
     const calculateTotals = () => {
         const subtotal = newVenta.detalles.reduce((acc: number, det: any) => acc + (det.cantidad * det.precioUnitario), 0);
+        
+        // 1. Descuento estándar
         const desc1 = (subtotal * Number(newVenta.descuentoPorcentaje || 0)) / 100;
         const sub1 = subtotal - desc1;
-        const desc2 = (sub1 * Number(newVenta.descuentoPromocionPorcentaje || 0)) / 100;
-        const total = sub1 - desc2;
-        return { subtotal, desc1, desc2, total };
+        
+        // 2. Descuento fijo 3%
+        const hasFijo = Boolean(newVenta.aplicaDescuentoFijo);
+        const descFijoPct = hasFijo ? 3 : 0;
+        const descFijo = (sub1 * descFijoPct) / 100;
+        const subFijo = sub1 - descFijo;
+        
+        // 3. Descuento promoción
+        const desc2 = (subFijo * Number(newVenta.descuentoPromocionPorcentaje || 0)) / 100;
+        const total = subFijo - desc2;
+        
+        return { subtotal, desc1, descFijo, hasFijo, descFijoPct, desc2, total };
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -507,6 +553,8 @@ const ventasPage: React.FC = () => {
                 precioUnitario: d.precioUnitario
             })),
             descuentoPorcentaje: newVenta.descuentoPorcentaje,
+            aplicaDescuentoFijo: Boolean(newVenta.aplicaDescuentoFijo),
+            descuentoFijoPorcentaje: newVenta.aplicaDescuentoFijo ? 3 : 0,
             descuentoPromocionPorcentaje: newVenta.descuentoPromocionPorcentaje
         };
         if (editingId) {
@@ -551,6 +599,7 @@ const ventasPage: React.FC = () => {
             filtered = filtered.filter(p => 
                 p.numero.toLowerCase().includes(term) ||
                 (p.numeroFactura && p.numeroFactura.toLowerCase().includes(term)) ||
+                p.cliente?.nombreTienda?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.nombres?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.apellidos?.toLowerCase().includes(term) ||
                 p.vendedor?.nombres?.toLowerCase().includes(term) ||
@@ -576,20 +625,34 @@ const ventasPage: React.FC = () => {
 
     const getFormattedData = () => {
         return filteredventas.map(s => {
-            const subTotalCalc = (Number(s.total) || 0) + (Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0);
-            const descCalc = (Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0);
+            const desc1Calc = Number(s.descuento) || 0;
+            const descFijoCalc = Number(s.descuentoFijo) || 0;
+            const desc2Calc = Number(s.descuentoPromocion) || 0;
+            const descTotalCalc = desc1Calc + descFijoCalc + desc2Calc;
+            const subTotalCalc = (Number(s.total) || 0) + descTotalCalc;
+            
+            const descPct = Number(s.descuentoPorcentaje) || 0;
+            const hasFijo = Boolean(s.aplicaDescuentoFijo) || Number(s.descuentoFijoPorcentaje || 0) > 0 || descFijoCalc > 0;
+            const descPromoPct = Number(s.descuentoPromocionPorcentaje) || 0;
+
+            const parts: string[] = [];
+            if (descPct > 0) parts.push(`${Number(descPct.toFixed(2))}%`);
+            if (hasFijo) parts.push(`3% Fijo`);
+            if (descPromoPct > 0) parts.push(`${Number(descPromoPct.toFixed(2))}% Promo`);
+            const pctLabel = parts.length > 0 ? ` (${parts.join(' + ')})` : '';
+
             const docInfo = s.conFactura ? `FAC: ${s.numeroFactura || 'S/N'}` : 'Nota de Entrega';
             return {
                 id: s.id,
                 numero: s.numero || '-',
                 fechaFormatted: s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '-',
-                clienteNombre: s.cliente?.persona ? `${s.cliente.persona.nombres || ''} ${s.cliente.persona.apellidos || ''}`.trim() : 'Cliente Final',
+                clienteNombre: getClientDisplayName(s.cliente),
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : '---',
                 observaciones: s.observaciones || '-',
                 sucursalNombre: s.sucursal?.nombre || '-',
                 documentoTipo: docInfo,
                 subtotalFormatted: formatCurrency(subTotalCalc),
-                descuentoFormatted: formatCurrency(descCalc),
+                descuentoFormatted: `${formatCurrency(descTotalCalc)}${pctLabel}`,
                 totalFormatted: formatCurrency(s.total || 0),
                 estado: s.estado
             };
@@ -796,68 +859,118 @@ const ventasPage: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y">
-                        {filteredventas.map((s) => (
-                            <tr key={s.id} className="hover:bg-accent/50 transition-colors group">
-                                <td className="p-4">
-                                    <div className="flex flex-col gap-1">
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-sm font-bold">{s.numero}</span>
-                                            {s.conFactura ? (
-                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200" title={`Factura Nro: ${s.numeroFactura || 'S/N'}`}>
-                                                    FAC: {s.numeroFactura || 'S/N'}
-                                                </span>
+                        {filteredventas.map((s) => {
+                            const desc1Calc = Number(s.descuento) || 0;
+                            const descFijoCalc = Number(s.descuentoFijo) || 0;
+                            const desc2Calc = Number(s.descuentoPromocion) || 0;
+                            const descTotalCalc = desc1Calc + descFijoCalc + desc2Calc;
+                            const subTotalCalc = (Number(s.total) || 0) + descTotalCalc;
+
+                            const descPct = Number(s.descuentoPorcentaje) || 0;
+                            const hasFijo = Boolean(s.aplicaDescuentoFijo) || Number(s.descuentoFijoPorcentaje || 0) > 0 || descFijoCalc > 0;
+                            const descPromoPct = Number(s.descuentoPromocionPorcentaje) || 0;
+
+                            return (
+                                <tr key={s.id} className="hover:bg-accent/50 transition-colors group">
+                                    <td className="p-4">
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-sm font-bold">{s.numero}</span>
+                                                {s.conFactura ? (
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200" title={`Factura Nro: ${s.numeroFactura || 'S/N'}`}>
+                                                        FAC: {s.numeroFactura || 'S/N'}
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                                                        Sin Factura
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className="text-xs text-muted-foreground">{s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '---'}</span>
+                                        </div>
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="flex flex-col">
+                                            {s.cliente?.nombreTienda ? (
+                                                <>
+                                                    <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                        {s.cliente.nombreTienda}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {getClientPersonName(s.cliente)} {s.cliente.persona?.ci ? `• CI: ${s.cliente.persona.ci}` : ''}
+                                                    </span>
+                                                </>
                                             ) : (
-                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
-                                                    Sin Factura
-                                                </span>
+                                                <>
+                                                    <span className="text-sm font-medium">
+                                                        {getClientPersonName(s.cliente)}
+                                                    </span>
+                                                    {s.cliente?.persona?.ci && <span className="text-xs text-muted-foreground">CI: {s.cliente.persona.ci}</span>}
+                                                </>
                                             )}
                                         </div>
-                                        <span className="text-xs text-muted-foreground">{s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '---'}</span>
-                                    </div>
-                                </td>
-                                <td className="p-4">
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-medium">
-                                            {s.cliente ? `${s.cliente.persona.nombres} ${s.cliente.persona.apellidos}` : 'Cliente Final'}
-                                        </span>
-                                        {s.cliente && <span className="text-xs text-muted-foreground">CI: {s.cliente.persona.ci}</span>}
-                                    </div>
-                                </td>
-                                <td className="p-4">
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-medium text-muted-foreground">
-                                            {s.vendedor ? `${s.vendedor.nombres} ${s.vendedor.apellidos}` : '---'}
-                                        </span>
-                                    </div>
-                                </td>
-                                <td className="p-4 max-w-[200px]">
-                                    {s.observaciones ? (
-                                        <span className="text-xs text-muted-foreground line-clamp-2" title={s.observaciones}>
-                                            {s.observaciones}
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs text-muted-foreground/50 font-mono">-</span>
-                                    )}
-                                </td>
-                                <td className="p-4 text-sm font-medium text-right text-muted-foreground">
-                                    {formatCurrency((Number(s.total) || 0) + (Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0))}
-                                </td>
-                                <td className="p-4 text-sm font-medium text-right text-red-600 dark:text-red-400">
-                                    {formatCurrency((Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0))}
-                                </td>
-                                <td className="p-4 text-sm font-bold text-primary text-right">
-                                    {formatCurrency(s.total)}
-                                </td>
-                                <td className="p-4">
-                                    <div className="flex justify-center flex-wrap gap-2">
-                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider 
-                                            ${s.estado === EstadoNota.CONFIRMADA ? 'bg-green-100 text-green-700' :
-                                                s.estado === EstadoNota.PENDIENTE ? 'bg-yellow-100 text-yellow-700' :
-                                                    'bg-red-100 text-red-700'}`}>
-                                            {s.estado}
-                                        </span>
-                                    </div>
-                                </td>
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-medium text-muted-foreground">
+                                                {s.vendedor ? `${s.vendedor.nombres} ${s.vendedor.apellidos}` : '---'}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td className="p-4 max-w-[200px]">
+                                        {s.observaciones ? (
+                                            <span className="text-xs text-muted-foreground line-clamp-2" title={s.observaciones}>
+                                                {s.observaciones}
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground/50 font-mono">-</span>
+                                        )}
+                                    </td>
+                                    <td className="p-4 text-sm font-medium text-right text-muted-foreground">
+                                        {formatCurrency(subTotalCalc)}
+                                    </td>
+                                    <td className="p-4 text-sm font-medium text-right">
+                                        {descTotalCalc > 0 || descPct > 0 || hasFijo || descPromoPct > 0 ? (
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-red-600 dark:text-red-400 font-semibold">
+                                                    {formatCurrency(descTotalCalc)}
+                                                </span>
+                                                <div className="flex items-center gap-1 flex-wrap justify-end">
+                                                    {descPct > 0 && (
+                                                        <span className="text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-1.5 py-0.5 rounded border border-red-200/60 dark:border-red-900/50" title="Descuento estándar">
+                                                            {Number(descPct.toFixed(2))}%
+                                                        </span>
+                                                    )}
+                                                    {hasFijo && (
+                                                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-900/50" title="Descuento fijo del 3% en ventas">
+                                                            {descPct > 0 ? '+ ' : ''}3% Fijo
+                                                        </span>
+                                                    )}
+                                                    {descPromoPct > 0 && (
+                                                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/50" title="Descuento adicional por promoción">
+                                                            {(descPct > 0 || hasFijo) ? '+ ' : ''}{Number(descPromoPct.toFixed(2))}% Promo
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className="text-muted-foreground/60">{formatCurrency(0)}</span>
+                                        )}
+                                    </td>
+                                    <td className="p-4 text-sm font-bold text-primary text-right">
+                                        {formatCurrency(s.total)}
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="flex justify-center flex-wrap gap-2">
+                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider 
+                                                ${s.estado === EstadoNota.CONFIRMADA ? 'bg-green-100 text-green-700' :
+                                                    s.estado === EstadoNota.PENDIENTE ? 'bg-yellow-100 text-yellow-700' :
+                                                        'bg-red-100 text-red-700'}`}>
+                                                {s.estado}
+                                            </span>
+                                        </div>
+                                    </td>
                                 <td className="p-4 text-right">
                                     <div className="flex justify-end gap-2 flex-wrap">
                                         <button
@@ -917,7 +1030,8 @@ const ventasPage: React.FC = () => {
                                     </div>
                                 </td>
                             </tr>
-                        ))}
+                        );
+                    })}
                         {filteredventas.length === 0 && (
                             <tr>
                                 <td colSpan={9} className="p-8 text-center text-muted-foreground">
@@ -966,9 +1080,9 @@ const ventasPage: React.FC = () => {
                                 className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50"
                             >
                                 <option value="">Cliente Final (Sin registrar)</option>
-                                {clients?.map(c => (
+                                {availableClients?.map(c => (
                                     <option key={c.id} value={c.id}>
-                                        {c.persona.nombres} {c.persona.apellidos}
+                                        {getClientDisplayName(c)}
                                     </option>
                                 ))}
                             </select>
@@ -1010,14 +1124,14 @@ const ventasPage: React.FC = () => {
                             <label className="text-sm font-medium flex items-center gap-2 italic text-muted-foreground">
                                 <Building2 className="w-3 h-3 text-primary" /> Sucursal
                             </label>
-                            <select disabled={isViewing} 
+                            <select disabled={isViewing || isRestrictedToBranch} 
                                 value={newVenta.sucursalId || ''}
                                 onChange={(e) => {
                                     const val = e.target.value;
                                     const found = sucursales?.find((s: any) => s.id.toString() === val);
                                     setNewVenta({ ...newVenta, sucursalId: val, sucursal: found?.nombre || '' });
                                 }}
-                                className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50"
+                                className={`w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 ${isRestrictedToBranch ? 'opacity-80 bg-muted/50 cursor-not-allowed' : ''}`}
                             >
                                 <option value="">Seleccione una sucursal...</option>
                                 {sucursales?.filter((s: any) => s.activo !== false || s.id.toString() === newVenta.sucursalId?.toString()).map((s: any) => (
@@ -1308,8 +1422,10 @@ const ventasPage: React.FC = () => {
 
                     <div className="fixed bottom-0 right-0 w-full max-w-4xl p-4 md:p-6 bg-card border-t flex flex-wrap items-center justify-between gap-4 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-10">
                         <div className="flex items-center gap-6">
-                            <div className="flex flex-col gap-2 items-end pr-6 border-r text-xs font-bold w-60">
+                            <div className="flex flex-col gap-2 items-end pr-6 border-r text-xs font-bold w-64">
                                 <div className="flex justify-between w-full"><span>Subtotal:</span> <span>{formatCurrency(calculateTotals().subtotal)}</span></div>
+                                
+                                {/* Descuento Estándar */}
                                 <div className="flex justify-between w-full items-center gap-2">
                                     <span className="text-muted-foreground font-medium">Desc (%):</span>
                                     <input disabled={isViewing} type="number" min="0" max="100" step="0.1"
@@ -1321,7 +1437,27 @@ const ventasPage: React.FC = () => {
                                 {calculateTotals().desc1 > 0 && (
                                     <div className="flex justify-between w-full text-red-600 dark:text-red-400"><span>-{formatCurrency(calculateTotals().desc1)}</span></div>
                                 )}
+
+                                {/* Descuento Fijo (3%) Checkbox */}
+                                <div className="flex justify-between w-full items-center gap-2 py-1 px-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 my-0.5">
+                                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                                        <input
+                                            disabled={isViewing}
+                                            type="checkbox"
+                                            checked={Boolean(newVenta.aplicaDescuentoFijo)}
+                                            onChange={(e) => setNewVenta({ ...newVenta, aplicaDescuentoFijo: e.target.checked })}
+                                            className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                                        />
+                                        <span>Desc. Fijo (3%)</span>
+                                    </label>
+                                    {calculateTotals().descFijo > 0 && (
+                                        <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                                            -{formatCurrency(calculateTotals().descFijo)}
+                                        </span>
+                                    )}
+                                </div>
                                 
+                                {/* Descuento Promo */}
                                 <div className="flex justify-between w-full items-center gap-2">
                                     <span className="text-muted-foreground font-medium">Promo (%):</span>
                                     <input disabled={isViewing} type="number" min="0" max="100" step="0.1"
@@ -1331,7 +1467,7 @@ const ventasPage: React.FC = () => {
                                     />
                                 </div>
                                 {calculateTotals().desc2 > 0 && (
-                                    <div className="flex justify-between w-full text-red-600 dark:text-red-400"><span>-{formatCurrency(calculateTotals().desc2)}</span></div>
+                                    <div className="flex justify-between w-full text-amber-600 dark:text-amber-400 font-bold"><span>-{formatCurrency(calculateTotals().desc2)}</span></div>
                                 )}
                             </div>
                             <div className="flex flex-col">

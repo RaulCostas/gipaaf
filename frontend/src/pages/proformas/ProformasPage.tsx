@@ -13,7 +13,7 @@ import { getCiudades } from '../../api/ciudadService';
 import { EstadoNota } from '../../api/purchaseService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
-import { Search, Plus, Trash2, CheckCircle, Calculator, User, Package, Calendar, X, ShoppingCart, Eye, Edit, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2 } from 'lucide-react';
+import { Search, Plus, Trash2, CheckCircle, Calculator, User, Package, Calendar, X, ShoppingCart, Eye, Edit, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useFilters } from '../../context/FilterContext';
@@ -21,12 +21,13 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { numeroALetras } from '../../utils/currencyUtils';
+import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import { useAuth } from '../../context/AuthContext';
 
 const ProformasPage: React.FC = () => {
     const { isAdmin, isVendedor, isJefeVentas, userPersonal } = useAuth();
     const isRestrictedVendor = isVendedor && !isAdmin && !isJefeVentas && !!userPersonal;
-    const { selectedSucursal, selectedCiudad } = useFilters();
+    const { selectedSucursal, selectedCiudad, isRestrictedToBranch, userSucursal, userCiudad } = useFilters();
     const queryClient = useQueryClient();
     const [isCreating, setIsCreating] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -42,7 +43,7 @@ const ProformasPage: React.FC = () => {
     const [newProforma, setNewProforma] = useState<any>({
         numero: '',
         clienteId: '',
-        sucursalId: isRestrictedVendor && userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : '',
+        sucursalId: selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : '')),
         vendedorId: isRestrictedVendor && userPersonal?.id ? String(userPersonal.id) : '',
         fecha: format(new Date(), 'yyyy-MM-dd'),
         observaciones: '',
@@ -60,6 +61,28 @@ const ProformasPage: React.FC = () => {
         queryKey: ['clients'],
         queryFn: () => clientService.getAll(),
     });
+
+    const availableClients = useMemo(() => {
+        if (!clients) return [];
+        const activeSucursal = newProforma.sucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
+        const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
+
+        if (activeSucursal) {
+            return clients.filter(c => 
+                c.sucursal?.id === Number(activeSucursal) || 
+                c.ruta?.sucursal?.id === Number(activeSucursal) ||
+                (newProforma.clienteId && c.id.toString() === newProforma.clienteId)
+            );
+        }
+        if (activeCiudad) {
+            return clients.filter(c => 
+                c.sucursal?.ciudad?.id === Number(activeCiudad) ||
+                c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) ||
+                (newProforma.clienteId && c.id.toString() === newProforma.clienteId)
+            );
+        }
+        return clients;
+    }, [clients, newProforma.sucursalId, selectedSucursal, userSucursal?.id, selectedCiudad, userCiudad?.id, newProforma.clienteId]);
 
     
     const { data: sucursales } = useQuery({ queryKey: ['sucursales'], queryFn: sucursalService.getAll });
@@ -112,13 +135,17 @@ const ProformasPage: React.FC = () => {
 
     const confirmMutation = useMutation({
         mutationFn: proformaService.confirmar,
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proformas'] }),
+        onSuccess: () => {
+            toast.success('Proforma confirmada exitosamente');
+            queryClient.invalidateQueries({ queryKey: ['proformas'] });
+        },
         onError: (err: any) => toast.error(err.response?.data?.message || 'Error al confirmar proforma'),
     });
 
     const convertMutation = useMutation({
         mutationFn: proformaService.convertirAVenta,
         onSuccess: () => {
+            toast.success('Proforma convertida a Venta exitosamente');
             queryClient.invalidateQueries({ queryKey: ['proformas'] });
             queryClient.invalidateQueries({ queryKey: ['sales'] });
         },
@@ -181,12 +208,16 @@ const ProformasPage: React.FC = () => {
     const resetForm = () => {
         setEditingId(null);
         setIsViewing(false);
+        const firstSucInCiudad = selectedCiudad ? sucursales?.find((s: any) => s.ciudad?.id === Number(selectedCiudad))?.id?.toString() : '';
+        const defaultSucId = selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : (firstSucInCiudad || '')));
+        const defaultSucNombre = sucursales?.find((s: any) => s.id.toString() === defaultSucId)?.nombre || userSucursal?.nombre || userPersonal?.sucursal?.nombre || '';
+
         setNewProforma({
             numero: '',
             clienteId: '',
-            sucursalId: isRestrictedVendor && userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : '',
+            sucursalId: defaultSucId,
             vendedorId: isRestrictedVendor && userPersonal?.id ? String(userPersonal.id) : '',
-            sucursal: isRestrictedVendor && userPersonal?.sucursal?.nombre ? userPersonal.sucursal.nombre : '',
+            sucursal: defaultSucNombre,
             fecha: format(new Date(), 'yyyy-MM-dd'),
             observaciones: '',
             descuentoPorcentaje: 0,
@@ -292,7 +323,7 @@ const ProformasPage: React.FC = () => {
         let clienteNombre = 'Cliente Final';
         if (newProforma.clienteId) {
             const c = clients?.find(c => c.id.toString() === newProforma.clienteId);
-            if (c) clienteNombre = `${c.persona.nombres} ${c.persona.apellidos}`;
+            if (c) clienteNombre = getClientDisplayName(c);
         }
         doc.text(`Cliente: ${clienteNombre}`, 14, currentY);
         
@@ -479,6 +510,7 @@ const ProformasPage: React.FC = () => {
             const term = search.toLowerCase();
             filtered = filtered.filter(p => 
                 p.numero.toLowerCase().includes(term) ||
+                p.cliente?.nombreTienda?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.nombres?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.apellidos?.toLowerCase().includes(term) ||
                 p.vendedor?.nombres?.toLowerCase().includes(term) ||
@@ -514,19 +546,34 @@ const ProformasPage: React.FC = () => {
 
     const getFormattedData = () => {
         return filteredProformas.map(s => {
-            const subTotalCalc = (Number(s.total) || 0) + (Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0);
             const descCalc = (Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0);
+            const subTotalCalc = (Number(s.total) || 0) + descCalc;
+            const descPct = Number(s.descuentoPorcentaje) || 0;
+            const descPromoPct = Number(s.descuentoPromocionPorcentaje) || 0;
+            let totalPct = descPct + descPromoPct;
+            if (totalPct === 0 && descCalc > 0 && subTotalCalc > 0) {
+                totalPct = (descCalc / subTotalCalc) * 100;
+            }
+            let pctLabel = '';
+            if (descPct > 0 && descPromoPct > 0) {
+                pctLabel = ` (${Number(descPct.toFixed(2))}% + ${Number(descPromoPct.toFixed(2))}% Promo)`;
+            } else if (descPromoPct > 0) {
+                pctLabel = ` (${Number(descPromoPct.toFixed(2))}% Promo)`;
+            } else if (totalPct > 0) {
+                pctLabel = ` (${Number(totalPct.toFixed(2))}%)`;
+            }
+
             const ciudadNombre = (s.sucursal?.ciudad as any)?.nombre;
             const sucursalTexto = s.sucursal ? `${s.sucursal.nombre}${ciudadNombre ? ` (${ciudadNombre})` : ''}`.trim() : '-';
             return {
                 id: s.id,
                 numero: s.numero || '-',
                 fechaFormatted: s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '-',
-                clienteNombre: s.cliente?.persona ? `${s.cliente.persona.nombres || ''} ${s.cliente.persona.apellidos || ''}`.trim() : 'Cliente Final',
+                clienteNombre: getClientDisplayName(s.cliente),
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : 'Sin asignar',
                 sucursalNombre: sucursalTexto,
                 subtotalFormatted: formatCurrency(subTotalCalc),
-                descuentoFormatted: formatCurrency(descCalc),
+                descuentoFormatted: `${formatCurrency(descCalc)}${pctLabel}`,
                 totalFormatted: formatCurrency(s.total || 0),
                 estado: s.estado
             };
@@ -735,7 +782,14 @@ const ProformasPage: React.FC = () => {
                     </thead>
                     <tbody className="divide-y">
                         {filteredProformas.map((s) => {
-                            const subTotalCalculado = (Number(s.total) || 0) + (Number(s.descuento) || 0);
+                            const descCalc = (Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0);
+                            const subTotalCalc = (Number(s.total) || 0) + descCalc;
+                            const descPct = Number(s.descuentoPorcentaje) || 0;
+                            const descPromoPct = Number(s.descuentoPromocionPorcentaje) || 0;
+                            let totalPct = descPct + descPromoPct;
+                            if (totalPct === 0 && descCalc > 0 && subTotalCalc > 0) {
+                                totalPct = (descCalc / subTotalCalc) * 100;
+                            }
                             
                             return (
                                 <tr key={s.id} className="hover:bg-accent/50 transition-colors group">
@@ -747,10 +801,24 @@ const ProformasPage: React.FC = () => {
                                     </td>
                                     <td className="p-4">
                                         <div className="flex flex-col">
-                                            <span className="text-sm font-medium">
-                                                {s.cliente ? `${s.cliente.persona.nombres} ${s.cliente.persona.apellidos}` : 'Cliente Final'}
-                                            </span>
-                                            {s.cliente && <span className="text-xs text-muted-foreground">CI: {s.cliente.persona.ci}</span>}
+                                            {s.cliente?.nombreTienda ? (
+                                                <>
+                                                    <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                        {s.cliente.nombreTienda}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {getClientPersonName(s.cliente)} {s.cliente.persona?.ci ? `• CI: ${s.cliente.persona.ci}` : ''}
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="text-sm font-medium">
+                                                        {getClientPersonName(s.cliente)}
+                                                    </span>
+                                                    {s.cliente?.persona?.ci && <span className="text-xs text-muted-foreground">CI: {s.cliente.persona.ci}</span>}
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                     {selectedVendedor === 'all' && (
@@ -763,20 +831,47 @@ const ProformasPage: React.FC = () => {
                                         </td>
                                     )}
                                     <td className="p-4 text-sm font-medium text-right text-muted-foreground">
-                                        {formatCurrency(subTotalCalculado)}
+                                        {formatCurrency(subTotalCalc)}
                                     </td>
-                                    <td className="p-4 text-sm font-medium text-right text-red-600 dark:text-red-400">
-                                        {formatCurrency((Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0))}
+                                    <td className="p-4 text-sm font-medium text-right">
+                                        {descCalc > 0 || totalPct > 0 ? (
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-red-600 dark:text-red-400 font-semibold">
+                                                    {formatCurrency(descCalc)}
+                                                </span>
+                                                {descPct > 0 && descPromoPct > 0 ? (
+                                                    <div className="flex items-center gap-1 flex-wrap justify-end">
+                                                        <span className="text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-1.5 py-0.5 rounded border border-red-200/60 dark:border-red-900/50" title="Descuento estándar">
+                                                            {Number(descPct.toFixed(2))}%
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/50" title="Descuento adicional por promoción">
+                                                            + {Number(descPromoPct.toFixed(2))}% Promo
+                                                        </span>
+                                                    </div>
+                                                ) : descPromoPct > 0 ? (
+                                                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/50" title="Descuento por promoción">
+                                                        {Number(descPromoPct.toFixed(2))}% Promo
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-1.5 py-0.5 rounded border border-red-200/60 dark:border-red-900/50">
+                                                        {Number(totalPct.toFixed(2))}%
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <span className="text-muted-foreground/60">{formatCurrency(0)}</span>
+                                        )}
                                     </td>
-                                <td className="p-4 text-sm font-bold text-primary text-right">
-                                    {formatCurrency(s.total)}
-                                </td>
+                                    <td className="p-4 text-sm font-bold text-primary text-right">
+                                        {formatCurrency(s.total)}
+                                    </td>
                                 <td className="p-4">
                                     <div className="flex justify-center">
                                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider 
-                                            ${s.estado === EstadoNota.CONFIRMADA ? 'bg-green-100 text-green-700' :
-                                                s.estado === EstadoNota.PENDIENTE ? 'bg-yellow-100 text-yellow-700' :
-                                                    'bg-red-100 text-red-700'}`}>
+                                            ${s.estado === EstadoNota.CONFIRMADA ? 'bg-green-100 text-green-700 dark:bg-green-950/70 dark:text-green-300' :
+                                                s.estado === EstadoNota.CONVERTIDA ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/70 dark:text-cyan-300' :
+                                                s.estado === EstadoNota.PENDIENTE ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/70 dark:text-yellow-300' :
+                                                    'bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300'}`}>
                                             {s.estado}
                                         </span>
                                     </div>
@@ -808,23 +903,34 @@ const ProformasPage: React.FC = () => {
                                         )}
                                         {s.estado === EstadoNota.PENDIENTE && (
                                             <button
+                                                onClick={() => confirmMutation.mutate(s.id)}
+                                                disabled={confirmMutation.isPending}
+                                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-1.5 shadow-sm"
+                                                title="Confirmar Proforma (Aprobar presupuesto)"
+                                            >
+                                                <CheckCircle className="w-3" /> Confirmar
+                                            </button>
+                                        )}
+                                        {s.estado === EstadoNota.PENDIENTE && (
+                                            <button
+                                                disabled
+                                                className="px-3 py-1.5 bg-muted text-muted-foreground/60 border rounded-lg text-xs font-bold cursor-not-allowed opacity-60 flex items-center gap-1.5"
+                                                title="Debe confirmar la proforma antes de poder pasar a venta"
+                                            >
+                                                <Calculator className="w-3" /> A Venta
+                                            </button>
+                                        )}
+                                        {s.estado === EstadoNota.CONFIRMADA && (
+                                            <button
                                                 onClick={() => convertMutation.mutate(s.id)}
-                                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all flex items-center gap-1.5"
+                                                disabled={convertMutation.isPending}
+                                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all flex items-center gap-1.5 shadow-sm"
                                                 title="Convertir a Venta"
                                             >
                                                 <Calculator className="w-3" /> A Venta
                                             </button>
                                         )}
-                                        {s.estado === EstadoNota.PENDIENTE && (
-                                            <button
-                                                onClick={() => confirmMutation.mutate(s.id)}
-                                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-1.5"
-                                                title="Confirmar Proforma (Cerrar)"
-                                            >
-                                                <CheckCircle className="w-3" /> Confirmar
-                                            </button>
-                                        )}
-                                        {s.estado !== EstadoNota.ANULADA && (
+                                        {s.estado !== EstadoNota.ANULADA && s.estado !== EstadoNota.CONVERTIDA && (
                                             <button
                                                 onClick={() => setAnularConfirmId(s.id)}
                                                 className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1.5"
@@ -888,9 +994,9 @@ const ProformasPage: React.FC = () => {
                                 className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none disabled:opacity-50"
                             >
                                 <option value="">Cliente Final (Sin registrar)</option>
-                                {clients?.map(c => (
+                                {availableClients?.map(c => (
                                     <option key={c.id} value={c.id}>
-                                        {c.persona.nombres} {c.persona.apellidos}
+                                        {c.nombreTienda ? `${c.nombreTienda} - ${c.persona.nombres} ${c.persona.apellidos}` : `${c.persona.nombres} ${c.persona.apellidos}`}
                                     </option>
                                 ))}
                             </select>
@@ -938,8 +1044,8 @@ const ProformasPage: React.FC = () => {
                                     const found = sucursales?.find((s: any) => s.id.toString() === e.target.value);
                                     setNewProforma({ ...newProforma, sucursalId: e.target.value, sucursal: found?.nombre || '' });
                                 }}
-                                disabled={isViewing}
-                                className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none disabled:opacity-50"
+                                disabled={isViewing || isRestrictedToBranch}
+                                className={`w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none ${isRestrictedToBranch ? 'opacity-80 bg-muted/50 cursor-not-allowed' : 'disabled:opacity-50'}`}
                             >
                                 <option value="">Seleccione una sucursal...</option>
                                 {sucursales?.filter((s: any) => s.activo !== false || s.id.toString() === newProforma.sucursalId?.toString()).map((s: any) => (

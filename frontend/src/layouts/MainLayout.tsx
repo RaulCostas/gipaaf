@@ -6,7 +6,7 @@ import {
     FileText, FileSpreadsheet, Menu, LogOut, Sun, Moon, MapPin, 
     Receipt, Calculator, Settings, X, Home, Boxes, Wallet, Undo2, 
     Briefcase, UserCircle, Shield, Key, History, ArrowLeftRight, PieChart, DollarSign,
-    Tag, TrendingUp, MessageSquare, KeyRound
+    Tag, TrendingUp, MessageSquare, KeyRound, Lock
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getCiudades } from '../api/ciudadService';
@@ -17,7 +17,15 @@ const MainLayout: React.FC = () => {
     const { logout, user, isAdmin, hasPermission } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const { selectedCiudad, setSelectedCiudad, selectedSucursal, setSelectedSucursal } = useFilters();
+    const { 
+        selectedCiudad, 
+        setSelectedCiudad, 
+        selectedSucursal, 
+        setSelectedSucursal,
+        userSucursal,
+        userCiudad,
+        isRestrictedToBranch
+    } = useFilters();
     
     // Sidebar is open by default on desktop, closed by default on mobile
     const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
@@ -229,53 +237,65 @@ const MainLayout: React.FC = () => {
                             <Menu className="w-5 h-5" />
                         </button>
 
-                        <div className="flex items-center gap-2 hidden lg:flex ml-2">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted px-2 py-1 rounded hidden xl:block">Ciudad</span>
-                            <div className="relative group">
-                                <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors pointer-events-none" />
-                                <select 
-                                    className="text-sm bg-background border rounded-md pl-9 pr-2 py-1.5 outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50 font-medium w-48 truncate transition-all cursor-pointer"
-                                    value={selectedCiudad}
-                                    onChange={(e) => {
-                                        setSelectedCiudad(e.target.value);
-                                        setSelectedSucursal('');
-                                    }}
-                                >
-                                    <option value="">Todas las Ciudades</option>
-                                    {ciudades?.map(c => (
-                                        <option key={c.id} value={c.id}>{c.nombre}</option>
-                                    ))}
-                                </select>
+                        {isRestrictedToBranch ? (
+                            <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 rounded-lg text-xs font-semibold ml-2 shadow-xs">
+                                <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
+                                <span>{userSucursal?.nombre} {userCiudad?.nombre ? `(${userCiudad.nombre})` : ''}</span>
+                                <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
+                                    <Lock className="w-2.5 h-2.5" /> Fija
+                                </span>
                             </div>
-                        </div>
-                        <div className="flex items-center gap-2 hidden sm:flex">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted px-2 py-1 rounded hidden xl:block">Sucursal</span>
-                            <div className="relative group">
-                                <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors pointer-events-none" />
-                                <select 
-                                    className="text-sm bg-background border rounded-md pl-9 pr-2 py-1.5 outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50 font-medium w-48 truncate transition-all cursor-pointer disabled:opacity-50"
-                                    value={selectedSucursal}
-                                    onChange={(e) => setSelectedSucursal(e.target.value)}
-                                    disabled={!selectedCiudad}
-                                >
-                                    <option value="">Todas las Sucursales</option>
-                                    {filteredSucursales?.map(s => (
-                                        <option key={s.id} value={s.id}>{s.nombre}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-2 hidden lg:flex ml-2">
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted px-2 py-1 rounded hidden xl:block">Ciudad</span>
+                                    <div className="relative group">
+                                        <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors pointer-events-none" />
+                                        <select 
+                                            className="text-sm bg-background border rounded-md pl-9 pr-2 py-1.5 outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50 font-medium w-48 truncate transition-all cursor-pointer"
+                                            value={selectedCiudad}
+                                            onChange={(e) => {
+                                                setSelectedCiudad(e.target.value);
+                                                setSelectedSucursal('');
+                                            }}
+                                        >
+                                            <option value="">Todas las Ciudades</option>
+                                            {ciudades?.map(c => (
+                                                <option key={c.id} value={c.id}>{c.nombre}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 hidden sm:flex">
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted px-2 py-1 rounded hidden xl:block">Sucursal</span>
+                                    <div className="relative group">
+                                        <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors pointer-events-none" />
+                                        <select 
+                                            className="text-sm bg-background border rounded-md pl-9 pr-2 py-1.5 outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50 font-medium w-48 truncate transition-all cursor-pointer disabled:opacity-50"
+                                            value={selectedSucursal}
+                                            onChange={(e) => setSelectedSucursal(e.target.value)}
+                                            disabled={!selectedCiudad}
+                                        >
+                                            <option value="">Todas las Sucursales</option>
+                                            {filteredSucursales?.map(s => (
+                                                <option key={s.id} value={s.id}>{s.nombre}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
 
-                        {(selectedCiudad || selectedSucursal) && (
-                            <button
-                                onClick={() => {
-                                    setSelectedCiudad('');
-                                    setSelectedSucursal('');
-                                }}
-                                className="text-xs text-primary font-bold hover:underline hidden sm:block ml-1"
-                            >
-                                Limpiar Filtros
-                            </button>
+                                {(selectedCiudad || selectedSucursal) && (
+                                    <button
+                                        onClick={() => {
+                                            setSelectedCiudad('');
+                                            setSelectedSucursal('');
+                                        }}
+                                        className="text-xs text-primary font-bold hover:underline hidden sm:block ml-1 cursor-pointer"
+                                    >
+                                        Limpiar Filtros
+                                    </button>
+                                )}
+                            </>
                         )}
                     </div>
 

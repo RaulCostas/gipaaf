@@ -60,13 +60,15 @@ export class ClientesService {
                     { persona: { nombres: Like(`%${search}%`) }, activo: true },
                     { persona: { apellidos: Like(`%${search}%`) }, activo: true },
                     { persona: { ci: Like(`%${search}%`) }, activo: true },
+                    { nombreTienda: Like(`%${search}%`), activo: true },
+                    { codigo: Like(`%${search}%`), activo: true },
                 ],
-                relations: ['persona', 'sucursal', 'sucursal.ciudad', 'ruta', 'ruta.vendedor']
+                relations: ['persona', 'sucursal', 'sucursal.ciudad', 'ruta', 'ruta.vendedor', 'ruta.sucursal', 'ruta.sucursal.ciudad']
             });
         } else {
             clientes = await this.repo.find({ 
                 where: { activo: true },
-                relations: ['persona', 'sucursal', 'sucursal.ciudad', 'ruta', 'ruta.vendedor']
+                relations: ['persona', 'sucursal', 'sucursal.ciudad', 'ruta', 'ruta.vendedor', 'ruta.sucursal', 'ruta.sucursal.ciudad']
             });
         }
         return this.attachDeudasYCredito(clientes);
@@ -75,7 +77,7 @@ export class ClientesService {
     async findOne(id: number) {
         const c = await this.repo.findOne({ 
             where: { id },
-            relations: ['persona', 'sucursal', 'sucursal.ciudad', 'ruta', 'ruta.vendedor']
+            relations: ['persona', 'sucursal', 'sucursal.ciudad', 'ruta', 'ruta.vendedor', 'ruta.sucursal', 'ruta.sucursal.ciudad']
         });
         if (!c) throw new NotFoundException(`Cliente ${id} no encontrado`);
         const [res] = await this.attachDeudasYCredito([c]);

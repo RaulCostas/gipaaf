@@ -2,8 +2,9 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { salesService } from '../../api/salesService';
 import Modal from '../ui/Modal';
-import { ShoppingCart, Receipt, User, Calendar, CreditCard, Package, Building2 } from 'lucide-react';
+import { ShoppingCart, Receipt, User, Calendar, CreditCard, Package, Building2, Store } from 'lucide-react';
 import { format } from 'date-fns';
+import { getClientPersonName } from '../../utils/clientUtils';
 
 interface DetalleVentaModalProps {
     isOpen: boolean;
@@ -31,9 +32,8 @@ export const DetalleVentaModal: React.FC<DetalleVentaModalProps> = ({
 
     if (!isOpen) return null;
 
-    const clienteName = activeNota?.cliente?.persona 
-        ? `${activeNota.cliente.persona.nombres} ${activeNota.cliente.persona.apellidos}` 
-        : (activeNota?.cliente?.razonSocial || 'Cliente General');
+    const clientePerson = getClientPersonName(activeNota?.cliente);
+    const clienteTienda = activeNota?.cliente?.nombreTienda?.trim();
 
     const isUSD = activeNota?.moneda === 'USD';
     const sim = isUSD ? '$us' : 'Bs.';
@@ -82,10 +82,22 @@ export const DetalleVentaModal: React.FC<DetalleVentaModalProps> = ({
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-muted/30 border rounded-xl text-xs">
                         <div>
                             <span className="text-muted-foreground block text-[11px]">Cliente:</span>
-                            <span className="font-bold text-foreground flex items-center gap-1 mt-0.5">
-                                <User className="w-3.5 h-3.5 text-primary" />
-                                {clienteName}
-                            </span>
+                            {clienteTienda ? (
+                                <div className="mt-0.5">
+                                    <span className="font-bold text-foreground flex items-center gap-1">
+                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                        {clienteTienda}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground block">
+                                        {clientePerson}
+                                    </span>
+                                </div>
+                            ) : (
+                                <span className="font-bold text-foreground flex items-center gap-1 mt-0.5">
+                                    <User className="w-3.5 h-3.5 text-primary" />
+                                    {clientePerson}
+                                </span>
+                            )}
                         </div>
 
                         <div>

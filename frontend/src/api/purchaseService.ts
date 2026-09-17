@@ -14,6 +14,7 @@ export enum EstadoNota {
     PENDIENTE = 'PENDIENTE',
     CONFIRMADA = 'CONFIRMADA',
     ANULADA = 'ANULADA',
+    CONVERTIDA = 'CONVERTIDA',
 }
 
 export interface DetalleNota {
@@ -39,6 +40,9 @@ export interface Nota {
     subtotal: number;
     descuento: number;
     descuentoPorcentaje?: number;
+    descuentoFijo?: number;
+    descuentoFijoPorcentaje?: number;
+    aplicaDescuentoFijo?: boolean;
     descuentoPromocionPorcentaje?: number;
     descuentoPromocion?: number;
     impuesto: number;

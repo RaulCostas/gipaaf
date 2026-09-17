@@ -30,6 +30,9 @@ export class Cliente {
     @Column({ length: 50, nullable: true })
     codigo: string;
 
+    @Column({ length: 150, nullable: true })
+    nombreTienda: string;
+
     @Column({ type: 'int', default: 0 })
     plazoCreditoDias: number;
 

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Usuario } from './usuario.entity';
 import { Persona } from '../personas/persona.entity';
+import { Personal } from '../personal/personal.entity';
 
 @Injectable()
 export class UsuariosService {
@@ -12,6 +13,8 @@ export class UsuariosService {
         private repo: Repository<Usuario>,
         @InjectRepository(Persona)
         private personaRepo: Repository<Persona>,
+        @InjectRepository(Personal)
+        private personalRepo: Repository<Personal>,
     ) { }
 
     findAll() {
@@ -140,7 +143,13 @@ export class UsuariosService {
 
             const { persona, ...safeUserData } = data;
             Object.assign(usuario, safeUserData);
-            return await this.repo.save(usuario);
+            const saved = await this.repo.save(usuario);
+
+            if (saved.sucursal && saved.personal?.id) {
+                await this.personalRepo.update(saved.personal.id, { sucursal: saved.sucursal });
+            }
+
+            return saved;
         } catch (err: any) {
             if (err instanceof ConflictException || err instanceof NotFoundException) {
                 throw err;
