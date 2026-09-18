@@ -17,8 +17,8 @@ import {
 import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
 import { toast } from 'sonner';
-import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { format } from 'date-fns';
+import { exportToPDF, exportToExcel, printData, printGroupedData, exportGroupedToPDF, exportGroupedToExcel, type GroupedExportSection } from '../../utils/exportUtils';
 import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
@@ -33,7 +33,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedClienteId, setSelectedClienteId] = useState<string>('');
     const [selectedVendedorId, setSelectedVendedorId] = useState<string>('');
-    const [estadoFiltro, setEstadoFiltro] = useState<'TODOS' | 'PENDIENTE' | 'EN_MORA' | 'AL_DIA' | 'SALDADO'>('TODOS');
+    const [estadoFiltro, setEstadoFiltro] = useState<'TODOS' | 'PENDIENTE' | 'EN_MORA' | 'AL_DIA' | 'SALDADO'>('PENDIENTE');
     const [facturaFiltro, setFacturaFiltro] = useState<'TODOS' | 'CON_FACTURA' | 'SIN_FACTURA'>('TODOS');
     const [fechaDesde, setFechaDesde] = useState<string>('');
     const [fechaHasta, setFechaHasta] = useState<string>('');
@@ -453,11 +453,9 @@ const EstadoCuentaClientesPage: React.FC = () => {
         { header: 'Cliente', dataKey: 'clienteNombre' },
         { header: 'Vendedor', dataKey: 'vendedorNombre' },
         { header: 'Nota de Venta', dataKey: 'observaciones' },
-        { header: 'Facturación', dataKey: 'facturaInfo' },
-        { header: 'Plazo/Venc.', dataKey: 'vencimientoInfo' },
-        { header: 'Total Venta', dataKey: 'totalFormateado' },
-        { header: 'Total Cobrado', dataKey: 'cobradoFormateado' },
-        { header: 'Saldo Pendiente', dataKey: 'saldoFormateado' },
+        { header: 'Total', dataKey: 'totalFormateado' },
+        { header: 'A Cuenta', dataKey: 'cobradoFormateado' },
+        { header: 'Saldo', dataKey: 'saldoFormateado' },
         { header: 'Estado / Mora', dataKey: 'estadoSaldo' }
     ];
 
@@ -524,12 +522,12 @@ const EstadoCuentaClientesPage: React.FC = () => {
         }
 
         // Estado de deuda / mora
-        if (estadoFiltro !== 'TODOS') {
+        if (estadoFiltro !== 'PENDIENTE') {
             const estadoLabels: Record<string, string> = {
-                PENDIENTE: 'Por Cobrar',
+                TODOS: 'Todos (Incluye Cancelados)',
                 EN_MORA: 'En Mora',
                 AL_DIA: 'Al Día',
-                SALDADO: 'Cancelados',
+                SALDADO: 'Cancelados / Saldados',
             };
             texts.push(`Estado: ${estadoLabels[estadoFiltro] ?? estadoFiltro}`);
         }
@@ -554,18 +552,115 @@ const EstadoCuentaClientesPage: React.FC = () => {
         return texts.length > 0 ? texts.join(' | ') : 'Todas las cuentas por cobrar';
     };
 
-    const getExportColumns = () => {
-        let cols = [...exportColumns];
-        if (selectedClienteId) {
-            cols = cols.filter(c => c.dataKey !== 'clienteNombre');
+    const getClientGroupTitle = (cliente?: Partial<any> | null) => {
+        if (!cliente) return 'SIN CLIENTE ASIGNADO';
+        const cid = cliente.codigo || cliente.id || '';
+        const tienda = cliente.nombreTienda?.trim() || '';
+        const persona = cliente.persona ? `${cliente.persona.nombres || ''} ${cliente.persona.apellidos || ''}`.trim() : '';
+
+        const parts = [cid ? String(cid) : ''];
+        if (tienda && persona && tienda.toLowerCase() !== persona.toLowerCase()) {
+            parts.push(tienda);
+            parts.push(persona);
+        } else if (tienda) {
+            parts.push(tienda);
+            parts.push(tienda);
+        } else if (persona) {
+            parts.push(persona);
+            parts.push(persona);
+        } else {
+            parts.push('Cliente Final');
         }
+        return parts.filter(Boolean).join('  -  ');
+    };
+
+    const getExportColumns = () => {
+        // Al agrupar por cliente, la cabecera del grupo muestra al cliente, manteniendo las demás columnas
+        let cols = exportColumns.filter(c => c.dataKey !== 'clienteNombre');
         if (selectedVendedorId) {
             cols = cols.filter(c => c.dataKey !== 'vendedorNombre');
         }
-        if (facturaFiltro !== 'TODOS') {
-            cols = cols.filter(c => c.dataKey !== 'facturaInfo');
-        }
         return cols;
+    };
+
+    const getGroupedExportData = (): GroupedExportSection[] => {
+        const groupsMap = new Map<string, {
+            clientTitle: string;
+            rows: any[];
+            totalVenta: number;
+            totalCobrado: number;
+            totalSaldo: number;
+        }>();
+
+        filteredVentas.forEach(v => {
+            const cliKey = v.cliente?.id ? String(v.cliente.id) : 'sin_cliente';
+            const clientTitle = getClientGroupTitle(v.cliente);
+
+            if (!groupsMap.has(cliKey)) {
+                groupsMap.set(cliKey, {
+                    clientTitle,
+                    rows: [],
+                    totalVenta: 0,
+                    totalCobrado: 0,
+                    totalSaldo: 0
+                });
+            }
+
+            const grp = groupsMap.get(cliKey)!;
+            const isUSD = v.moneda === 'USD';
+            const sim = isUSD ? '$us' : 'Bs.';
+            const total = Number(v.total) || 0;
+            const saldo = Number(v.saldo) || 0;
+            const cobrado = Math.max(0, total - saldo);
+            const cliName = getClientDisplayName(v.cliente);
+            const vendedorNombre = v.vendedor 
+                ? `${v.vendedor.nombres || ''} ${v.vendedor.apellidos || ''}`.trim() 
+                : '---';
+            const mora = getMoraInfo(v);
+            const vencStr = mora.fechaVenc ? format(mora.fechaVenc, 'dd/MM/yyyy') : (mora.diasCredito > 0 ? `${mora.diasCredito} días` : 'Contado');
+
+            const tc = Number(v.tipoCambio) || 6.96;
+            grp.totalVenta += isUSD ? total * tc : total;
+            grp.totalCobrado += isUSD ? cobrado * tc : cobrado;
+            grp.totalSaldo += isUSD ? saldo * tc : saldo;
+
+            const totalFormatted = total.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const cobradoFormatted = cobrado.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const saldoFormatted = saldo.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            grp.rows.push({
+                ...v,
+                fechaFormateada: v.fecha ? format(new Date(v.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-',
+                clienteNombre: cliName,
+                vendedorNombre,
+                observaciones: v.observaciones || '-',
+                facturaInfo: v.conFactura ? `Con Factura (#${v.numeroFactura || 'S/N'})` : 'Sin Factura',
+                vencimientoInfo: vencStr,
+                totalFormateado: totalFormatted,
+                cobradoFormateado: cobradoFormatted,
+                saldoFormateado: saldoFormatted,
+                estadoSaldo: mora.texto
+            });
+        });
+
+        const fmt = (n: number) => n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const cols = getExportColumns();
+        const totalIndex = cols.findIndex(c => c.dataKey === 'totalFormateado');
+        const prevKey = totalIndex > 0 ? cols[totalIndex - 1].dataKey : 'observaciones';
+
+        return Array.from(groupsMap.values()).map(g => {
+            const subtotals: Record<string, string> = {
+                [prevKey]: 'SUBTOTAL',
+                totalFormateado: fmt(g.totalVenta),
+                cobradoFormateado: fmt(g.totalCobrado),
+                saldoFormateado: fmt(g.totalSaldo)
+            };
+            return {
+                groupTitle: g.clientTitle,
+                rows: g.rows,
+                subtotals
+            };
+        });
     };
 
     const getTotalsFooter = (): Record<string, string> => {
@@ -584,37 +679,35 @@ const EstadoCuentaClientesPage: React.FC = () => {
             totalSaldo   += isUSD ? saldo   * tc : saldo;
         });
 
-        const fmt = (n: number) => `Bs. ${n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const fmt = (n: number) => n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const cols = getExportColumns();
+        const totalIndex = cols.findIndex(c => c.dataKey === 'totalFormateado');
+        const prevKey = totalIndex > 0 ? cols[totalIndex - 1].dataKey : 'observaciones';
 
         return {
-            fechaFormateada: 'TOTALES',
-            numero: '',
-            facturaInfo: '',
-            clienteNombre: '',
-            vendedorNombre: '',
-            observaciones: '',
-            vencimientoInfo: '',
-            moneda: '',
+            [prevKey]: 'TOTAL GENERAL',
             totalFormateado: fmt(totalVenta),
             cobradoFormateado: fmt(totalCobrado),
             saldoFormateado: fmt(totalSaldo),
-            estadoSaldo: '',
         };
     };
 
     const handlePrint = () => {
-        if (!mappedExportData.length) return;
-        printData('Estado de Cuentas por Cobrar - Clientes', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter());
+        const groups = getGroupedExportData();
+        if (!groups.length) return;
+        printGroupedData('Estado de Cuentas por Cobrar - Clientes', getExportColumns(), groups, getFiltersText(), getTotalsFooter());
     };
 
     const handleExportPDF = () => {
-        if (!mappedExportData.length) return;
-        exportToPDF('Estado de Cuentas por Cobrar - Clientes', getExportColumns(), mappedExportData, 'estado_cuenta_clientes', getFiltersText(), getTotalsFooter());
+        const groups = getGroupedExportData();
+        if (!groups.length) return;
+        exportGroupedToPDF('Estado de Cuentas por Cobrar - Clientes', getExportColumns(), groups, 'estado_cuenta_clientes', getFiltersText(), getTotalsFooter());
     };
 
     const handleExportExcel = () => {
-        if (!mappedExportData.length) return;
-        exportToExcel(getExportColumns(), mappedExportData, 'estado_cuenta_clientes');
+        const groups = getGroupedExportData();
+        if (!groups.length) return;
+        exportGroupedToExcel(getExportColumns(), groups, 'estado_cuenta_clientes', getTotalsFooter());
     };
 
     if (loadingSales) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando estado de cuentas de clientes...</div>;
@@ -706,7 +799,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                 </div>
 
                 <div 
-                    onClick={() => setEstadoFiltro(prev => prev === 'EN_MORA' ? 'TODOS' : 'EN_MORA')}
+                    onClick={() => setEstadoFiltro(prev => prev === 'EN_MORA' ? 'PENDIENTE' : 'EN_MORA')}
                     className={`p-4 bg-card border rounded-xl shadow-sm space-y-1 border-l-4 border-l-red-500 cursor-pointer transition-all hover:shadow-md ${
                         estadoFiltro === 'EN_MORA' ? 'ring-2 ring-red-500 bg-red-50/20' : ''
                     }`}
@@ -810,11 +903,11 @@ const EstadoCuentaClientesPage: React.FC = () => {
                             onChange={(e) => setEstadoFiltro(e.target.value as any)}
                             className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 font-medium"
                         >
-                            <option value="TODOS">Todos los Estados</option>
+                            <option value="PENDIENTE">⏳ Solo Por Cobrar (Pendientes)</option>
                             <option value="EN_MORA">⚠️ Solo En Mora (Vencidos)</option>
                             <option value="AL_DIA">✅ Solo Al Día (Dentro de Plazo)</option>
-                            <option value="PENDIENTE">⏳ Todos por Cobrar</option>
-                            <option value="SALDADO">✨ Cancelados / Saldados</option>
+                            <option value="TODOS">Todos los Estados (Incluye Cancelados)</option>
+                            <option value="SALDADO">✨ Solo Cancelados / Saldados</option>
                         </select>
                     </div>
 
@@ -843,12 +936,12 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 onChange={(e) => setFechaHasta(e.target.value)}
                                 className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
                             />
-                            {(fechaDesde || fechaHasta || selectedClienteId || selectedVendedorId || estadoFiltro !== 'TODOS' || facturaFiltro !== 'TODOS') && (
+                            {(fechaDesde || fechaHasta || selectedClienteId || selectedVendedorId || estadoFiltro !== 'PENDIENTE' || facturaFiltro !== 'TODOS') && (
                                 <button
                                     onClick={() => {
                                         setSelectedClienteId('');
                                         setSelectedVendedorId('');
-                                        setEstadoFiltro('TODOS');
+                                        setEstadoFiltro('PENDIENTE');
                                         setFacturaFiltro('TODOS');
                                         setFechaDesde('');
                                         setFechaHasta('');
