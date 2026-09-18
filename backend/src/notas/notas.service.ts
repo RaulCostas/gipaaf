@@ -453,7 +453,26 @@ export class NotasService {
                         }
 
                         if (cantidadPorDescontar > 0) {
-                            throw new BadRequestException(`No hay suficientes lotes con stock para ${det.producto.nombre}`);
+                            // Si hay stock en inventario pero faltaban lotes registrados, auto-crear lote para respaldar la venta
+                            const costoRef = Number(inv?.precioCompra) || Number(det.producto?.precioCompra) || 0;
+                            const autoLote = manager.create(Lote, {
+                                numeroLote: `L-STOCK-${det.producto.codigo || det.producto.id}`,
+                                producto: det.producto,
+                                sucursal: targetSucursal || inv?.sucursal || undefined,
+                                cantidadInicial: cantidadPorDescontar,
+                                cantidadActual: 0,
+                                costoUnitario: costoRef,
+                                fechaIngreso: new Date()
+                            });
+                            const savedAutoLote = await manager.save(autoLote);
+
+                            const movLote = manager.create(MovimientoLote, {
+                                lote: savedAutoLote,
+                                detalleNota: det,
+                                cantidad: cantidadPorDescontar
+                            });
+                            await manager.save(movLote);
+                            cantidadPorDescontar = 0;
                         }
 
                         if (inv) {
@@ -567,10 +586,13 @@ export class NotasService {
                     await manager.save(nuevoLote);
 
                     let finalInv = inv;
+                    const rate = (nota.moneda === Moneda.USD) ? (Number(nota.tipoCambio) || 6.96) : 1;
+                    const costoUnitarioBob = Number((Number(det.precioUnitario) * rate).toFixed(2));
+
                     if (inv) {
                         inv.stockActual = Number(inv.stockActual) + Number(det.cantidad);
                         if (det.precioUnitario) {
-                            inv.precioCompra = Number(det.precioUnitario);
+                            inv.precioCompra = costoUnitarioBob;
                         }
                         finalInv = await manager.save(inv);
                     } else if (targetSucursal) {
@@ -580,7 +602,7 @@ export class NotasService {
                             stockActual: Number(det.cantidad),
                             stockMinimo: 0,
                             stockMaximo: 0,
-                            precioCompra: Number(det.precioUnitario) || 0,
+                            precioCompra: costoUnitarioBob,
                             precioVenta: Number(det.producto?.precioVenta) || 0
                         });
                         finalInv = await manager.save(nuevoInv);
@@ -598,7 +620,7 @@ export class NotasService {
                             motivo: motivo.trim(),
                             numeroDocumento: nota.numero,
                             observaciones: nota.observaciones || '',
-                            costoUnitario: Number(det.precioUnitario) || Number(det.producto?.precioCompra) || 0,
+                            costoUnitario: costoUnitarioBob,
                             usuario: nota.usuario || undefined,
                         });
                         await manager.save(mov);
@@ -606,7 +628,7 @@ export class NotasService {
 
                     if (det.precioUnitario && det.producto?.id) {
                         await manager.update(Producto, det.producto.id, {
-                            precioCompra: Number(det.precioUnitario),
+                            precioCompra: costoUnitarioBob,
                             fechaUltimaCompra: nota.fecha || new Date()
                         });
                     }
@@ -649,7 +671,26 @@ export class NotasService {
                     }
                     
                     if (cantidadPorDescontar > 0) {
-                        throw new BadRequestException(`No hay suficientes lotes con stock para ${det.producto.nombre} en la sucursal seleccionada. Stock en lotes: ${Number(det.cantidad) - cantidadPorDescontar}`);
+                        // Si hay stock en inventario pero faltaban lotes registrados, auto-crear lote para respaldar la venta
+                        const costoRef = Number(inv?.precioCompra) || Number(det.producto?.precioCompra) || 0;
+                        const autoLote = manager.create(Lote, {
+                            numeroLote: `L-STOCK-${det.producto.codigo || det.producto.id}`,
+                            producto: det.producto,
+                            sucursal: targetSucursal || inv?.sucursal || undefined,
+                            cantidadInicial: cantidadPorDescontar,
+                            cantidadActual: 0,
+                            costoUnitario: costoRef,
+                            fechaIngreso: new Date()
+                        });
+                        const savedAutoLote = await manager.save(autoLote);
+
+                        const movLote = manager.create(MovimientoLote, {
+                            lote: savedAutoLote,
+                            detalleNota: det,
+                            cantidad: cantidadPorDescontar
+                        });
+                        await manager.save(movLote);
+                        cantidadPorDescontar = 0;
                     }
 
                     if (inv) {
@@ -667,7 +708,7 @@ export class NotasService {
                             motivo: motivo.trim(),
                             numeroDocumento: nota.numero,
                             observaciones: nota.observaciones || '',
-                            costoUnitario: Number(det.precioUnitario) || Number(det.producto?.precioCompra) || 0,
+                            costoUnitario: Number(inv.precioCompra) || Number(det.producto?.precioCompra) || 0,
                             usuario: nota.usuario || undefined,
                         });
                         await manager.save(mov);
@@ -713,6 +754,28 @@ export class NotasService {
                             }
                         }
 
+                        if (cantidadPorDescontar > 0) {
+                            const costoRef = Number(inv?.precioCompra) || Number(det.producto?.precioCompra) || 0;
+                            const autoLote = manager.create(Lote, {
+                                numeroLote: `L-STOCK-${det.producto.codigo || det.producto.id}`,
+                                producto: det.producto,
+                                sucursal: targetSucursal || inv?.sucursal || undefined,
+                                cantidadInicial: cantidadPorDescontar,
+                                cantidadActual: 0,
+                                costoUnitario: costoRef,
+                                fechaIngreso: new Date()
+                            });
+                            const savedAutoLote = await manager.save(autoLote);
+
+                            const movLote = manager.create(MovimientoLote, {
+                                lote: savedAutoLote,
+                                detalleNota: det,
+                                cantidad: cantidadPorDescontar
+                            });
+                            await manager.save(movLote);
+                            cantidadPorDescontar = 0;
+                        }
+
                         inv.stockActual = Number(inv.stockActual) - Number(det.cantidad);
                         await manager.save(inv);
 
@@ -724,7 +787,7 @@ export class NotasService {
                             motivo: `Reposición / Cambio por Devolución [${nota.numero}]`.trim(),
                             numeroDocumento: nota.numero,
                             observaciones: nota.observaciones || '',
-                            costoUnitario: Number(det.precioUnitario) || Number(det.producto?.precioCompra) || 0,
+                            costoUnitario: Number(inv.precioCompra) || Number(det.producto?.precioCompra) || 0,
                             usuario: nota.usuario || undefined,
                         });
                         await manager.save(mov);
@@ -927,7 +990,7 @@ export class NotasService {
                                     motivo: `Anulación Venta [${nota.numero}]`,
                                     numeroDocumento: nota.numero,
                                     observaciones: `Anulación de venta. ${nota.observaciones || ''}`.trim(),
-                                    costoUnitario: Number(det.precioUnitario) || Number(det.producto?.precioCompra) || 0,
+                                    costoUnitario: Number(inv.precioCompra) || Number(det.producto?.precioCompra) || 0,
                                     usuario: nota.usuario || undefined,
                                 });
                                 await manager.save(mov);
@@ -1272,7 +1335,7 @@ export class NotasService {
             const costoTotalBob = Number(data.costoTotalBob) || (costoFobBob + totalGastosBob);
             const porcentajeGastos = Number(data.porcentajeGastos) || (costoFobBob > 0 ? (totalGastosBob * 100) / costoFobBob : 0);
             const sucursalId = data.sucursalId ? Number(data.sucursalId) : (nota.sucursal?.id || null);
-            const fecha = data.fecha ? new Date(data.fecha) : new Date();
+            const fecha = (data.fecha ? (typeof data.fecha === 'string' ? data.fecha.substring(0, 10) : data.fecha) : new Date().toISOString().substring(0, 10)) as any;
 
             const monedaGastos = data.monedaGastos || 'BOB';
             const metodoPago = data.metodoPago || 'Transferencia Bancaria';
@@ -1361,6 +1424,20 @@ export class NotasService {
                 for (const lote of lotes) {
                     lote.costoUnitario = nuevoPrecioCompra;
                     await manager.save(lote);
+                }
+
+                // 4. Actualizar MovimientoInventario de la compra
+                const movsCompra = await manager.find(MovimientoInventario, {
+                    where: {
+                        numeroDocumento: nota.numero,
+                    },
+                    relations: ['inventario', 'inventario.producto']
+                });
+                for (const mov of movsCompra) {
+                    if (mov.inventario?.producto?.id === det.producto.id) {
+                        mov.costoUnitario = nuevoPrecioCompra;
+                        await manager.save(mov);
+                    }
                 }
             }
 

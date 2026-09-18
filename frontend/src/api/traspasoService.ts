@@ -65,6 +65,10 @@ export const traspasoService = {
         const response = await apiClient.post<Traspaso>('/traspasos', data);
         return response.data;
     },
+    update: async (id: number, data: CreateTraspasoDto) => {
+        const response = await apiClient.put<Traspaso>(`/traspasos/${id}`, data);
+        return response.data;
+    },
     anular: async (id: number) => {
         const response = await apiClient.put<Traspaso>(`/traspasos/${id}/anular`);
         return response.data;

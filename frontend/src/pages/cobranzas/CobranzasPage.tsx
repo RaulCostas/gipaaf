@@ -905,15 +905,10 @@ const CobranzasPage: React.FC = () => {
                                         <td className="p-4">
                                             <div className="flex flex-col">
                                                 {p.cliente?.nombreTienda ? (
-                                                    <>
-                                                        <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                                                            <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                            {p.cliente.nombreTienda}
-                                                        </span>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {getClientPersonName(p.cliente)}
-                                                        </span>
-                                                    </>
+                                                    <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                        {p.cliente.nombreTienda}
+                                                    </span>
                                                 ) : (
                                                     <span className="text-sm font-semibold text-foreground">
                                                         {getClientPersonName(p.cliente)}
@@ -1134,15 +1129,11 @@ const CobranzasPage: React.FC = () => {
                                     required
                                 >
                                     <option value="">Seleccione un cliente...</option>
-                                    {clientesConDeuda?.map(c => {
-                                        const personaName = c.persona ? `${c.persona.nombres} ${c.persona.apellidos}`.trim() : (c.razonSocial || 'Cliente');
-                                        const label = c.nombreTienda ? `${c.nombreTienda} - ${personaName}` : personaName;
-                                        return (
-                                            <option key={c.id} value={c.id}>
-                                                {label} {c.persona?.ci ? `(CI: ${c.persona.ci})` : ''}
-                                            </option>
-                                        );
-                                    })}
+                                    {clientesConDeuda?.map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {getClientDisplayName(c)}
+                                        </option>
+                                    ))}
                                 </select>
                             )}
                             {!editingId && clientesConDeuda && clientesConDeuda.length === 0 && !loadingDeudas && (
@@ -1590,7 +1581,7 @@ const CobranzasPage: React.FC = () => {
                                 </span>
                             </div>
                             <div className="text-xs text-muted-foreground flex justify-between items-center">
-                                <span>Cliente: {whatsappModalData.pago.cliente?.persona ? `${whatsappModalData.pago.cliente.persona.nombres} ${whatsappModalData.pago.cliente.persona.apellidos}` : 'Cliente Final'}</span>
+                                <span>Cliente: {getClientDisplayName(whatsappModalData.pago.cliente)}</span>
                                 <span>{whatsappModalData.pago.fecha ? String(whatsappModalData.pago.fecha).split('T')[0].split('-').reverse().join('/') : '-'}</span>
                             </div>
                             {whatsappModalData.pago.nota && (
@@ -1680,7 +1671,7 @@ const CobranzasPage: React.FC = () => {
                             {(() => {
                                 const cleanDigits = (whatsappModalData.phone || '').replace(/\D/g, '');
                                 const phoneWithCountry = cleanDigits.length === 8 ? `591${cleanDigits}` : cleanDigits;
-                                const clienteNombre = whatsappModalData.pago.cliente?.persona ? `${whatsappModalData.pago.cliente.persona.nombres || ''} ${whatsappModalData.pago.cliente.persona.apellidos || ''}`.trim() : 'Cliente';
+                                const clienteNombre = getClientDisplayName(whatsappModalData.pago.cliente);
                                 const defaultText = encodeURIComponent(
                                     `Hola *${clienteNombre}*, le enviamos su comprobante del Recibo de Cobranza N° REC-${String(whatsappModalData.pago.id).padStart(6, '0')} emitida por GIPAAF.`
                                 );

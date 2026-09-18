@@ -35,7 +35,7 @@ const EgresosPage: React.FC = () => {
     const { selectedSucursal, selectedCiudad } = useFilters();
 
     const [isEditing, setIsEditing] = useState(false);
-    const [currentEgreso, setCurrentEgreso] = useState<Partial<CreateEgresoDto & { id?: number }>>({});
+    const [currentEgreso, setCurrentEgreso] = useState<Partial<Omit<CreateEgresoDto, 'tipoCambio'> & { id?: number; tipoCambio?: number | string }>>({});
     
     // Filtros
     const [searchTerm, setSearchTerm] = useState('');
@@ -564,11 +564,16 @@ const EgresosPage: React.FC = () => {
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-foreground">Tipo de Cambio</label>
                             <input
-                                type="number"
-                                step="0.01"
-                                min="1"
-                                value={currentEgreso.tipoCambio || 6.96}
-                                onChange={(e) => setCurrentEgreso({ ...currentEgreso, tipoCambio: Number(e.target.value) })}
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="6.96"
+                                value={currentEgreso.tipoCambio !== undefined && currentEgreso.tipoCambio !== null ? currentEgreso.tipoCambio : ''}
+                                onChange={(e) => {
+                                    const val = e.target.value.replace(',', '.');
+                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                        setCurrentEgreso({ ...currentEgreso, tipoCambio: val });
+                                    }
+                                }}
                                 className="w-full p-2 border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary/20 outline-none text-xs"
                             />
                         </div>

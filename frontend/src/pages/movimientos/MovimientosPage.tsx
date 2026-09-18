@@ -84,10 +84,25 @@ const MovimientosPage: React.FC = () => {
         return 'SISTEMA';
     };
 
-    const getCostoUnitario = (m: MovimientoInventario): number => {
-        if (m.costoUnitario != null && Number(m.costoUnitario) > 0) return Number(m.costoUnitario);
-        if (m.inventario?.precioCompra != null && Number(m.inventario.precioCompra) > 0) return Number(m.inventario.precioCompra);
-        if (m.inventario?.producto?.precioCompra != null) return Number(m.inventario.producto.precioCompra);
+    const getPrecioCompra = (m: MovimientoInventario): number => {
+        if (m.tipo === 'COMPRA' && m.costoUnitario != null && Number(m.costoUnitario) > 0) {
+            return Number(m.costoUnitario);
+        }
+        if (m.inventario?.precioCompra != null && Number(m.inventario.precioCompra) > 0) {
+            return Number(m.inventario.precioCompra);
+        }
+        if (m.inventario?.producto?.precioCompra != null && Number(m.inventario.producto.precioCompra) > 0) {
+            return Number(m.inventario.producto.precioCompra);
+        }
+        if (m.costoUnitario != null && Number(m.costoUnitario) > 0) {
+            return Number(m.costoUnitario);
+        }
+        return 0;
+    };
+
+    const getPrecioVenta = (m: MovimientoInventario): number => {
+        if (m.inventario?.precioVenta != null && Number(m.inventario.precioVenta) > 0) return Number(m.inventario.precioVenta);
+        if (m.inventario?.producto?.precioVenta != null) return Number(m.inventario.producto.precioVenta);
         return 0;
     };
 
@@ -123,7 +138,8 @@ const MovimientosPage: React.FC = () => {
                 ingreso,
                 salida,
                 saldoCalculado: currentSaldo,
-                costoUnitarioVal: getCostoUnitario(m),
+                precioCompraVal: getPrecioCompra(m),
+                precioVentaVal: getPrecioVenta(m),
                 docNumero: getDocNumber(m),
                 observacionText: getObservacion(m),
                 usuarioText: getUsuarioNombre(m),
@@ -242,7 +258,8 @@ const MovimientosPage: React.FC = () => {
         cols.push(
             { header: 'Observación', dataKey: 'observacionText' },
             { header: 'Usuario', dataKey: 'usuarioText' },
-            { header: 'Costo Unitario', dataKey: 'costoUnitarioFmt' },
+            { header: 'P. Compra', dataKey: 'precioCompraFmt' },
+            { header: 'P. Venta', dataKey: 'precioVentaFmt' },
             { header: 'Ingreso', dataKey: 'ingresoFmt' },
             { header: 'Salida', dataKey: 'salidaFmt' },
             { header: 'Saldo', dataKey: 'saldoFmt' }
@@ -258,7 +275,7 @@ const MovimientosPage: React.FC = () => {
             const ciudadNombre = suc?.ciudad?.nombre || (suc?.ciudadId ? ciudades?.find(c => c.id === suc.ciudadId)?.nombre : '');
             const sucursalDisplay = ciudadNombre ? `${sucursalNombre} (${ciudadNombre})` : sucursalNombre;
             const prod = m.inventario?.producto;
-            const prodDisplay = prod ? `${prod.codigo ? `[${prod.codigo}] ` : ''}${prod.nombre}` : '-';
+            const prodDisplay = prod ? `${prod.nombre}${prod.codigo ? ` [${prod.codigo}]` : ''}` : '-';
 
             return {
                 id: m.id,
@@ -270,7 +287,8 @@ const MovimientosPage: React.FC = () => {
                 sucursal: sucursalDisplay,
                 observacionText: m.observacionText,
                 usuarioText: m.usuarioText,
-                costoUnitarioFmt: `Bs. ${m.costoUnitarioVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                precioCompraFmt: `Bs. ${m.precioCompraVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                precioVentaFmt: `Bs. ${m.precioVentaVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                 ingresoFmt: m.ingreso > 0 ? formatQuantity(m.ingreso) : '',
                 salidaFmt: m.salida > 0 ? formatQuantity(m.salida) : '',
                 saldoFmt: formatQuantity(m.saldoCalculado),
@@ -577,7 +595,7 @@ const MovimientosPage: React.FC = () => {
             {/* Tabla Kardex de Movimientos */}
             <div className="bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[1000px]">
+                    <table className="w-full text-left border-collapse min-w-[1100px]">
                         <thead>
                             <tr className="bg-muted/50 border-b">
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-12">#</th>
@@ -592,7 +610,8 @@ const MovimientosPage: React.FC = () => {
                                 )}
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Observación</th>
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-36">Usuario</th>
-                                <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">Costo Unit.</th>
+                                <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">P. Compra</th>
+                                <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">P. Venta</th>
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-green-700 dark:text-green-400 text-right w-24">Ingreso</th>
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-400 text-right w-24">Salida</th>
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-24">Saldo</th>
@@ -601,7 +620,7 @@ const MovimientosPage: React.FC = () => {
                         <tbody className="divide-y">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={12} className="p-12 text-center text-muted-foreground">
+                                    <td colSpan={10 + (!selectedProductId ? 1 : 0) + (!selectedSucursal ? 1 : 0)} className="p-12 text-center text-muted-foreground">
                                         <div className="flex flex-col items-center justify-center gap-2.5">
                                             <Loader2 className="w-6 h-6 animate-spin text-primary" />
                                             <span className="text-sm font-medium">Cargando movimientos de inventario...</span>
@@ -610,7 +629,7 @@ const MovimientosPage: React.FC = () => {
                                 </tr>
                             ) : paginatedMovimientos.length === 0 ? (
                                 <tr>
-                                    <td colSpan={12} className="p-8 text-center text-muted-foreground text-sm">
+                                    <td colSpan={10 + (!selectedProductId ? 1 : 0) + (!selectedSucursal ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         No se encontraron movimientos de inventario con los filtros seleccionados.
                                     </td>
                                 </tr>
@@ -643,9 +662,16 @@ const MovimientosPage: React.FC = () => {
                                         </td>
                                         {!selectedProductId && (
                                             <td className="p-3 text-xs">
-                                                <span className="font-semibold text-foreground line-clamp-1">
-                                                    {prod ? `${prod.codigo ? `[${prod.codigo}] ` : ''}${prod.nombre}` : 'Producto'}
-                                                </span>
+                                                <div className="flex flex-col">
+                                                    <span className="font-semibold text-foreground line-clamp-1">
+                                                        {prod?.nombre || 'Producto'}
+                                                    </span>
+                                                    {prod?.codigo && (
+                                                        <span className="text-[11px] font-mono text-muted-foreground">
+                                                            {prod.codigo}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                         )}
                                         {!selectedSucursal && (
@@ -662,7 +688,10 @@ const MovimientosPage: React.FC = () => {
                                             {m.usuarioText}
                                         </td>
                                         <td className="p-3 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">
-                                            Bs. {m.costoUnitarioVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            Bs. {m.precioCompraVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                        <td className="p-3 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">
+                                            Bs. {m.precioVentaVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
                                         <td className="p-3 text-xs font-mono font-bold text-right text-green-600 dark:text-green-400 whitespace-nowrap">
                                             {m.ingreso > 0 ? formatQuantity(m.ingreso) : '-'}
@@ -681,7 +710,7 @@ const MovimientosPage: React.FC = () => {
                             <tfoot className="bg-muted/70 font-bold border-t-2 border-border">
                                 <tr>
                                     <td 
-                                        colSpan={4 + (!selectedProductId ? 1 : 0) + (!selectedSucursal ? 1 : 0) + 3} 
+                                        colSpan={4 + (!selectedProductId ? 1 : 0) + (!selectedSucursal ? 1 : 0) + 4} 
                                         className="p-3 text-xs text-right uppercase tracking-wider text-foreground font-black"
                                     >
                                         TOTALES:

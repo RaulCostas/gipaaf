@@ -763,11 +763,11 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
     public formatClienteDisplay(cliente: any): string {
         if (!cliente) return 'Cliente Final';
+        if (cliente.nombreTienda && cliente.nombreTienda.trim()) {
+            return cliente.nombreTienda.trim();
+        }
         const persona = cliente.persona;
         const personaNombre = persona ? `${persona.nombres || ''} ${persona.apellidos || ''}`.trim() : '';
-        if (cliente.nombreTienda && cliente.nombreTienda.trim()) {
-            return personaNombre ? `${cliente.nombreTienda.trim()} (${personaNombre})` : cliente.nombreTienda.trim();
-        }
         return personaNombre || 'Cliente Final';
     }
 
@@ -954,7 +954,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             `📅 *Fecha:* ${fechaFormatted}\n` +
             `🏢 *Sucursal:* ${branchDisplay}\n` +
             (venta.vendedor ? `👤 *Atendido por:* ${venta.vendedor.nombres} ${venta.vendedor.apellidos}\n` : '') +
-            (venta.conFactura ? `📑 *Documento:* Con Factura (N° ${venta.numeroFactura || 'S/N'})\n` : '') +
+            (venta.conFactura ? `📑 *Documento:* CF:${venta.numeroFactura || 'S/N'}\n` : `📑 *Documento:* XF\n`) +
             `\n_En el documento PDF adjunto encontrará el desglose detallado de su compra. ¡Agradecemos su preferencia!_`;
 
         try {
@@ -1054,10 +1054,10 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                     // Fila 3 (Y = 110)
                     if (venta.conFactura) {
                         doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#333333');
-                        doc.text(`Documento: Con Factura (Nro: ${venta.numeroFactura || 'S/N'})`, 36, 110, { width: 350 });
+                        doc.text(`Documento: CF:${venta.numeroFactura || 'S/N'}`, 36, 110, { width: 350 });
                     } else {
                         doc.font('Helvetica').fontSize(9.5).fillColor('#505050');
-                        doc.text(`Documento: Sin Factura (Nota de Entrega)`, 36, 110, { width: 350 });
+                        doc.text(`Documento: XF`, 36, 110, { width: 350 });
                     }
                 }
             };
@@ -3831,7 +3831,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 doc.text(`Sucursal: ${sucursalNombre}`, 250, startY + 20, { width: 300, ellipsis: true });
 
                 // Fila 3: Vendedor | Tipo Documento
-                const docTipo = venta.conFactura ? `Factura N° ${venta.numeroFactura || 'S/N'}` : 'Sin Factura (Nota de Entrega)';
+                const docTipo = venta.conFactura ? `CF:${venta.numeroFactura || 'S/N'}` : 'XF';
                 doc.text(`Vendedor: ${vendedorName}`, 46, startY + 33, { width: 200, ellipsis: true });
                 doc.text(`Documento: ${docTipo}`, 250, startY + 33, { width: 300 });
 

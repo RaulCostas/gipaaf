@@ -41,6 +41,22 @@ const DEFAULT_EXPENSE_PRESETS = [
     'Transporte (Hasta almacén CBBA)'
 ];
 
+const getLocalDateString = (val?: string | Date | null): string => {
+    if (!val) return format(new Date(), 'yyyy-MM-dd');
+    if (typeof val === 'string') {
+        return val.includes('T') ? val.split('T')[0] : val.substring(0, 10);
+    }
+    try {
+        const d = new Date(val);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    } catch {
+        return format(new Date(), 'yyyy-MM-dd');
+    }
+};
+
 export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
     isOpen,
     onClose,
@@ -55,9 +71,9 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
     const [isUploadingFile, setIsUploadingFile] = useState(false);
 
     // Form states
-    const [fecha, setFecha] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+    const [fecha, setFecha] = useState<string>(() => getLocalDateString());
     const [selectedSucursalId, setSelectedSucursalId] = useState<string>('');
-    const [tipoCambio, setTipoCambio] = useState<number>(6.96);
+    const [tipoCambio, setTipoCambio] = useState<string | number>('6.96');
     const [monedaGastos, setMonedaGastos] = useState<'BOB' | 'USD'>('BOB');
     const [metodoPago, setMetodoPago] = useState<string>('Transferencia Bancaria');
     const [referencia, setReferencia] = useState<string>('');
@@ -95,9 +111,9 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
             try {
                 const existing = await importacionService.getByNotaId(compra.id);
                 if (existing) {
-                    setFecha(existing.fecha ? existing.fecha.split('T')[0] : format(new Date(), 'yyyy-MM-dd'));
+                    setFecha(getLocalDateString(existing.fecha || compra.fecha));
                     setSelectedSucursalId(existing.sucursalId ? String(existing.sucursalId) : '');
-                    setTipoCambio(Number(existing.tipoCambio) || Number(compra.tipoCambio) || 6.96);
+                    setTipoCambio(existing.tipoCambio != null ? String(existing.tipoCambio) : (compra.tipoCambio != null ? String(compra.tipoCambio) : '6.96'));
                     setMonedaGastos(existing.monedaGastos || 'BOB');
                     setMetodoPago(existing.metodoPago || 'Transferencia Bancaria');
                     setReferencia(existing.referencia || '');
@@ -105,9 +121,9 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                     setGastos(existing.gastos || []);
                 } else {
                     // Por primera vez (sin registro): iniciar vacío para que el usuario use 'Cargar Plantilla'
-                    setFecha(compra.fecha ? compra.fecha.split('T')[0] : format(new Date(), 'yyyy-MM-dd'));
+                    setFecha(getLocalDateString(compra.fecha));
                     setSelectedSucursalId('');
-                    setTipoCambio(Number(compra.tipoCambio) || 6.96);
+                    setTipoCambio(compra.tipoCambio != null ? String(compra.tipoCambio) : '6.96');
                     setMonedaGastos('BOB');
                     setMetodoPago('Transferencia Bancaria');
                     setReferencia('');
@@ -143,18 +159,23 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
         }
     };
 
+    // Numeric value of tipoCambio
+    const tcNum = useMemo(() => {
+        return parseFloat(String(tipoCambio).replace(',', '.')) || 6.96;
+    }, [tipoCambio]);
+
     // Calculate FOB amounts respecting the purchase's original currency
     const totalCompra = Number(compra?.total) || 0;
 
     const costoFobUsd = useMemo(() => {
         if (isUSD) return totalCompra;
-        return tipoCambio > 0 ? totalCompra / tipoCambio : 0;
-    }, [isUSD, totalCompra, tipoCambio]);
+        return tcNum > 0 ? totalCompra / tcNum : 0;
+    }, [isUSD, totalCompra, tcNum]);
 
     const costoFobBob = useMemo(() => {
         if (!isUSD) return totalCompra;
-        return totalCompra * (tipoCambio || 1);
-    }, [isUSD, totalCompra, tipoCambio]);
+        return totalCompra * (tcNum || 1);
+    }, [isUSD, totalCompra, tcNum]);
 
     // Handle updating expense row
     const handleUpdateGasto = (index: number, field: keyof GastoImportacionItem, value: any) => {
@@ -168,12 +189,12 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                 const usd = Number(value) || 0;
                 current.montoUsd = usd;
                 // Auto convert to Bob if USD was entered
-                current.montoBob = Number((usd * (tipoCambio || 1)).toFixed(2));
+                current.montoBob = Number((usd * (tcNum || 1)).toFixed(2));
             } else if (field === 'montoBob') {
                 const bob = Number(value) || 0;
                 current.montoBob = bob;
-                if (isUSD && tipoCambio > 0) {
-                    current.montoUsd = Number((bob / tipoCambio).toFixed(2));
+                if (isUSD && tcNum > 0) {
+                    current.montoUsd = Number((bob / tcNum).toFixed(2));
                 }
             }
 
@@ -231,7 +252,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
 
         return compra.detalles.map((det: any) => {
             const unitPriceOriginal = Number(det.precioUnitario) || 0;
-            const unitPriceBob = isUSD ? unitPriceOriginal * (tipoCambio || 1) : unitPriceOriginal;
+            const unitPriceBob = isUSD ? unitPriceOriginal * (tcNum || 1) : unitPriceOriginal;
             const landedCost = unitPriceBob * factor;
 
             return {
@@ -245,7 +266,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                 incrementoUnitario: Number((landedCost - unitPriceBob).toFixed(2))
             };
         });
-    }, [compra, isUSD, tipoCambio, porcentajeGastosTotal]);
+    }, [compra, isUSD, tcNum, porcentajeGastosTotal]);
 
     // Handle Save
     const handleSave = async () => {
@@ -255,8 +276,8 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
             const payload: Partial<CostoImportacionData> = {
                 notaId: compra.id,
                 sucursalId: selectedSucursalId ? Number(selectedSucursalId) : undefined,
-                fecha,
-                tipoCambio: isUSD ? tipoCambio : 1,
+                fecha: fecha ? fecha.substring(0, 10) : getLocalDateString(),
+                tipoCambio: isUSD ? tcNum : 1,
                 costoFobUsd: Number(costoFobUsd.toFixed(2)),
                 costoFobBob: Number(costoFobBob.toFixed(2)),
                 totalGastosBob: Number(totalGastosBob.toFixed(2)),
@@ -503,10 +524,15 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                                     </label>
                                     <div className="relative">
                                         <input
-                                            type="number"
-                                            step="0.01"
-                                            value={tipoCambio}
-                                            onChange={(e) => setTipoCambio(Number(e.target.value) || 0)}
+                                            type="text"
+                                            inputMode="decimal"
+                                            value={tipoCambio !== undefined && tipoCambio !== null ? tipoCambio : ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value.replace(',', '.');
+                                                if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                                    setTipoCambio(val);
+                                                }
+                                            }}
                                             disabled={!canManage}
                                             className="w-full px-3 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-2 focus:ring-primary/20 font-bold text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
                                             placeholder="6.96"

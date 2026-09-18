@@ -181,6 +181,9 @@ const ProductosPage: React.FC = () => {
         
         const { marca, categoria, grupo, ...safeData } = currentProduct as any;
         safeData.imagen = currentProduct.imagen || null;
+        safeData.precioCompra = currentProduct.precioCompra !== undefined && currentProduct.precioCompra !== null && !isNaN(Number(currentProduct.precioCompra))
+            ? Number(currentProduct.precioCompra)
+            : 0;
 
         if (currentProduct.id) {
             updateMutation.mutate(safeData as Producto, {
@@ -444,17 +447,16 @@ const ProductosPage: React.FC = () => {
                         
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <label className="text-sm font-semibold text-foreground">Precio de Compra <span className="text-destructive">*</span></label>
+                                <label className="text-sm font-semibold text-foreground">Precio de Compra</label>
                                 <div className="relative group">
                                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                                     <input
                                         type="number"
                                         step="0.01"
                                         placeholder="0.00"
-                                        value={currentProduct.precioCompra || ''}
-                                        onChange={(e) => setCurrentProduct({ ...currentProduct, precioCompra: parseFloat(e.target.value) })}
+                                        value={currentProduct.precioCompra !== undefined && currentProduct.precioCompra !== null ? currentProduct.precioCompra : ''}
+                                        onChange={(e) => setCurrentProduct({ ...currentProduct, precioCompra: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                                         className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
-                                        required
                                     />
                                 </div>
                             </div>

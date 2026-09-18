@@ -802,22 +802,14 @@ const ProformasPage: React.FC = () => {
                                     <td className="p-4">
                                         <div className="flex flex-col">
                                             {s.cliente?.nombreTienda ? (
-                                                <>
-                                                    <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                        {s.cliente.nombreTienda}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {getClientPersonName(s.cliente)} {s.cliente.persona?.ci ? `• CI: ${s.cliente.persona.ci}` : ''}
-                                                    </span>
-                                                </>
+                                                <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                    <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                    {s.cliente.nombreTienda}
+                                                </span>
                                             ) : (
-                                                <>
-                                                    <span className="text-sm font-medium">
-                                                        {getClientPersonName(s.cliente)}
-                                                    </span>
-                                                    {s.cliente?.persona?.ci && <span className="text-xs text-muted-foreground">CI: {s.cliente.persona.ci}</span>}
-                                                </>
+                                                <span className="text-sm font-medium">
+                                                    {getClientPersonName(s.cliente)}
+                                                </span>
                                             )}
                                         </div>
                                     </td>
@@ -996,7 +988,7 @@ const ProformasPage: React.FC = () => {
                                 <option value="">Cliente Final (Sin registrar)</option>
                                 {availableClients?.map(c => (
                                     <option key={c.id} value={c.id}>
-                                        {c.nombreTienda ? `${c.nombreTienda} - ${c.persona.nombres} ${c.persona.apellidos}` : `${c.persona.nombres} ${c.persona.apellidos}`}
+                                        {getClientDisplayName(c)}
                                     </option>
                                 ))}
                             </select>
@@ -1424,7 +1416,7 @@ const ProformasPage: React.FC = () => {
                             {(() => {
                                 const cleanPhone = (whatsappModalData.phone || '').replace(/\D/g, '');
                                 const phoneWithCountry = cleanPhone.length === 8 ? `591${cleanPhone}` : cleanPhone;
-                                const clienteNombre = whatsappModalData.proforma.cliente?.persona ? `${whatsappModalData.proforma.cliente.persona.nombres || ''} ${whatsappModalData.proforma.cliente.persona.apellidos || ''}`.trim() : 'Cliente';
+                                const clienteNombre = getClientDisplayName(whatsappModalData.proforma.cliente);
                                 const webText = encodeURIComponent(
                                     `Hola ${clienteNombre}, te compartimos el resumen de tu Proforma N° ${whatsappModalData.proforma.numero || whatsappModalData.proforma.id} emitida por GIPAAF por un total de Bs. ${Number(whatsappModalData.proforma.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}. ¡Quedamos a tu disposición!`
                                 );

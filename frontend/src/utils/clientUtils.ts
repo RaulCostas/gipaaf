@@ -14,12 +14,10 @@ export const getClientPersonName = (cliente?: Partial<Cliente> | null): string =
  */
 export const getClientDisplayName = (cliente?: Partial<Cliente> | null): string => {
     if (!cliente) return 'Cliente Final';
-    const person = getClientPersonName(cliente);
     if (cliente.nombreTienda && cliente.nombreTienda.trim()) {
-        return person !== 'Cliente Final' 
-            ? `${cliente.nombreTienda.trim()} (${person})`
-            : cliente.nombreTienda.trim();
+        return cliente.nombreTienda.trim();
     }
+    const person = getClientPersonName(cliente);
     return person;
 };
 

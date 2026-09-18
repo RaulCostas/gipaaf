@@ -156,7 +156,7 @@ const ComprasPage: React.FC = () => {
         proveedorId: '',
         sucursalId: '',
         moneda: 'BOB',
-        tipoCambio: 6.96,
+        tipoCambio: '6.96',
         fecha: format(new Date(), 'yyyy-MM-dd'),
         observaciones: '',
         descuentoPorcentaje: 0,
@@ -231,7 +231,7 @@ const ComprasPage: React.FC = () => {
             proveedorId: '',
             sucursalId: selectedSucursal || '',
             moneda: 'BOB',
-            tipoCambio: 6.96,
+            tipoCambio: '6.96',
             fecha: format(new Date(), 'yyyy-MM-dd'),
             observaciones: '',
             descuentoPorcentaje: 0,
@@ -360,7 +360,7 @@ const ComprasPage: React.FC = () => {
             proveedorId: nota.proveedor?.id || '',
             sucursalId: nota.sucursal?.id || '',
             moneda: nota.moneda || 'BOB',
-            tipoCambio: nota.tipoCambio || 6.96,
+            tipoCambio: nota.tipoCambio != null ? String(nota.tipoCambio) : '6.96',
             fecha: nota.fecha ? nota.fecha.split('T')[0] : '',
             observaciones: nota.observaciones || '',
             descuentoPorcentaje: Number(nota.descuentoPorcentaje || 0),
@@ -387,7 +387,7 @@ const ComprasPage: React.FC = () => {
             proveedorId: nota.proveedor?.id || '',
             sucursalId: nota.sucursal?.id || '',
             moneda: nota.moneda || 'BOB',
-            tipoCambio: nota.tipoCambio || 6.96,
+            tipoCambio: nota.tipoCambio != null ? String(nota.tipoCambio) : '6.96',
             fecha: nota.fecha ? nota.fecha.split('T')[0] : '',
             observaciones: nota.observaciones || '',
             descuentoPorcentaje: Number(nota.descuentoPorcentaje || 0),
@@ -429,7 +429,7 @@ const ComprasPage: React.FC = () => {
             fecha: newNota.fecha,
             observaciones: newNota.observaciones,
             moneda: newNota.moneda,
-            tipoCambio: newNota.moneda === 'USD' ? Number(newNota.tipoCambio) : 1,
+            tipoCambio: newNota.moneda === 'USD' ? (parseFloat(String(newNota.tipoCambio).replace(',', '.')) || 6.96) : 1,
             sucursal: newNota.sucursalId ? { id: Number(newNota.sucursalId) } : (selectedSucursal ? { id: Number(selectedSucursal) } : null),
             descuentoPorcentaje: newNota.descuentoPorcentaje,
             descuentoPromocionPorcentaje: 0,
@@ -957,9 +957,19 @@ const ComprasPage: React.FC = () => {
                             {newNota.moneda === 'USD' && (
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium flex items-center gap-2 italic">Tipo de Cambio</label>
-                                    <input disabled={isViewing} type="number" step="0.01" value={newNota.tipoCambio}
-                                        onChange={(e) => setNewNota({ ...newNota, tipoCambio: parseFloat(e.target.value) || 6.96 })}
-                                        className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50"
+                                    <input 
+                                        disabled={isViewing} 
+                                        type="text" 
+                                        inputMode="decimal"
+                                        placeholder="6.96"
+                                        value={newNota.tipoCambio !== undefined && newNota.tipoCambio !== null ? newNota.tipoCambio : ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(',', '.');
+                                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                                setNewNota({ ...newNota, tipoCambio: val });
+                                            }
+                                        }}
+                                        className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 font-medium"
                                     />
                                 </div>
                             )}

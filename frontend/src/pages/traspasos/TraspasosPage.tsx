@@ -7,7 +7,7 @@ import { productService, type Producto } from '../../api/productService';
 import { inventoryService } from '../../api/inventoryService';
 import { 
     Search, Plus, Trash2, ArrowLeftRight, 
-    X, Save, ChevronLeft, ChevronRight,
+    X, Save, ChevronLeft, ChevronRight, Edit,
     Printer, FileText, FileSpreadsheet, AlertTriangle,
     Building2, Calendar, Eye, Truck, Package, CheckCircle2, XCircle, Filter,
     MessageCircle, Send, Loader2, ExternalLink
@@ -38,6 +38,7 @@ const TraspasosPage: React.FC = () => {
     const queryClient = useQueryClient();
 
     const [isCreating, setIsCreating] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
     const [viewingTraspaso, setViewingTraspaso] = useState<Traspaso | null>(null);
     const [anularConfirmId, setAnularConfirmId] = useState<number | null>(null);
 
@@ -254,11 +255,30 @@ const TraspasosPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['inventory'] });
             queryClient.invalidateQueries({ queryKey: ['movimientos'] });
             setIsCreating(false);
+            setEditingId(null);
             resetForm();
             toast.success('Traspaso entre sucursales registrado y stock actualizado con éxito');
         },
         onError: (err: any) => {
             const msg = err?.response?.data?.message || 'Error al registrar el traspaso';
+            setError(Array.isArray(msg) ? msg.join(', ') : msg);
+        }
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: ({ id, data }: { id: number; data: any }) => traspasoService.update(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['traspasosList'] });
+            queryClient.invalidateQueries({ queryKey: ['inventariosGlobal'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+            queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+            setIsCreating(false);
+            setEditingId(null);
+            resetForm();
+            toast.success('Traspaso actualizado y stock recalculado con éxito');
+        },
+        onError: (err: any) => {
+            const msg = err?.response?.data?.message || 'Error al actualizar el traspaso';
             setError(Array.isArray(msg) ? msg.join(', ') : msg);
         }
     });
@@ -281,6 +301,7 @@ const TraspasosPage: React.FC = () => {
     });
 
     const resetForm = () => {
+        setEditingId(null);
         setFormData({
             codigo: '',
             fecha: format(new Date(), 'yyyy-MM-dd'),
@@ -297,6 +318,45 @@ const TraspasosPage: React.FC = () => {
         setItemCantidad('1');
         setItemObservacion('');
         setError(null);
+    };
+
+    const handleOpenEdit = (t: Traspaso) => {
+        const origId = (t.sucursalOrigen || t.almacenOrigen)?.id ? String((t.sucursalOrigen || t.almacenOrigen)?.id) : '';
+        const destId = (t.sucursalDestino || t.almacenDestino)?.id ? String((t.sucursalDestino || t.almacenDestino)?.id) : '';
+
+        setEditingId(t.id);
+        setFormData({
+            codigo: t.codigo || '',
+            fecha: t.fecha ? String(t.fecha).substring(0, 10) : format(new Date(), 'yyyy-MM-dd'),
+            sucursalOrigenId: origId,
+            sucursalDestinoId: destId,
+            costoTransporte: t.costoTransporte !== undefined && t.costoTransporte !== null ? String(t.costoTransporte) : '',
+            sucursalCargoCosto: t.sucursalCargoCosto || 'ORIGEN',
+            motivo: t.motivo || '',
+            observaciones: t.observaciones || ''
+        });
+
+        const mappedItems: ItemForm[] = (t.detalles || []).map(d => {
+            const currentStockInBranch = origId ? getStockInOrigen(d.producto?.id, Number(origId)) : 0;
+            return {
+                productoId: d.producto?.id,
+                producto: d.producto,
+                cantidad: Number(d.cantidad) || 0,
+                numeroLote: d.numeroLote || undefined,
+                fechaVencimiento: d.fechaVencimiento ? String(d.fechaVencimiento).substring(0, 10) : undefined,
+                stockDisponible: currentStockInBranch + (Number(d.cantidad) || 0),
+                observacion: d.observacion || ''
+            };
+        });
+
+        setItemsList(mappedItems);
+        setSelectedProdId('');
+        setSelectedNumeroLote('');
+        setItemCantidad('1');
+        setItemObservacion('');
+        setError(null);
+        if (viewingTraspaso) setViewingTraspaso(null);
+        setIsCreating(true);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -318,7 +378,7 @@ const TraspasosPage: React.FC = () => {
             return;
         }
 
-        createMutation.mutate({
+        const payload = {
             codigo: formData.codigo || undefined,
             fecha: formData.fecha,
             sucursalOrigenId: Number(formData.sucursalOrigenId),
@@ -333,7 +393,13 @@ const TraspasosPage: React.FC = () => {
                 numeroLote: i.numeroLote,
                 observacion: i.observacion
             }))
-        });
+        };
+
+        if (editingId) {
+            updateMutation.mutate({ id: editingId, data: payload });
+        } else {
+            createMutation.mutate(payload);
+        }
     };
 
     // Filter traspasos list by search, status, global sucursal/ciudad, and origin/destination sucursal
@@ -1008,11 +1074,20 @@ const TraspasosPage: React.FC = () => {
                                             <div className="flex justify-end gap-1.5">
                                                 <button
                                                     onClick={() => setViewingTraspaso(t)}
-                                                    className="px-2.5 py-1.5 bg-card border hover:border-primary/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm"
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-primary/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                     title="Ver Detalle de Traspaso"
                                                 >
                                                     <Eye className="w-3.5 h-3.5 text-primary" />
                                                 </button>
+                                                {!isAnulado && (
+                                                    <button
+                                                        onClick={() => handleOpenEdit(t)}
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                        title="Editar Traspaso"
+                                                    >
+                                                        <Edit className="w-3.5 h-3.5 text-amber-500" />
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => handlePrintIndividualTraspaso(t)}
                                                     className="px-2.5 py-1.5 bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1030,7 +1105,7 @@ const TraspasosPage: React.FC = () => {
                                                 {!isAnulado && (
                                                     <button
                                                         onClick={() => setAnularConfirmId(t.id)}
-                                                        className="px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1"
+                                                        className="px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1 cursor-pointer"
                                                         title="Anular Traspaso (Revertir Stock)"
                                                     >
                                                         <Trash2 className="w-3.5 h-3.5" />
@@ -1073,14 +1148,14 @@ const TraspasosPage: React.FC = () => {
                 )}
             </div>
 
-            {/* Modal de Registro de Nuevo Traspaso */}
+            {/* Modal de Registro / Edición de Traspaso */}
             <Modal
                 isOpen={isCreating}
                 onClose={() => { setIsCreating(false); resetForm(); }}
                 title={
                     <span className="flex items-center gap-2 text-primary font-bold">
                         <ArrowLeftRight className="w-6 h-6 text-primary/80" />
-                        Registrar Traspaso entre Sucursales
+                        {editingId ? 'Editar Traspaso entre Sucursales' : 'Registrar Traspaso entre Sucursales'}
                     </span>
                 }
                 className="max-w-3xl"
@@ -1469,10 +1544,10 @@ const TraspasosPage: React.FC = () => {
                             </button>
                             <button
                                 type="submit"
-                                disabled={createMutation.isPending || itemsList.length === 0}
-                                className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+                                disabled={createMutation.isPending || updateMutation.isPending || itemsList.length === 0}
+                                className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 active:scale-95 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
                             >
-                                <Save className="w-4 h-4" /> {createMutation.isPending ? 'Procesando...' : 'Completar Traspaso'}
+                                <Save className="w-4 h-4" /> {editingId ? (updateMutation.isPending ? 'Actualizando...' : 'Guardar Cambios') : (createMutation.isPending ? 'Procesando...' : 'Completar Traspaso')}
                             </button>
                         </div>
                     </div>
@@ -1650,6 +1725,16 @@ const TraspasosPage: React.FC = () => {
 
                         <div className="flex justify-between items-center pt-3 border-t">
                             <div className="flex items-center gap-2">
+                                {viewingTraspaso.estado === 'COMPLETADO' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleOpenEdit(viewingTraspaso)}
+                                        className="px-3 py-2 bg-amber-500/10 text-amber-600 hover:bg-amber-600 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                                        title="Editar Traspaso"
+                                    >
+                                        <Edit className="w-3.5 h-3.5" /> Editar
+                                    </button>
+                                )}
                                 {viewingTraspaso.estado === 'COMPLETADO' && (
                                     <button
                                         type="button"

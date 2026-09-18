@@ -76,6 +76,7 @@ const InventarioPage: React.FC = () => {
 
     const exportColumns = [
         { header: 'Producto', dataKey: 'producto' },
+        { header: 'Marca', dataKey: 'marca' },
         { header: 'Código', dataKey: 'codigo' },
         { header: 'Sucursal', dataKey: 'sucursal' },
         { header: 'Stock Actual', dataKey: 'stock' },
@@ -96,13 +97,31 @@ const InventarioPage: React.FC = () => {
         ];
     };
 
+    const getMarcaNombre = (producto: any): string => {
+        if (!producto) return '-';
+        if (producto.marca && typeof producto.marca === 'object' && producto.marca.nombre) {
+            return producto.marca.nombre;
+        }
+        if (typeof producto.marca === 'string' && producto.marca.trim()) {
+            return producto.marca.trim();
+        }
+        const mId = producto.marcaId || producto.marca?.id;
+        if (mId && marcas) {
+            const found = marcas.find((m: any) => Number(m.id) === Number(mId));
+            if (found?.nombre) return found.nombre;
+        }
+        return '-';
+    };
+
     const filteredInventory = useMemo(() => {
         if (!inventory) return [];
 
         const filtered = inventory.filter(inv => {
+            const marcaNombre = getMarcaNombre(inv.producto);
             const matchesSearch = !searchTerm ||
                 inv.producto?.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 inv.producto?.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                marcaNombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 Boolean((inv as any).lotes && (inv as any).lotes.some((l: any) => (l.numeroLote || '').toLowerCase().includes(searchTerm.toLowerCase())));
 
             const matchesCiudad = !selectedCiudad || 
@@ -119,7 +138,8 @@ const InventarioPage: React.FC = () => {
 
             const matchesMarca = selectedMarca === 'all' || 
                 inv.producto?.marca?.id === Number(selectedMarca) ||
-                inv.producto?.marcaId === Number(selectedMarca);
+                inv.producto?.marcaId === Number(selectedMarca) ||
+                (marcas?.find(m => m.id === selectedMarca)?.nombre && marcaNombre.toLowerCase() === marcas.find(m => m.id === selectedMarca)?.nombre.toLowerCase());
 
             const matchesGrupo = selectedGrupo === 'all' || 
                 inv.producto?.grupo?.id === Number(selectedGrupo) ||
@@ -129,7 +149,7 @@ const InventarioPage: React.FC = () => {
         });
         
         return filtered.sort((a, b) => (a.producto?.nombre || '').localeCompare(b.producto?.nombre || ''));
-    }, [inventory, searchTerm, selectedCiudad, selectedSucursal, selectedCategory, selectedMarca, selectedGrupo]);
+    }, [inventory, searchTerm, selectedCiudad, selectedSucursal, selectedCategory, selectedMarca, selectedGrupo, marcas]);
 
     const getFormattedData = () => {
         return filteredInventory.map(inv => {
@@ -143,6 +163,7 @@ const InventarioPage: React.FC = () => {
             return {
                 id: inv.id,
                 producto: inv.producto?.nombre || '-',
+                marca: getMarcaNombre(inv.producto),
                 codigo: inv.producto?.codigo || '-',
                 sucursal: `${(inv.sucursal as any)?.nombre || '-'} (${(inv.sucursal as any)?.ciudad?.nombre || '-'})`,
                 stock: `${formatQuantity(inv.stockActual)} ${inv.producto?.unidadMedida || ''}`,
@@ -341,6 +362,7 @@ const InventarioPage: React.FC = () => {
                             <tr className="bg-muted/50 border-b">
                                 <th className="p-4 text-sm font-semibold text-muted-foreground w-16">#</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Producto</th>
+                                <th className="p-4 text-sm font-semibold text-muted-foreground">Marca</th>
                                 {!selectedSucursal && <th className="p-4 text-sm font-semibold text-muted-foreground">Sucursal / Ciudad</th>}
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Lotes / Vencimiento</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Stock Actual</th>
@@ -353,9 +375,9 @@ const InventarioPage: React.FC = () => {
                         </thead>
                         <tbody className="divide-y">
                             {isLoading ? (
-                                <tr><td colSpan={canAjustar || canModificarLimites ? 8 : 7} className="p-8 text-center text-muted-foreground animate-pulse">Cargando existencias...</td></tr>
+                                <tr><td colSpan={7 + (!selectedSucursal ? 1 : 0) + (canAjustar || canModificarLimites ? 1 : 0)} className="p-8 text-center text-muted-foreground animate-pulse">Cargando existencias...</td></tr>
                             ) : paginatedInventory.length === 0 ? (
-                                <tr><td colSpan={canAjustar || canModificarLimites ? 8 : 7} className="p-8 text-center text-muted-foreground">No se encontraron productos en inventario.</td></tr>
+                                <tr><td colSpan={7 + (!selectedSucursal ? 1 : 0) + (canAjustar || canModificarLimites ? 1 : 0)} className="p-8 text-center text-muted-foreground">No se encontraron productos en inventario.</td></tr>
                             ) : paginatedInventory.map((inv, index) => {
                                 const isLowStock = Number(inv.stockActual) <= Number(inv.stockMinimo);
                                 const itemLotes = (inv as any).lotes || [];
@@ -364,9 +386,14 @@ const InventarioPage: React.FC = () => {
                                         <td className="p-4 text-sm font-mono text-muted-foreground">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                                         <td className="p-4">
                                             <div className="flex flex-col">
-                                                <span className="text-sm font-medium">{inv.producto.nombre}</span>
-                                                <span className="text-xs font-mono text-muted-foreground">Código: {inv.producto.codigo}</span>
+                                                <span className="text-sm font-medium">{inv.producto?.nombre}</span>
+                                                <span className="text-xs font-mono text-muted-foreground">Código: {inv.producto?.codigo}</span>
                                             </div>
+                                        </td>
+                                        <td className="p-4">
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-foreground">
+                                                {getMarcaNombre(inv.producto)}
+                                            </span>
                                         </td>
                                         {!selectedSucursal && (
                                             <td className="p-4">

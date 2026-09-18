@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
+import { Repository, MoreThan, IsNull } from 'typeorm';
 import { Inventario } from './inventario.entity';
 import { Lote } from './lote.entity';
 import { MovimientosInventarioService } from '../movimientos-inventario/movimientos.service';
@@ -47,6 +47,50 @@ export class InventarioService implements OnModuleInit {
             `);
         } catch (error) {
             console.error('Error during schema/data migration from almacenes to sucursales:', error);
+        }
+
+        // 4. Auto-reconciliación: Asegurar que todo stock en inventario tenga lotes disponibles
+        try {
+            const inventariosConStock = await this.repo.find({
+                where: { stockActual: MoreThan(0) },
+                relations: ['producto', 'sucursal']
+            });
+
+            for (const inv of inventariosConStock) {
+                if (!inv.producto || !inv.sucursal) continue;
+
+                // Primero asignar lotes sin sucursal de este producto si existen
+                const lotesSinSucursal = await this.loteRepo.find({
+                    where: { producto: { id: inv.producto.id }, sucursal: IsNull(), cantidadActual: MoreThan(0) }
+                });
+                for (const lss of lotesSinSucursal) {
+                    lss.sucursal = inv.sucursal;
+                    await this.loteRepo.save(lss);
+                }
+
+                const totalLotesRes = await this.loteRepo.createQueryBuilder('l')
+                    .select('COALESCE(SUM(l.cantidadActual), 0)', 'total')
+                    .where('l.productoId = :prodId', { prodId: inv.producto.id })
+                    .andWhere('(l.sucursalId = :sucId OR l.sucursalId IS NULL)', { sucId: inv.sucursal.id })
+                    .getRawOne();
+                const totalLotes = Number(totalLotesRes?.total || 0);
+                const faltante = Number(inv.stockActual) - totalLotes;
+
+                if (faltante > 0) {
+                    const nuevoLote = this.loteRepo.create({
+                        numeroLote: `L-INICIAL-${inv.producto.codigo || inv.producto.id}`,
+                        producto: inv.producto,
+                        sucursal: inv.sucursal,
+                        cantidadInicial: faltante,
+                        cantidadActual: faltante,
+                        costoUnitario: Number(inv.precioCompra) || Number(inv.producto.precioCompra) || 0,
+                        fechaIngreso: new Date()
+                    });
+                    await this.loteRepo.save(nuevoLote);
+                }
+            }
+        } catch (error) {
+            console.error('Error reconciliando lotes con inventario:', error);
         }
     }
 
@@ -182,6 +226,35 @@ export class InventarioService implements OnModuleInit {
         const inv = await this.findOne(id);
         inv.stockActual = Number(inv.stockActual) + cantidad;
         const saved = await this.repo.save(inv);
+
+        // Si se agregó stock positivo, registrar lote de ajuste
+        if (cantidad > 0) {
+            const autoLote = this.loteRepo.create({
+                numeroLote: `L-AJUSTE-${inv.producto?.codigo || inv.producto?.id || 'GEN'}`,
+                producto: inv.producto,
+                sucursal: inv.sucursal,
+                cantidadInicial: cantidad,
+                cantidadActual: cantidad,
+                costoUnitario: Number(inv.precioCompra) || Number(inv.producto?.precioCompra) || 0,
+                fechaIngreso: new Date()
+            });
+            await this.loteRepo.save(autoLote);
+        } else if (cantidad < 0) {
+            // Descontar de lotes existentes
+            let porDescontar = Math.abs(cantidad);
+            const lotes = await this.loteRepo.find({
+                where: { producto: { id: inv.producto?.id }, sucursal: inv.sucursal ? { id: inv.sucursal.id } : undefined, cantidadActual: MoreThan(0) },
+                order: { fechaVencimiento: { direction: 'ASC', nulls: 'NULLS LAST' } as any, fechaIngreso: 'ASC' }
+            });
+            for (const l of lotes) {
+                if (porDescontar <= 0) break;
+                const disp = Number(l.cantidadActual);
+                const desc = Math.min(disp, porDescontar);
+                l.cantidadActual = disp - desc;
+                await this.loteRepo.save(l);
+                porDescontar -= desc;
+            }
+        }
 
         // Registrar movimiento
         await this.movimientosService.create({

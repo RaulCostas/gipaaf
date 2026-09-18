@@ -896,24 +896,12 @@ const MuestrasPage: React.FC = () => {
                                         </td>
                                         <td className="p-4 text-sm font-medium">
                                             {m.cliente?.nombreTienda ? (
-                                                <div>
-                                                    <div className="font-semibold text-foreground flex items-center gap-1.5">
-                                                        <Store className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                                                        <span>{m.cliente.nombreTienda}</span>
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground font-normal">
-                                                        {getClientPersonName(m.cliente)} {m.cliente.persona?.ci ? `• CI: ${m.cliente.persona.ci}` : ''}
-                                                    </div>
+                                                <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                                    <Store className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                                    <span>{m.cliente.nombreTienda}</span>
                                                 </div>
                                             ) : (
-                                                <div>
-                                                    <div className="font-semibold text-foreground">{getClientPersonName(m.cliente)}</div>
-                                                    {m.cliente?.persona?.ci && (
-                                                        <div className="text-xs text-muted-foreground font-normal">
-                                                            CI: {m.cliente.persona.ci}
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                <div className="font-semibold text-foreground">{getClientPersonName(m.cliente)}</div>
                                             )}
                                             {m.cliente?.persona?.telefono && (
                                                 <div className="text-xs text-muted-foreground font-normal">

@@ -88,9 +88,6 @@ export const DetalleVentaModal: React.FC<DetalleVentaModalProps> = ({
                                         <Store className="w-3.5 h-3.5 text-primary shrink-0" />
                                         {clienteTienda}
                                     </span>
-                                    <span className="text-[10px] text-muted-foreground block">
-                                        {clientePerson}
-                                    </span>
                                 </div>
                             ) : (
                                 <span className="font-bold text-foreground flex items-center gap-1 mt-0.5">

@@ -569,6 +569,16 @@ const ReportesPage: React.FC = () => {
         return filtered;
     }, [productsList, filtroProdCategoria, filtroProdMarca, filtroProdGrupo, filtroProdEstado, prodSearchTerm]);
 
+    const formatFechaCompra = (fecha?: string | Date) => {
+        if (!fecha) return 'Sin compras';
+        try {
+            const str = typeof fecha === 'string' ? (fecha.includes('T') ? fecha : `${fecha}T00:00:00`) : fecha;
+            return format(new Date(str), 'dd/MM/yyyy');
+        } catch {
+            return 'Sin compras';
+        }
+    };
+
     const exportColumnsProductos = [
         { header: 'Código', dataKey: 'codigo' },
         { header: 'Nombre', dataKey: 'nombre' },
@@ -576,8 +586,9 @@ const ReportesPage: React.FC = () => {
         { header: 'Categoría', dataKey: 'categoriaNombre' },
         { header: 'Grupo', dataKey: 'grupoNombre' },
         { header: 'Precio Compra', dataKey: 'precioCompraFormatted' },
+        { header: 'Última Compra', dataKey: 'fechaUltimaCompraFormatted' },
         { header: 'Precio Venta', dataKey: 'precioVentaFormatted' },
-        { header: 'Margen (%)', dataKey: 'margenFormatted' },
+        { header: 'Margen', dataKey: 'margenFormatted' },
         { header: 'Estado', dataKey: 'estado' }
     ];
 
@@ -594,7 +605,7 @@ const ReportesPage: React.FC = () => {
         return filteredProductos.map(p => {
             const pCompra = Number(p.precioCompra) || 0;
             const pVenta = Number(p.precioVenta) || 0;
-            const margenPct = pVenta > 0 ? (((pVenta - pCompra) / pVenta) * 100).toFixed(1) + '%' : '0%';
+            const margenBs = pVenta - pCompra;
 
             return {
                 id: p.id,
@@ -604,8 +615,9 @@ const ReportesPage: React.FC = () => {
                 categoriaNombre: p.categoria?.nombre || '-',
                 grupoNombre: p.grupo?.nombre || '-',
                 precioCompraFormatted: formatCurrency(pCompra),
+                fechaUltimaCompraFormatted: formatFechaCompra(p.fechaUltimaCompra),
                 precioVentaFormatted: formatCurrency(pVenta),
-                margenFormatted: margenPct,
+                margenFormatted: formatCurrency(margenBs),
                 estado: p.activo ? 'Activo' : 'Inactivo'
             };
         });
@@ -2093,17 +2105,25 @@ const ReportesPage: React.FC = () => {
                                                         </td>
                                                     )}
                                                     <td className="p-4 text-sm font-medium text-right text-muted-foreground">
-                                                        {formatCurrency(pCompra)}
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="font-semibold text-foreground">
+                                                                {formatCurrency(pCompra)}
+                                                            </span>
+                                                            <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5" title="Fecha de última compra">
+                                                                <Calendar className="w-3 h-3 text-muted-foreground/70 shrink-0" />
+                                                                {formatFechaCompra(p.fechaUltimaCompra)}
+                                                            </span>
+                                                        </div>
                                                     </td>
                                                     <td className="p-4 text-sm font-bold text-primary text-right">
                                                         {formatCurrency(pVenta)}
                                                     </td>
                                                     <td className="p-4 text-right">
                                                         <div className={`text-xs font-bold ${margenBs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600'}`}>
-                                                            {margenPct}%
+                                                            {formatCurrency(margenBs)}
                                                         </div>
                                                         <div className="text-[10px] text-muted-foreground">
-                                                            {formatCurrency(margenBs)}
+                                                            {margenPct}%
                                                         </div>
                                                     </td>
                                                     {filtroProdEstado === 'TODOS' && (
@@ -2356,22 +2376,12 @@ const ReportesPage: React.FC = () => {
                                                         <td className="p-4 text-sm">
                                                             <div className="flex flex-col">
                                                                 {s.cliente?.nombreTienda ? (
-                                                                    <>
-                                                                        <span className="font-bold text-foreground flex items-center gap-1">
-                                                                            <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                                            {s.cliente.nombreTienda}
-                                                                        </span>
-                                                                        <span className="text-xs text-muted-foreground">
-                                                                            {getClientPersonName(s.cliente)} {s.cliente?.persona?.ci ? `• CI: ${s.cliente.persona.ci}` : ''}
-                                                                        </span>
-                                                                    </>
+                                                                    <span className="font-bold text-foreground flex items-center gap-1">
+                                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                                        {s.cliente.nombreTienda}
+                                                                    </span>
                                                                 ) : (
-                                                                    <>
-                                                                        <span className="font-semibold text-foreground">{getClientPersonName(s.cliente)}</span>
-                                                                        {s.cliente?.persona?.ci && (
-                                                                            <span className="text-[11px] text-muted-foreground">CI: {s.cliente.persona.ci}</span>
-                                                                        )}
-                                                                    </>
+                                                                    <span className="font-semibold text-foreground">{getClientPersonName(s.cliente)}</span>
                                                                 )}
                                                             </div>
                                                         </td>
@@ -2663,15 +2673,10 @@ const ReportesPage: React.FC = () => {
                                                         <td className="p-4 text-sm font-semibold text-foreground">
                                                             <div className="flex flex-col">
                                                                 {p.cliente?.nombreTienda ? (
-                                                                    <>
-                                                                        <span className="font-bold text-foreground flex items-center gap-1">
-                                                                            <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                                            {p.cliente.nombreTienda}
-                                                                        </span>
-                                                                        <span className="text-xs text-muted-foreground">
-                                                                            {getClientPersonName(p.cliente)}
-                                                                        </span>
-                                                                    </>
+                                                                    <span className="font-bold text-foreground flex items-center gap-1">
+                                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                                        {p.cliente.nombreTienda}
+                                                                    </span>
                                                                 ) : (
                                                                     <span>{getClientPersonName(p.cliente)}</span>
                                                                 )}

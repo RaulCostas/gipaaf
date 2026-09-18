@@ -38,6 +38,18 @@ export class TraspasosController {
         return this.service.create(body);
     }
 
+    @Put(':id')
+    update(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() body: any,
+        @Req() req: any,
+    ) {
+        if (!body.usuarioId && req.user?.id) {
+            body.usuarioId = req.user.id;
+        }
+        return this.service.update(id, body);
+    }
+
     @Put(':id/anular')
     anular(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
         return this.service.anular(id, req.user?.id);

@@ -982,15 +982,10 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                             <td className="p-4">
                                                 <div className="flex flex-col">
                                                     {v.cliente?.nombreTienda ? (
-                                                        <>
-                                                            <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                                                                <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                                {v.cliente.nombreTienda}
-                                                            </span>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                {getClientPersonName(v.cliente)}
-                                                            </span>
-                                                        </>
+                                                        <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                            <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                            {v.cliente.nombreTienda}
+                                                        </span>
                                                     ) : (
                                                         <span className="text-sm font-semibold text-foreground">
                                                             {getClientPersonName(v.cliente)}
@@ -1574,7 +1569,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                             const cobradoNum = Math.max(0, totalNum - saldoNum);
                             const sim = v.moneda === 'USD' ? '$us' : 'Bs.';
                             const mora = getMoraInfo(v);
-                            const clientName = v.cliente?.persona ? `${v.cliente.persona.nombres} ${v.cliente.persona.apellidos}` : (v.cliente?.codigo || 'Cliente Final');
+                            const clientName = getClientDisplayName(v.cliente);
 
                             return (
                                 <div className="p-3.5 bg-muted/40 border rounded-xl space-y-2 text-sm">
@@ -1654,7 +1649,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                     <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 border shrink-0 transition-colors ${
                                         isConn 
                                             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
-                                             : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                                            : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
                                     }`}>
                                         <span className={`w-2 h-2 rounded-full shrink-0 ${isConn ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
                                         <span>{isConn ? 'Bot Conectado' : 'Bot No Conectado'}</span>
@@ -1681,7 +1676,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 const cleanDigits = (whatsappVentaModalData.phone || '').replace(/\D/g, '');
                                 const phoneWithCountry = cleanDigits.length === 8 ? `591${cleanDigits}` : cleanDigits;
                                 const defaultText = encodeURIComponent(
-                                    `Hola *${whatsappVentaModalData.venta.cliente?.persona ? `${whatsappVentaModalData.venta.cliente.persona.nombres} ${whatsappVentaModalData.venta.cliente.persona.apellidos}` : 'Cliente'}*, le enviamos su Extracto de Cuenta correspondiente a la Venta N° ${whatsappVentaModalData.venta.numero || whatsappVentaModalData.venta.id} con saldo pendiente de ${whatsappVentaModalData.venta.moneda === 'USD' ? '$us' : 'Bs.'} ${Number(whatsappVentaModalData.venta.saldo).toFixed(2)}.`
+                                    `Hola *${getClientDisplayName(whatsappVentaModalData.venta.cliente)}*, le enviamos su Extracto de Cuenta correspondiente a la Venta N° ${whatsappVentaModalData.venta.numero || whatsappVentaModalData.venta.id} con saldo pendiente de ${whatsappVentaModalData.venta.moneda === 'USD' ? '$us' : 'Bs.'} ${Number(whatsappVentaModalData.venta.saldo).toFixed(2)}.`
                                 );
                                 const waLink = `https://wa.me/${phoneWithCountry}?text=${defaultText}`;
 
@@ -1798,14 +1793,11 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 className="w-full p-2 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20"
                             >
                                 <option value="">-- Seleccione Cliente --</option>
-                                {availableClients.map(c => {
-                                    const name = c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : (c.codigo || `Cliente #${c.id}`);
-                                    return (
-                                        <option key={c.id} value={c.id}>
-                                            {name} {c.persona?.ci ? `(CI: ${c.persona.ci})` : ''}
-                                        </option>
-                                    );
-                                })}
+                                {availableClients.map(c => (
+                                    <option key={c.id} value={c.id}>
+                                        {getClientDisplayName(c)}
+                                    </option>
+                                ))}
                             </select>
                         </div>
 
@@ -1882,7 +1874,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 const cleanDigits = (whatsappClienteModalData.phone || '').replace(/\D/g, '');
                                 const phoneWithCountry = cleanDigits.length === 8 ? `591${cleanDigits}` : cleanDigits;
                                 const targetCli = clientsList?.find(c => String(c.id) === String(whatsappClienteModalData.clienteId));
-                                const clientName = targetCli?.persona ? `${targetCli.persona.nombres} ${targetCli.persona.apellidos}` : 'Cliente';
+                                const clientName = targetCli ? getClientDisplayName(targetCli) : 'Cliente';
                                 const defaultText = encodeURIComponent(
                                     `Hola *${clientName}*, le enviamos su Estado de Cuenta Oficial emitido por GIPAAF.`
                                 );

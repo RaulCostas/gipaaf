@@ -27,7 +27,7 @@ export class MovimientosInventarioService implements OnModuleInit {
         try {
             const confirmedNotas = await this.notaRepo.find({
                 where: { estado: EstadoNota.CONFIRMADA },
-                relations: ['detalles', 'detalles.producto', 'sucursal', 'cliente', 'proveedor', 'usuario']
+                relations: ['detalles', 'detalles.producto', 'sucursal', 'cliente', 'proveedor', 'usuario', 'costoImportacion']
             });
 
             for (const nota of confirmedNotas) {
@@ -75,7 +75,16 @@ export class MovimientosInventarioService implements OnModuleInit {
 
                     if (!inv) continue;
 
-                    const costoUnit = Number(det.precioUnitario) || Number(det.producto?.precioCompra) || 0;
+                    let unitPriceBob = Number(det.precioUnitario) || 0;
+                    if (nota.moneda === 'USD') {
+                        unitPriceBob = unitPriceBob * (Number(nota.tipoCambio) || 6.96);
+                    }
+                    let factorIncremento = 1;
+                    if (nota.costoImportacion) {
+                        const pct = Number(nota.costoImportacion.porcentajeGastos) || 0;
+                        factorIncremento = 1 + (pct / 100);
+                    }
+                    const costoUnitCompra = Number((unitPriceBob * factorIncremento).toFixed(2));
                     const obs = nota.observaciones || '';
 
                     if (nota.tipo === TipoNota.COMPRA) {
@@ -89,7 +98,7 @@ export class MovimientosInventarioService implements OnModuleInit {
                             motivo: motivo.trim(),
                             numeroDocumento: nota.numero,
                             observaciones: obs,
-                            costoUnitario: costoUnit,
+                            costoUnitario: costoUnitCompra,
                             usuario: nota.usuario || undefined,
                             creadoEn: nota.fecha ? new Date(nota.fecha + 'T12:00:00') : (nota.creadoEn || new Date()),
                         }));
@@ -104,7 +113,7 @@ export class MovimientosInventarioService implements OnModuleInit {
                             motivo: motivo.trim(),
                             numeroDocumento: nota.numero,
                             observaciones: obs,
-                            costoUnitario: costoUnit,
+                            costoUnitario: Number(inv.precioCompra) || Number(det.producto?.precioCompra) || 0,
                             usuario: nota.usuario || undefined,
                             creadoEn: nota.fecha ? new Date(nota.fecha + 'T12:00:00') : (nota.creadoEn || new Date()),
                         }));
@@ -117,7 +126,7 @@ export class MovimientosInventarioService implements OnModuleInit {
                             motivo: motivo.trim(),
                             numeroDocumento: nota.numero,
                             observaciones: obs,
-                            costoUnitario: costoUnit,
+                            costoUnitario: Number(inv.precioCompra) || Number(det.producto?.precioCompra) || 0,
                             usuario: nota.usuario || undefined,
                             creadoEn: nota.fecha ? new Date(nota.fecha + 'T12:00:00') : (nota.creadoEn || new Date()),
                         }));
@@ -125,25 +134,56 @@ export class MovimientosInventarioService implements OnModuleInit {
                 }
             }
 
-            // Also backfill existing records that have null numeroDocumento or observaciones
-            const existingWithoutDocs = await this.repo.createQueryBuilder('m')
-                .where('m.numeroDocumento IS NULL')
-                .getMany();
+            // Also backfill existing records that have null numeroDocumento, observaciones, or un-converted costoUnitario
+            const allMovs = await this.repo.find({ relations: ['inventario', 'inventario.producto'] });
+            for (const mov of allMovs) {
+                let updated = false;
+                const match = mov.motivo?.match(/\[(.*?)\]/);
+                const docNum = mov.numeroDocumento || (match && match[1]);
 
-            for (const mov of existingWithoutDocs) {
-                const match = mov.motivo.match(/\[(.*?)\]/);
-                if (match && match[1]) {
-                    mov.numeroDocumento = match[1];
-                    const matchedNota = confirmedNotas.find(n => n.numero === match[1]);
+                if (docNum) {
+                    if (!mov.numeroDocumento) {
+                        mov.numeroDocumento = docNum;
+                        updated = true;
+                    }
+                    const matchedNota = confirmedNotas.find(n => n.numero === docNum);
                     if (matchedNota) {
-                        if (matchedNota.observaciones) mov.observaciones = matchedNota.observaciones;
-                        if (!mov.costoUnitario && matchedNota.detalles && matchedNota.detalles.length > 0) {
-                            const detMatch = matchedNota.detalles.find(d => d.producto?.id === mov.inventario?.producto?.id);
-                            if (detMatch) {
-                                mov.costoUnitario = Number(detMatch.precioUnitario) || Number(detMatch.producto?.precioCompra) || 0;
+                        if (!mov.observaciones && matchedNota.observaciones) {
+                            mov.observaciones = matchedNota.observaciones;
+                            updated = true;
+                        }
+                        if (mov.tipo === 'COMPRA') {
+                            const det = matchedNota.detalles?.find(d => d.producto?.id === mov.inventario?.producto?.id);
+                            if (det) {
+                                let unitPriceBob = Number(det.precioUnitario) || 0;
+                                if (matchedNota.moneda === 'USD') {
+                                    unitPriceBob = unitPriceBob * (Number(matchedNota.tipoCambio) || 6.96);
+                                }
+                                let factorIncremento = 1;
+                                if (matchedNota.costoImportacion) {
+                                    const pct = Number(matchedNota.costoImportacion.porcentajeGastos) || 0;
+                                    factorIncremento = 1 + (pct / 100);
+                                }
+                                const correctCosto = Number((unitPriceBob * factorIncremento).toFixed(2));
+                                if (correctCosto > 0 && Number(mov.costoUnitario) !== correctCosto) {
+                                    mov.costoUnitario = correctCosto;
+                                    updated = true;
+                                }
                             }
                         }
                     }
+                }
+
+                // If movement is a sale, ensure its costoUnitario is the purchase cost rather than the sale price
+                if (mov.tipo === 'VENTA' || mov.tipo === 'ANULACION_VENTA') {
+                    const prodCost = Number(mov.inventario?.precioCompra) || Number(mov.inventario?.producto?.precioCompra) || 0;
+                    if (prodCost > 0 && Number(mov.costoUnitario) !== prodCost) {
+                        mov.costoUnitario = prodCost;
+                        updated = true;
+                    }
+                }
+
+                if (updated) {
                     await this.repo.save(mov);
                 }
             }

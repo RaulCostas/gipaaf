@@ -371,10 +371,10 @@ const ventasPage: React.FC = () => {
 
         if (newVenta.conFactura) {
             doc.setFont("helvetica", "bold");
-            doc.text(`Documento: Con Factura (Nro: ${newVenta.numeroFactura || 'S/N'})`, 14, currentY);
+            doc.text(`Documento: CF:${newVenta.numeroFactura || 'S/N'}`, 14, currentY);
             doc.setFont("helvetica", "normal");
         } else {
-            doc.text(`Documento: Sin Factura (Nota de Entrega)`, 14, currentY);
+            doc.text(`Documento: XF`, 14, currentY);
         }
 
         const tableColumn = ["Código", "Producto", "Lote / Venc.", "Cant.", "P.Unit", "Subtotal"];
@@ -524,15 +524,9 @@ const ventasPage: React.FC = () => {
         }
 
         if (newVenta.tipoPago === 'CREDITO') {
-            const selectedCli = clients?.find(c => c.id.toString() === newVenta.clienteId);
-            const maxDias = Number(selectedCli?.plazoCreditoDias) || 0;
             const enteredDias = Number(newVenta.diasCredito) || 0;
             if (enteredDias <= 0) {
                 setError('Debe ingresar un plazo de crédito válido en días');
-                return;
-            }
-            if (maxDias > 0 && enteredDias > maxDias) {
-                setError(`El plazo de crédito no puede exceder el límite del cliente (${maxDias} días)`);
                 return;
             }
         }
@@ -892,22 +886,14 @@ const ventasPage: React.FC = () => {
                                     <td className="p-4">
                                         <div className="flex flex-col">
                                             {s.cliente?.nombreTienda ? (
-                                                <>
-                                                    <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                        {s.cliente.nombreTienda}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {getClientPersonName(s.cliente)} {s.cliente.persona?.ci ? `• CI: ${s.cliente.persona.ci}` : ''}
-                                                    </span>
-                                                </>
+                                                <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                    <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                    {s.cliente.nombreTienda}
+                                                </span>
                                             ) : (
-                                                <>
-                                                    <span className="text-sm font-medium">
-                                                        {getClientPersonName(s.cliente)}
-                                                    </span>
-                                                    {s.cliente?.persona?.ci && <span className="text-xs text-muted-foreground">CI: {s.cliente.persona.ci}</span>}
-                                                </>
+                                                <span className="text-sm font-medium">
+                                                    {getClientPersonName(s.cliente)}
+                                                </span>
                                             )}
                                         </div>
                                     </td>
@@ -1217,10 +1203,6 @@ const ventasPage: React.FC = () => {
                                     disabled={isViewing || newVenta.tipoPago !== 'CREDITO'}
                                     type="number"
                                     min="1"
-                                    max={(() => {
-                                        const selectedCli = clients?.find(c => c.id.toString() === newVenta.clienteId);
-                                        return Number(selectedCli?.plazoCreditoDias) || undefined;
-                                    })()}
                                     placeholder={newVenta.tipoPago === 'CREDITO' ? "30" : "0"}
                                     value={newVenta.tipoPago === 'CREDITO' ? (newVenta.diasCredito || '') : 0}
                                     onChange={(e) => {
@@ -1235,23 +1217,19 @@ const ventasPage: React.FC = () => {
                                     const selectedCli = clients?.find(c => c.id.toString() === newVenta.clienteId);
                                     const max = Number(selectedCli?.plazoCreditoDias) || 0;
                                     const currentDias = Number(newVenta.diasCredito) || 0;
-                                    const isExceeded = max > 0 && currentDias > max;
                                     
                                     const baseDateStr = newVenta.fecha || format(new Date(), 'yyyy-MM-dd');
                                     const d = new Date(baseDateStr + 'T00:00:00');
                                     d.setDate(d.getDate() + currentDias);
                                     const formattedVenc = format(d, 'dd/MM/yyyy');
 
-                                    if (isExceeded) {
-                                        return (
-                                            <div className="flex flex-col text-[11px] leading-tight">
-                                                <span className="text-destructive font-bold">⚠️ Excede límite ({max} d)</span>
-                                            </div>
-                                        );
-                                    }
                                     return (
                                         <div className="flex flex-col text-[11px] leading-tight">
-                                            {max > 0 && <span className="font-semibold text-primary">Límite: {max} días</span>}
+                                            {max > 0 && (
+                                                <span className={currentDias > max ? "text-amber-600 dark:text-amber-400 font-medium" : "text-primary font-semibold"}>
+                                                    {currentDias > max ? `Plazo cliente: ${max} d (extendido)` : `Plazo cliente: ${max} d`}
+                                                </span>
+                                            )}
                                             <span className="text-muted-foreground">Vence: <strong className="text-foreground">{formattedVenc}</strong></span>
                                         </div>
                                     );

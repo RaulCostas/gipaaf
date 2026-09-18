@@ -956,22 +956,14 @@ const DevolucionesPage: React.FC = () => {
                                     <td className="p-4">
                                         <div className="flex flex-col">
                                             {r.cliente?.nombreTienda ? (
-                                                <>
-                                                    <span className="font-bold text-foreground text-xs flex items-center gap-1">
-                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                        {r.cliente.nombreTienda}
-                                                    </span>
-                                                    <span className="text-[11px] text-muted-foreground">
-                                                        {getClientPersonName(r.cliente)} {r.cliente?.persona?.ci ? `• CI: ${r.cliente.persona.ci}` : ''}
-                                                    </span>
-                                                </>
+                                                <span className="font-bold text-foreground text-xs flex items-center gap-1">
+                                                    <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                    {r.cliente.nombreTienda}
+                                                </span>
                                             ) : (
-                                                <>
-                                                    <span className="font-semibold text-foreground">
-                                                        {getClientPersonName(r.cliente)}
-                                                    </span>
-                                                    {r.cliente?.persona?.ci && <span className="text-[10px] text-muted-foreground font-mono">CI: {r.cliente.persona.ci}</span>}
-                                                </>
+                                                <span className="font-semibold text-foreground">
+                                                    {getClientPersonName(r.cliente)}
+                                                </span>
                                             )}
                                         </div>
                                     </td>
@@ -1566,7 +1558,7 @@ const DevolucionesPage: React.FC = () => {
                                 })()}
                             </div>
                             <div className="text-xs text-muted-foreground flex justify-between items-center">
-                                <span>Cliente: <strong className="text-foreground">{whatsappModalData.devolucion.cliente?.persona ? `${whatsappModalData.devolucion.cliente.persona.nombres} ${whatsappModalData.devolucion.cliente.persona.apellidos}` : 'Cliente Final'}</strong></span>
+                                <span>Cliente: <strong className="text-foreground">{getClientDisplayName(whatsappModalData.devolucion.cliente)}</strong></span>
                                 <span>{format(new Date(String(whatsappModalData.devolucion.fecha).substring(0, 10) + 'T00:00:00'), 'dd/MM/yyyy')}</span>
                             </div>
                             {whatsappModalData.devolucion.motivo && (
@@ -1654,7 +1646,7 @@ const DevolucionesPage: React.FC = () => {
                                 const cleanDigits = (whatsappModalData.phone || '').replace(/\D/g, '');
                                 const phoneWithCountry = cleanDigits.length === 8 ? `591${cleanDigits}` : cleanDigits;
                                 const defaultText = encodeURIComponent(
-                                    `Hola *${whatsappModalData.devolucion.cliente?.persona ? `${whatsappModalData.devolucion.cliente.persona.nombres} ${whatsappModalData.devolucion.cliente.persona.apellidos}` : 'Cliente'}*, le enviamos el comprobante de su Nota de Devolución N° ${whatsappModalData.devolucion.numero || whatsappModalData.devolucion.id}.`
+                                    `Hola *${getClientDisplayName(whatsappModalData.devolucion.cliente)}*, le enviamos el comprobante de su Nota de Devolución N° ${whatsappModalData.devolucion.numero || whatsappModalData.devolucion.id}.`
                                 );
                                 const waLink = `https://wa.me/${phoneWithCountry}?text=${defaultText}`;
 

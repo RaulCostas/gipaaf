@@ -59,11 +59,11 @@ export class Producto {
     @JoinColumn({ name: 'categoriaId' })
     categoria: Categoria;
 
-    @ManyToOne(() => Marca, { nullable: true })
+    @ManyToOne(() => Marca, { nullable: true, eager: true })
     @JoinColumn({ name: 'marcaId' })
     marca: Marca;
 
-    @ManyToOne(() => Grupo, { nullable: true })
+    @ManyToOne(() => Grupo, { nullable: true, eager: true })
     @JoinColumn({ name: 'grupoId' })
     grupo: Grupo;
 
