@@ -17,6 +17,10 @@ import { getCiudades } from '../../api/ciudadService';
 import { traspasoService } from '../../api/traspasoService';
 import { egresoService } from '../../api/egresoService';
 import { importacionService } from '../../api/importacionService';
+import { inventoryService } from '../../api/inventoryService';
+import { movimientoService } from '../../api/movimientoService';
+import { returnService } from '../../api/returnService';
+import { muestraService } from '../../api/muestraService';
 import { useFilters } from '../../context/FilterContext';
 import { 
     Search, Printer, FileText, FileSpreadsheet,
@@ -50,7 +54,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'
 
 const ReportesPage: React.FC = () => {
     const { selectedSucursal, selectedCiudad } = useFilters();
-    const [activeTab, setActiveTab] = useState<'estadisticas' | 'productos' | 'ventas' | 'cobranzas' | 'compras' | 'pagos-proveedores'>('estadisticas');
+    const [activeTab, setActiveTab] = useState<'estadisticas' | 'productos' | 'kardex-cliente' | 'ventas' | 'cobranzas' | 'compras' | 'pagos-proveedores'>('estadisticas');
 
     // ==========================================
     // ESTADOS: ESTADÍSTICAS ESTRATÉGICAS
@@ -86,8 +90,19 @@ const ReportesPage: React.FC = () => {
     const [filtroProdMarca, setFiltroProdMarca] = useState<string>('');
     const [filtroProdGrupo, setFiltroProdGrupo] = useState<string>('');
     const [filtroProdEstado, setFiltroProdEstado] = useState<'TODOS' | 'ACTIVO' | 'INACTIVO'>('TODOS');
+    const [prodFechaDesde, setProdFechaDesde] = useState<string>('');
+    const [prodFechaHasta, setProdFechaHasta] = useState<string>('');
     const [prodSearchTerm, setProdSearchTerm] = useState('');
     const [prodCurrentPage, setProdCurrentPage] = useState(1);
+
+    // ==========================================
+    // ESTADOS: KARDEX INDIVIDUAL DE CLIENTE
+    // ==========================================
+    const [kardexClienteId, setKardexClienteId] = useState<string>('');
+    const [kardexFechaDesde, setKardexFechaDesde] = useState<string>(() => format(startOfYear(new Date()), 'yyyy-MM-dd'));
+    const [kardexFechaHasta, setKardexFechaHasta] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
+    const [kardexIncluirMuestras, setKardexIncluirMuestras] = useState<boolean>(true);
+    const [kardexIncluirDevoluciones, setKardexIncluirDevoluciones] = useState<boolean>(true);
 
     // ==========================================
     // ESTADOS: VENTAS
@@ -151,6 +166,18 @@ const ReportesPage: React.FC = () => {
         enabled: activeTab === 'productos' || activeTab === 'estadisticas',
     });
 
+    const { data: inventoryList, isLoading: loadingInventory } = useQuery({
+        queryKey: ['inventoryListReportes'],
+        queryFn: () => inventoryService.getAll(),
+        enabled: activeTab === 'productos' || activeTab === 'estadisticas',
+    });
+
+    const { data: movimientosList } = useQuery({
+        queryKey: ['movimientosListReportes'],
+        queryFn: () => movimientoService.getAll(),
+        enabled: activeTab === 'productos' || activeTab === 'estadisticas',
+    });
+
     const { data: categoriesList } = useQuery({
         queryKey: ['categoriesListReportes'],
         queryFn: categoryService.getAll,
@@ -172,13 +199,25 @@ const ReportesPage: React.FC = () => {
     const { data: ventasList, isLoading: loadingVentas } = useQuery({
         queryKey: ['ventasListReportes'],
         queryFn: salesService.getAll,
-        enabled: activeTab === 'ventas' || activeTab === 'estadisticas',
+        enabled: activeTab === 'ventas' || activeTab === 'estadisticas' || activeTab === 'kardex-cliente',
     });
 
     const { data: pagosList, isLoading: loadingCobranzas } = useQuery({
         queryKey: ['cobranzasListReportes'],
         queryFn: cobranzaService.getAll,
-        enabled: activeTab === 'cobranzas' || activeTab === 'estadisticas',
+        enabled: activeTab === 'cobranzas' || activeTab === 'estadisticas' || activeTab === 'kardex-cliente',
+    });
+
+    const { data: muestrasList } = useQuery({
+        queryKey: ['muestrasListReportes'],
+        queryFn: () => muestraService.getAll(),
+        enabled: activeTab === 'kardex-cliente',
+    });
+
+    const { data: devolucionesList } = useQuery({
+        queryKey: ['devolucionesListReportes'],
+        queryFn: () => returnService.getAll(),
+        enabled: activeTab === 'kardex-cliente',
     });
 
     const { data: comprasList, isLoading: loadingCompras } = useQuery({
@@ -532,11 +571,12 @@ const ReportesPage: React.FC = () => {
     }, [ventasList, comprasList, pagosList, pagosProveedoresList, costosImportacionList, traspasosList, egresosList, statsFechaDesde, statsFechaHasta, selectedSucursal, selectedCiudad, sucursales]);
 
     // ==========================================
-    // LÓGICA PRODUCTOS
+    // LÓGICA PRODUCTOS Y EXISTENCIAS POR SUCURSAL
     // ==========================================
     const hasProdActiveFilters = Boolean(
         filtroProdCategoria || filtroProdMarca || 
-        filtroProdGrupo || filtroProdEstado !== 'TODOS' || prodSearchTerm
+        filtroProdGrupo || filtroProdEstado !== 'TODOS' || 
+        prodFechaDesde || prodFechaHasta || prodSearchTerm
     );
 
     const handleClearProdFilters = () => {
@@ -544,7 +584,107 @@ const ReportesPage: React.FC = () => {
         setFiltroProdMarca('');
         setFiltroProdGrupo('');
         setFiltroProdEstado('TODOS');
+        setProdFechaDesde('');
+        setProdFechaHasta('');
         setProdSearchTerm('');
+    };
+
+    const getCiudadAbrev = (nombre?: string) => {
+        if (!nombre) return 'OTRO';
+        const n = nombre.trim().toUpperCase();
+        if (n.includes('PAZ')) return 'LP';
+        if (n.includes('COCHABAMBA') || n.includes('CBBA')) return 'CBBA';
+        if (n.includes('SANTA CRUZ') || n.includes('SCZ')) return 'SCZ';
+        if (n.includes('ALTO')) return 'EA';
+        if (n.includes('ORURO')) return 'ORU';
+        if (n.includes('SUCRE')) return 'SUC';
+        if (n.includes('TARIJA')) return 'TJA';
+        if (n.includes('POTOSI') || n.includes('POTOSÍ')) return 'POT';
+        if (n.includes('BENI')) return 'BEN';
+        if (n.includes('PANDO')) return 'PAN';
+        return nombre.substring(0, 4).toUpperCase();
+    };
+
+    const activeCities = useMemo(() => {
+        if (!ciudades || ciudades.length === 0) {
+            return [
+                { id: 1, nombre: 'La Paz', abrev: 'LP' },
+                { id: 2, nombre: 'Cochabamba', abrev: 'CBBA' },
+                { id: 3, nombre: 'Santa Cruz', abrev: 'SCZ' }
+            ];
+        }
+        return ciudades
+            .filter(c => c.activo !== false)
+            .map(c => ({
+                id: c.id,
+                nombre: c.nombre,
+                abrev: getCiudadAbrev(c.nombre)
+            }));
+    }, [ciudades]);
+
+    const getProductStockData = (prodId: number) => {
+        if (!inventoryList) return { stockPorCiudad: {}, totalExistencias: 0 };
+
+        const stockMap: Record<number, number> = {};
+        activeCities.forEach(c => { stockMap[c.id] = 0; });
+
+        if (prodFechaHasta) {
+            const cutOffDateStr = prodFechaHasta + 'T23:59:59.999Z';
+            const prodInvs = inventoryList.filter(inv => inv.producto?.id === prodId);
+
+            prodInvs.forEach(inv => {
+                const ciudadId = (inv.sucursal as any)?.ciudad?.id || (inv.sucursal as any)?.ciudadId;
+                if (!ciudadId) return;
+
+                let currentStock = Number(inv.stockActual || 0);
+
+                if (movimientosList) {
+                    const movsAfter = movimientosList.filter(m => 
+                        m.inventario?.id === inv.id && 
+                        m.creadoEn && 
+                        new Date(m.creadoEn).toISOString() > cutOffDateStr
+                    );
+
+                    movsAfter.forEach(m => {
+                        const cant = Number(m.cantidad || 0);
+                        const tipo = (m.tipo || '').toUpperCase();
+                        if (['ENTRADA', 'COMPRA', 'TRASPASO_ENTRADA', 'DEVOLUCION', 'INGRESO'].includes(tipo)) {
+                            currentStock -= cant;
+                        } else if (['SALIDA', 'VENTA', 'TRASPASO_SALIDA'].includes(tipo)) {
+                            currentStock += cant;
+                        }
+                    });
+                }
+
+                const finalStock = Math.max(0, currentStock);
+                stockMap[ciudadId] = (stockMap[ciudadId] || 0) + finalStock;
+            });
+        } else {
+            inventoryList.forEach(inv => {
+                if (inv.producto?.id === prodId) {
+                    const ciudadId = (inv.sucursal as any)?.ciudad?.id || (inv.sucursal as any)?.ciudadId;
+                    if (ciudadId) {
+                        stockMap[ciudadId] = (stockMap[ciudadId] || 0) + Number(inv.stockActual || 0);
+                    }
+                }
+            });
+        }
+
+        let total = 0;
+        if (selectedSucursal) {
+            const suc = sucursales?.find(s => s.id === Number(selectedSucursal));
+            const cId = (suc as any)?.ciudad?.id || (suc as any)?.ciudadId;
+            total = cId ? (stockMap[cId] || 0) : 0;
+        } else if (selectedCiudad) {
+            total = stockMap[Number(selectedCiudad)] || 0;
+        } else {
+            total = Object.values(stockMap).reduce((acc, v) => acc + v, 0);
+        }
+
+        return {
+            stockPorCiudad: stockMap,
+            totalExistencias: total
+        };
     };
 
     const filteredProductos = useMemo(() => {
@@ -557,6 +697,48 @@ const ReportesPage: React.FC = () => {
         if (filtroProdEstado === 'ACTIVO') filtered = filtered.filter(p => p.activo);
         else if (filtroProdEstado === 'INACTIVO') filtered = filtered.filter(p => !p.activo);
 
+        // Opción B: Filtrar productos por rango de fecha si se especifica Fecha Desde o Hasta
+        if (prodFechaDesde || prodFechaHasta) {
+            const desdeStr = prodFechaDesde || null;
+            const hastaStr = prodFechaHasta ? prodFechaHasta + 'T23:59:59.999Z' : null;
+
+            filtered = filtered.filter(p => {
+                if (movimientosList) {
+                    const hasMovInRange = movimientosList.some(m => {
+                        const isProd = m.inventario?.producto?.id === p.id || (m as any).productoId === p.id || (m.inventario as any)?.productoId === p.id;
+                        if (!isProd || !m.creadoEn) return false;
+                        const fStr = typeof m.creadoEn === 'string' ? m.creadoEn : new Date(m.creadoEn).toISOString();
+                        if (desdeStr && fStr.substring(0, 10) < desdeStr) return false;
+                        if (hastaStr && fStr > hastaStr) return false;
+                        return true;
+                    });
+                    if (hasMovInRange) return true;
+                }
+
+                if (p.fechaUltimaCompra) {
+                    const fc = String(p.fechaUltimaCompra).substring(0, 10);
+                    if ((!prodFechaDesde || fc >= prodFechaDesde) && (!prodFechaHasta || fc <= prodFechaHasta)) {
+                        return true;
+                    }
+                }
+
+                const pCreadoEn = (p as any).creadoEn || (p as any).createdAt;
+                if (pCreadoEn) {
+                    const cr = String(pCreadoEn).substring(0, 10);
+                    if ((!prodFechaDesde || cr >= prodFechaDesde) && (!prodFechaHasta || cr <= prodFechaHasta)) {
+                        return true;
+                    }
+                }
+
+                // Si se especificó Fecha Desde y no tuvo movimientos ni compras en ese rango, no incluir
+                if (prodFechaDesde) {
+                    return false;
+                }
+
+                return true;
+            });
+        }
+
         if (prodSearchTerm.trim()) {
             const s = prodSearchTerm.toLowerCase();
             filtered = filtered.filter(p => 
@@ -567,7 +749,35 @@ const ReportesPage: React.FC = () => {
         }
 
         return filtered;
-    }, [productsList, filtroProdCategoria, filtroProdMarca, filtroProdGrupo, filtroProdEstado, prodSearchTerm]);
+    }, [productsList, filtroProdCategoria, filtroProdMarca, filtroProdGrupo, filtroProdEstado, prodSearchTerm, prodFechaDesde, prodFechaHasta, movimientosList]);
+
+    const metricsProductos = useMemo(() => {
+        let totalExistencias = 0;
+        let totalValorCosto = 0;
+        let totalValorVenta = 0;
+        const totalItems = filteredProductos.length;
+
+        filteredProductos.forEach(p => {
+            const { totalExistencias: ex } = getProductStockData(p.id);
+            const pCompra = Number(p.precioCompra) || 0;
+            const pVenta = Number(p.precioVenta) || 0;
+            totalExistencias += ex;
+            totalValorCosto += ex * pCompra;
+            totalValorVenta += ex * pVenta;
+        });
+
+        const margenPotencial = totalValorVenta - totalValorCosto;
+        const margenPct = totalValorVenta > 0 ? (margenPotencial / totalValorVenta) * 100 : 0;
+
+        return {
+            totalItems,
+            totalExistencias,
+            totalValorCosto,
+            totalValorVenta,
+            margenPotencial,
+            margenPct
+        };
+    }, [filteredProductos, inventoryList, movimientosList, prodFechaHasta, selectedSucursal, selectedCiudad, activeCities]);
 
     const formatFechaCompra = (fecha?: string | Date) => {
         if (!fecha) return 'Sin compras';
@@ -579,18 +789,32 @@ const ReportesPage: React.FC = () => {
         }
     };
 
-    const exportColumnsProductos = [
-        { header: 'Código', dataKey: 'codigo' },
-        { header: 'Nombre', dataKey: 'nombre' },
-        { header: 'Marca', dataKey: 'marcaNombre' },
-        { header: 'Categoría', dataKey: 'categoriaNombre' },
-        { header: 'Grupo', dataKey: 'grupoNombre' },
-        { header: 'Precio Compra', dataKey: 'precioCompraFormatted' },
-        { header: 'Última Compra', dataKey: 'fechaUltimaCompraFormatted' },
-        { header: 'Precio Venta', dataKey: 'precioVentaFormatted' },
-        { header: 'Margen', dataKey: 'margenFormatted' },
-        { header: 'Estado', dataKey: 'estado' }
-    ];
+    const exportColumnsProductos = useMemo(() => {
+        const cols: { header: string; dataKey: string }[] = [
+            { header: 'CÓDIGO DE PRODUCTO', dataKey: 'codigo' },
+            { header: 'MARCA', dataKey: 'marcaNombre' },
+            { header: 'CATEGORÍA', dataKey: 'categoriaNombre' },
+            { header: 'GRUPO', dataKey: 'grupoNombre' },
+            { header: 'NOMBRE', dataKey: 'nombre' },
+        ];
+
+        if (!selectedSucursal && !selectedCiudad) {
+            activeCities.forEach(c => {
+                cols.push({ header: c.abrev, dataKey: `stock_${c.abrev}` });
+            });
+        }
+
+        cols.push(
+            { header: 'TOTAL EXISTENCIAS', dataKey: 'totalExistencias' },
+            { header: 'COSTO UNITARIO', dataKey: 'precioCompraFormatted' },
+            { header: 'TOTAL BS', dataKey: 'totalBsFormatted' },
+            { header: 'PRECIO VENTA', dataKey: 'precioVentaFormatted' },
+            { header: 'ÚLTIMA COMPRA', dataKey: 'fechaUltimaCompraFormatted' },
+            { header: 'ESTADO', dataKey: 'estado' }
+        );
+
+        return cols;
+    }, [activeCities, selectedSucursal, selectedCiudad]);
 
     const getExportColumnsProductos = () => {
         let cols = [...exportColumnsProductos];
@@ -605,26 +829,63 @@ const ReportesPage: React.FC = () => {
         return filteredProductos.map(p => {
             const pCompra = Number(p.precioCompra) || 0;
             const pVenta = Number(p.precioVenta) || 0;
+            const { stockPorCiudad, totalExistencias } = getProductStockData(p.id);
+            const totalBs = totalExistencias * pCompra;
             const margenBs = pVenta - pCompra;
 
-            return {
+            const row: any = {
                 id: p.id,
                 codigo: p.codigo,
-                nombre: p.nombre,
                 marcaNombre: p.marca?.nombre || '-',
                 categoriaNombre: p.categoria?.nombre || '-',
                 grupoNombre: p.grupo?.nombre || '-',
-                precioCompraFormatted: formatCurrency(pCompra),
+                nombre: p.nombre,
+                totalExistencias: totalExistencias > 0 ? totalExistencias.toLocaleString('es-BO') : '0',
+                precioCompraFormatted: pCompra.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                totalBsFormatted: totalBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                precioVentaFormatted: pVenta.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                margenFormatted: margenBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 fechaUltimaCompraFormatted: formatFechaCompra(p.fechaUltimaCompra),
-                precioVentaFormatted: formatCurrency(pVenta),
-                margenFormatted: formatCurrency(margenBs),
                 estado: p.activo ? 'Activo' : 'Inactivo'
             };
+
+            activeCities.forEach(c => {
+                const qty = stockPorCiudad[c.id] || 0;
+                row[`stock_${c.abrev}`] = qty > 0 ? qty.toLocaleString('es-BO') : '0';
+            });
+
+            return row;
         });
-    }, [filteredProductos]);
+    }, [filteredProductos, activeCities, inventoryList, movimientosList, prodFechaHasta, selectedSucursal, selectedCiudad]);
+
+    const exportFooterProductos = useMemo(() => {
+        const footer: Record<string, string> = {
+            codigo: 'TOTAL GENERAL',
+            totalExistencias: metricsProductos.totalExistencias.toLocaleString('es-BO'),
+            totalBsFormatted: metricsProductos.totalValorCosto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        };
+
+        activeCities.forEach(c => {
+            const cityTotal = filteredProductos.reduce((acc, p) => {
+                const { stockPorCiudad } = getProductStockData(p.id);
+                return acc + (stockPorCiudad[c.id] || 0);
+            }, 0);
+            footer[`stock_${c.abrev}`] = cityTotal.toLocaleString('es-BO');
+        });
+
+        return footer;
+    }, [filteredProductos, activeCities, metricsProductos, inventoryList, movimientosList, prodFechaHasta]);
 
     const getFiltersTextProductos = () => {
         const texts: string[] = [];
+        if (prodFechaHasta) {
+            texts.push(`A la fecha: ${prodFechaHasta.split('-').reverse().join('/')}`);
+        }
+        if (prodFechaDesde && prodFechaHasta) {
+            texts.push(`Período: ${prodFechaDesde.split('-').reverse().join('/')} al ${prodFechaHasta.split('-').reverse().join('/')}`);
+        } else if (prodFechaDesde) {
+            texts.push(`Desde: ${prodFechaDesde.split('-').reverse().join('/')}`);
+        }
         if (filtroProdCategoria) {
             const c = categoriesList?.find(cat => String(cat.id) === filtroProdCategoria);
             if (c) texts.push(`Categoría: ${c.nombre}`);
@@ -643,7 +904,7 @@ const ReportesPage: React.FC = () => {
         if (prodSearchTerm) {
             texts.push(`Búsqueda: "${prodSearchTerm}"`);
         }
-        return texts.join(' | ') || 'Todos los productos';
+        return texts.join(' | ') || (prodFechaHasta ? `A la fecha: ${prodFechaHasta.split('-').reverse().join('/')}` : 'Todos los productos con existencias');
     };
 
     const totalPagesProductos = Math.ceil(filteredProductos.length / itemsPerPage) || 1;
@@ -653,8 +914,309 @@ const ReportesPage: React.FC = () => {
     }, [filteredProductos, prodCurrentPage]);
 
     React.useEffect(() => setProdCurrentPage(1), [
-        filtroProdCategoria, filtroProdMarca, filtroProdGrupo, filtroProdEstado, prodSearchTerm
+        filtroProdCategoria, filtroProdMarca, filtroProdGrupo, filtroProdEstado, prodFechaDesde, prodFechaHasta, prodSearchTerm
     ]);
+
+    // ==========================================
+    // LÓGICA KARDEX INDIVIDUAL DE CLIENTE
+    // ==========================================
+    const selectedKardexCliente = useMemo(() => {
+        if (!kardexClienteId || !clientesList) return null;
+        return clientesList.find(c => String(c.id) === String(kardexClienteId)) || null;
+    }, [kardexClienteId, clientesList]);
+
+    const kardexTimeline = useMemo(() => {
+        if (!selectedKardexCliente) {
+            return {
+                saldoInicial: 0,
+                movimientos: [] as Array<{
+                    id: string;
+                    fecha: string;
+                    fechaRaw: string;
+                    nroNota: string;
+                    observacion: string;
+                    nroRecibo: string;
+                    credito: number;
+                    abono: number;
+                    saldo: number;
+                    tipo: 'VENTA' | 'PAGO' | 'DEVOLUCION' | 'MUESTRA';
+                    badge?: string;
+                }>,
+                totalCredito: 0,
+                totalAbono: 0,
+                saldoFinal: 0,
+                totalMuestras: 0,
+                totalDevoluciones: 0,
+            };
+        }
+
+        const cId = selectedKardexCliente.id;
+        const desdeStr = kardexFechaDesde ? kardexFechaDesde.substring(0, 10) : '';
+        const hastaStr = kardexFechaHasta ? kardexFechaHasta.substring(0, 10) : '';
+
+        // 1. Ventas del cliente
+        const clientVentas = (ventasList || []).filter(v => 
+            (v.cliente?.id === cId || (v as any).clienteId === cId) && 
+            v.estado !== 'ANULADA' &&
+            (!selectedSucursal || v.sucursal?.id === Number(selectedSucursal) || (v as any).sucursalId === Number(selectedSucursal))
+        );
+
+        // 2. Pagos / Cobranzas del cliente
+        const clientPagos = (pagosList || []).filter(p => 
+            (p.cliente?.id === cId || (p as any).clienteId === cId || p.nota?.cliente?.id === cId || (p.nota as any)?.clienteId === cId) && 
+            p.activo !== false &&
+            (!selectedSucursal || p.nota?.sucursal?.id === Number(selectedSucursal) || (p.nota as any)?.sucursalId === Number(selectedSucursal))
+        );
+
+        // 3. Devoluciones del cliente (Cambios de producto a producto)
+        const clientDevoluciones = (devolucionesList || []).filter(d => 
+            (d.cliente?.id === cId || (d as any).clienteId === cId) && 
+            d.estado !== 'ANULADA' &&
+            (!selectedSucursal || d.sucursal?.id === Number(selectedSucursal) || (d as any).sucursalId === Number(selectedSucursal))
+        );
+
+        // 4. Muestras entregadas al cliente
+        const clientMuestras = (muestrasList || []).filter(m => 
+            (m.cliente?.id === cId || (m as any).clienteId === cId) && 
+            m.estado !== 'ANULADO' &&
+            (!selectedSucursal || m.sucursal?.id === Number(selectedSucursal) || (m as any).sucursalId === Number(selectedSucursal))
+        );
+
+        // 5. Saldo Inicial: Ventas - Pagos anteriores a kardexFechaDesde
+        let saldoInicial = 0;
+        if (desdeStr) {
+            const priorVentas = clientVentas.filter(v => v.fecha && v.fecha.substring(0, 10) < desdeStr);
+            const priorPagos = clientPagos.filter(p => p.fecha && p.fecha.substring(0, 10) < desdeStr);
+            const totalPriorVentas = priorVentas.reduce((acc, v) => acc + (Number(v.total) || 0), 0);
+            const totalPriorPagos = priorPagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+            saldoInicial = totalPriorVentas - totalPriorPagos;
+        }
+
+        // 6. Movimientos en el período
+        type KardexItemType = {
+            id: string;
+            fecha: string;
+            fechaRaw: string;
+            nroNota: string;
+            observacion: string;
+            nroRecibo: string;
+            credito: number;
+            abono: number;
+            saldo: number;
+            tipo: 'VENTA' | 'PAGO' | 'DEVOLUCION' | 'MUESTRA';
+            badge?: string;
+        };
+
+        const items: KardexItemType[] = [];
+
+        // Ventas en el período
+        clientVentas.forEach(v => {
+            const f = v.fecha ? v.fecha.substring(0, 10) : '';
+            if (desdeStr && f < desdeStr) return;
+            if (hastaStr && f > hastaStr) return;
+
+            const nroNota = v.numero || String(v.id);
+            const total = Number(v.total) || 0;
+            const factStr = v.numeroFactura ? `FACT. ${v.numeroFactura}` : ((v as any).nroRecibo ? `REC. ${(v as any).nroRecibo}` : '');
+            let obs = v.observaciones ? v.observaciones.trim() : `VENTA NOTA ${nroNota}`;
+            if (factStr && !obs.toUpperCase().includes(factStr)) {
+                obs += ` (${factStr})`;
+            }
+
+            items.push({
+                id: `venta-${v.id}`,
+                fecha: f ? f.split('-').reverse().join('/') : '-',
+                fechaRaw: v.fecha || f,
+                nroNota: nroNota,
+                observacion: obs.toUpperCase(),
+                nroRecibo: (v as any).nroRecibo || '',
+                credito: total,
+                abono: 0,
+                saldo: 0,
+                tipo: 'VENTA'
+            });
+        });
+
+        // Pagos en el período
+        clientPagos.forEach(p => {
+            const f = p.fecha ? p.fecha.substring(0, 10) : '';
+            if (desdeStr && f < desdeStr) return;
+            if (hastaStr && f > hastaStr) return;
+
+            const nroNota = p.nota?.numero || '0';
+            const monto = Number(p.monto) || 0;
+            const nroRecibo = p.referencia || p.comprobanteUrl || String(p.id);
+            const metodo = p.metodoPago ? `(${p.metodoPago})` : '';
+            let obs = p.observaciones ? p.observaciones.trim() : (nroNota !== '0' ? `PAGO NOTA ${nroNota} ${metodo}` : `PAGO A CUENTA ${metodo}`);
+
+            items.push({
+                id: `pago-${p.id}`,
+                fecha: f ? f.split('-').reverse().join('/') : '-',
+                fechaRaw: p.fecha || f,
+                nroNota: nroNota,
+                observacion: obs.toUpperCase(),
+                nroRecibo: nroRecibo !== '0' ? nroRecibo : '',
+                credito: 0,
+                abono: monto,
+                saldo: 0,
+                tipo: 'PAGO'
+            });
+        });
+
+        // Devoluciones (Cambio producto a producto - Sin movimiento de dinero)
+        let totalDevs = 0;
+        if (kardexIncluirDevoluciones) {
+            clientDevoluciones.forEach(d => {
+                const f = d.fecha ? d.fecha.substring(0, 10) : '';
+                if (desdeStr && f < desdeStr) return;
+                if (hastaStr && f > hastaStr) return;
+                totalDevs++;
+
+                const nroNota = d.numero || String(d.id);
+                const itemsDev = d.detalles?.map((dt: any) => `${dt.cantidad}x ${dt.producto?.nombre || 'Prod'}`).join(', ') || '';
+                const obs = d.observaciones 
+                    ? `[CAMBIO DE PRODUCTO] ${d.observaciones.trim()} ${itemsDev ? `(${itemsDev})` : ''}`
+                    : `[CAMBIO DE PRODUCTO] DEVOLUCIÓN NOTA ${nroNota} ${itemsDev ? `(${itemsDev})` : ''}`;
+
+                items.push({
+                    id: `dev-${d.id}`,
+                    fecha: f ? f.split('-').reverse().join('/') : '-',
+                    fechaRaw: d.fecha || f,
+                    nroNota: nroNota,
+                    observacion: obs.toUpperCase(),
+                    nroRecibo: '',
+                    credito: 0,
+                    abono: 0,
+                    saldo: 0,
+                    tipo: 'DEVOLUCION',
+                    badge: 'Cambio Físico'
+                });
+            });
+        }
+
+        // Muestras (Entregas físicas de muestras - Sin costo/deuda)
+        let totalMuestrasCount = 0;
+        if (kardexIncluirMuestras) {
+            clientMuestras.forEach(m => {
+                const f = m.fecha ? m.fecha.substring(0, 10) : '';
+                if (desdeStr && f < desdeStr) return;
+                if (hastaStr && f > hastaStr) return;
+                totalMuestrasCount++;
+
+                const nroNota = m.numero || String(m.id);
+                const itemsMuestra = m.detalles?.map(dt => `${dt.cantidadEntregada}x ${dt.producto?.nombre || 'Prod'}`).join(', ') || '';
+                const obs = m.observaciones 
+                    ? `[ENTREGA MUESTRA] ${m.observaciones.trim()} ${itemsMuestra ? `(${itemsMuestra})` : ''}`
+                    : `[ENTREGA MUESTRA] MUESTRA ${nroNota} ${itemsMuestra ? `(${itemsMuestra})` : ''}`;
+
+                items.push({
+                    id: `muestra-${m.id}`,
+                    fecha: f ? f.split('-').reverse().join('/') : '-',
+                    fechaRaw: m.fecha || f,
+                    nroNota: nroNota,
+                    observacion: obs.toUpperCase(),
+                    nroRecibo: '',
+                    credito: 0,
+                    abono: 0,
+                    saldo: 0,
+                    tipo: 'MUESTRA',
+                    badge: 'Muestra'
+                });
+            });
+        }
+
+        // Ordenar cronológicamente ascendente
+        items.sort((a, b) => {
+            const diff = new Date(a.fechaRaw).getTime() - new Date(b.fechaRaw).getTime();
+            if (diff !== 0) return diff;
+            const order: Record<string, number> = { VENTA: 1, DEVOLUCION: 2, MUESTRA: 3, PAGO: 4 };
+            return (order[a.tipo] || 9) - (order[b.tipo] || 9);
+        });
+
+        // Calcular saldo acumulado
+        let currentSaldo = saldoInicial;
+        let totalCreditoPeriodo = 0;
+        let totalAbonoPeriodo = 0;
+
+        items.forEach(it => {
+            totalCreditoPeriodo += it.credito;
+            totalAbonoPeriodo += it.abono;
+            currentSaldo = currentSaldo + it.credito - it.abono;
+            it.saldo = currentSaldo;
+        });
+
+        return {
+            saldoInicial,
+            movimientos: items,
+            totalCredito: totalCreditoPeriodo,
+            totalAbono: totalAbonoPeriodo,
+            saldoFinal: currentSaldo,
+            totalMuestras: totalMuestrasCount,
+            totalDevoluciones: totalDevs
+        };
+    }, [selectedKardexCliente, ventasList, pagosList, devolucionesList, muestrasList, kardexFechaDesde, kardexFechaHasta, kardexIncluirDevoluciones, kardexIncluirMuestras, selectedSucursal]);
+
+    const exportColumnsKardex = useMemo(() => [
+        { header: 'FECHA', dataKey: 'fecha' },
+        { header: 'NRO DE NOTA', dataKey: 'nroNota' },
+        { header: 'OBSERVACIÓN', dataKey: 'observacion' },
+        { header: 'NRO DE RECIBO', dataKey: 'nroRecibo' },
+        { header: 'CRÉDITO', dataKey: 'creditoFormatted' },
+        { header: 'ABONO', dataKey: 'abonoFormatted' },
+        { header: 'SALDO', dataKey: 'saldoFormatted' },
+    ], []);
+
+    const mappedExportDataKardex = useMemo(() => {
+        if (!selectedKardexCliente) return [];
+        const rows: any[] = [];
+
+        // Fila 1: Saldo Inicial si existe fecha desde
+        if (kardexFechaDesde) {
+            rows.push({
+                fecha: kardexFechaDesde.split('-').reverse().join('/'),
+                nroNota: '0',
+                observacion: 'SALDO INICIAL',
+                nroRecibo: '0',
+                creditoFormatted: kardexTimeline.saldoInicial >= 0 ? kardexTimeline.saldoInicial.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00',
+                abonoFormatted: kardexTimeline.saldoInicial < 0 ? Math.abs(kardexTimeline.saldoInicial).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00',
+                saldoFormatted: kardexTimeline.saldoInicial.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            });
+        }
+
+        kardexTimeline.movimientos.forEach(m => {
+            rows.push({
+                fecha: m.fecha,
+                nroNota: m.nroNota,
+                observacion: m.observacion,
+                nroRecibo: m.nroRecibo || '',
+                creditoFormatted: m.credito > 0 ? m.credito.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00',
+                abonoFormatted: m.abono > 0 ? m.abono.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00',
+                saldoFormatted: m.saldo.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            });
+        });
+
+        return rows;
+    }, [selectedKardexCliente, kardexTimeline, kardexFechaDesde]);
+
+    const exportFooterKardex = useMemo(() => {
+        if (!selectedKardexCliente) return undefined;
+        return {
+            fecha: 'TOTALES',
+            nroNota: '',
+            observacion: '',
+            nroRecibo: '',
+            creditoFormatted: kardexTimeline.totalCredito.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            abonoFormatted: kardexTimeline.totalAbono.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            saldoFormatted: kardexTimeline.saldoFinal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        };
+    }, [selectedKardexCliente, kardexTimeline]);
+
+    const getKardexSubtitle = () => {
+        const c = selectedKardexCliente;
+        const clientLabel = c ? `${c.codigo || ''} - ${getClientDisplayName(c)}` : 'Sin cliente seleccionado';
+        const fechaCorte = kardexFechaHasta ? kardexFechaHasta.split('-').reverse().join('/') : format(new Date(), 'dd/MM/yyyy');
+        return `Cliente: ${clientLabel} | Corte al ${fechaCorte} | Desde: ${kardexFechaDesde ? kardexFechaDesde.split('-').reverse().join('/') : 'Inicio'}`;
+    };
 
     // ==========================================
     // LÓGICA VENTAS
@@ -1477,7 +2039,10 @@ const ReportesPage: React.FC = () => {
             handlePrintEstadisticas();
         } else if (activeTab === 'productos') {
             if (!mappedExportDataProductos.length) return;
-            printData('Reporte de Catálogo de Productos', getExportColumnsProductos(), mappedExportDataProductos, getFiltersTextProductos());
+            printData('Reporte de Existencias y Catálogo de Productos', getExportColumnsProductos(), mappedExportDataProductos, getFiltersTextProductos(), exportFooterProductos);
+        } else if (activeTab === 'kardex-cliente') {
+            if (!mappedExportDataKardex.length) return;
+            printData('KARDEX INDIVIDUAL DE CLIENTE', exportColumnsKardex, mappedExportDataKardex, getKardexSubtitle(), exportFooterKardex);
         } else if (activeTab === 'ventas') {
             if (!mappedExportDataVentas.length) return;
             printData('Reporte de Ventas Realizadas', getExportColumnsVentas(), mappedExportDataVentas, getFiltersTextVentas());
@@ -1496,7 +2061,11 @@ const ReportesPage: React.FC = () => {
     const handleExportPDF = () => {
         if (activeTab === 'productos') {
             if (!mappedExportDataProductos.length) return;
-            exportToPDF('Reporte de Catálogo de Productos', getExportColumnsProductos(), mappedExportDataProductos, 'productos_reporte', getFiltersTextProductos());
+            exportToPDF('Reporte de Existencias y Catálogo de Productos', getExportColumnsProductos(), mappedExportDataProductos, 'productos_existencias_reporte', getFiltersTextProductos(), exportFooterProductos);
+        } else if (activeTab === 'kardex-cliente') {
+            if (!mappedExportDataKardex.length) return;
+            const fileName = `kardex_cliente_${selectedKardexCliente?.codigo || 'reporte'}`;
+            exportToPDF('KARDEX INDIVIDUAL DE CLIENTE', exportColumnsKardex, mappedExportDataKardex, fileName, getKardexSubtitle(), exportFooterKardex);
         } else if (activeTab === 'ventas') {
             if (!mappedExportDataVentas.length) return;
             exportToPDF('Reporte de Ventas Realizadas', getExportColumnsVentas(), mappedExportDataVentas, 'ventas_reporte', getFiltersTextVentas());
@@ -1515,7 +2084,11 @@ const ReportesPage: React.FC = () => {
     const handleExportExcel = () => {
         if (activeTab === 'productos') {
             if (!mappedExportDataProductos.length) return;
-            exportToExcel(getExportColumnsProductos(), mappedExportDataProductos, 'productos_reporte');
+            exportToExcel(getExportColumnsProductos(), mappedExportDataProductos, 'productos_existencias_reporte', exportFooterProductos);
+        } else if (activeTab === 'kardex-cliente') {
+            if (!mappedExportDataKardex.length) return;
+            const fileName = `kardex_cliente_${selectedKardexCliente?.codigo || 'reporte'}`;
+            exportToExcel(exportColumnsKardex, mappedExportDataKardex, fileName, exportFooterKardex);
         } else if (activeTab === 'ventas') {
             if (!mappedExportDataVentas.length) return;
             exportToExcel(getExportColumnsVentas(), mappedExportDataVentas, 'ventas_reporte');
@@ -1576,6 +2149,13 @@ const ReportesPage: React.FC = () => {
                 >
                     <Boxes className="w-4 h-4" />
                     Reporte de Productos
+                </button>
+                <button
+                    onClick={() => setActiveTab('kardex-cliente')}
+                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${activeTab === 'kardex-cliente' ? 'border-primary text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}`}
+                >
+                    <Users className="w-4 h-4" />
+                    Kardex de Cliente
                 </button>
                 <button
                     onClick={() => setActiveTab('ventas')}
@@ -1925,13 +2505,63 @@ const ReportesPage: React.FC = () => {
             )}
 
             {/* ========================================== */}
-            {/* TAB: PRODUCTOS */}
+            {/* TAB: PRODUCTOS Y EXISTENCIAS POR SUCURSAL */}
             {/* ========================================== */}
             {activeTab === 'productos' && (
-                <>
+                <div className="space-y-6">
+                    {/* Métricas de Existencias y Catálogo */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                <Package className="w-4 h-4 text-primary" /> Total Productos
+                            </span>
+                            <div className="text-xl font-bold text-foreground">
+                                {metricsProductos.totalItems.toLocaleString('es-BO')} <span className="text-xs font-normal text-muted-foreground">ítems</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">En catálogo según filtros</p>
+                        </div>
+
+                        <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                <Boxes className="w-4 h-4 text-blue-600" /> Total Existencias
+                            </span>
+                            <div className="text-xl font-bold text-blue-600">
+                                {metricsProductos.totalExistencias.toLocaleString('es-BO')} <span className="text-xs font-normal text-muted-foreground">unidades</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                                {prodFechaHasta ? `Stock a la fecha ${prodFechaHasta.split('-').reverse().join('/')}` : 'Stock consolidado en sucursales'}
+                            </p>
+                        </div>
+
+                        <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                <DollarSign className="w-4 h-4 text-emerald-600" /> Total Bs (Al Costo)
+                            </span>
+                            <div className="text-xl font-bold text-emerald-600">
+                                Bs. {metricsProductos.totalValorCosto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">Valorización total al costo unitario</p>
+                        </div>
+
+                        <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                <TrendingUp className="w-4 h-4 text-primary" /> Total Bs (A la Venta)
+                            </span>
+                            <div className="text-xl font-bold text-primary">
+                                Bs. {metricsProductos.totalValorVenta.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <span>Margen est.:</span>
+                                <span className="font-semibold text-green-600">
+                                    Bs. {metricsProductos.margenPotencial.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({metricsProductos.margenPct.toFixed(1)}%)
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Filtros de Productos */}
                     <div className="bg-card p-4 border rounded-xl shadow-sm space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                                      <Tag className="w-3.5 h-3.5 text-primary" /> Marca
@@ -1964,33 +2594,55 @@ const ReportesPage: React.FC = () => {
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                                    <Boxes className="w-3.5 h-3.5 text-primary" /> Grupo
+                                     <Boxes className="w-3.5 h-3.5 text-primary" /> Grupo
                                 </label>
                                 <select 
-                                    value={filtroProdGrupo} 
-                                    onChange={(e) => setFiltroProdGrupo(e.target.value)} 
-                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                                     value={filtroProdGrupo} 
+                                     onChange={(e) => setFiltroProdGrupo(e.target.value)} 
+                                     className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
                                 >
-                                    <option value="">Todos los Grupos</option>
-                                    {gruposList?.map(g => (
-                                        <option key={g.id} value={g.id}>{g.nombre}</option>
-                                    ))}
+                                     <option value="">Todos los Grupos</option>
+                                     {gruposList?.map(g => (
+                                         <option key={g.id} value={g.id}>{g.nombre}</option>
+                                     ))}
                                 </select>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                                     <CreditCard className="w-3.5 h-3.5 text-primary" /> Estado
                                 </label>
+                                <select 
+                                    value={filtroProdEstado} 
+                                    onChange={(e) => setFiltroProdEstado(e.target.value as any)} 
+                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                                >
+                                    <option value="TODOS">Todos</option>
+                                    <option value="ACTIVO">Activos</option>
+                                    <option value="INACTIVO">Inactivos</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5 text-primary" /> Fecha Desde
+                                </label>
+                                <input 
+                                    type="date" 
+                                    value={prodFechaDesde} 
+                                    onChange={(e) => setProdFechaDesde(e.target.value)} 
+                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20" 
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5 text-primary" /> Fecha Hasta (A la fecha)
+                                </label>
                                 <div className="flex items-center gap-2">
-                                    <select 
-                                        value={filtroProdEstado} 
-                                        onChange={(e) => setFiltroProdEstado(e.target.value as any)} 
-                                        className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                                    >
-                                        <option value="TODOS">Todos</option>
-                                        <option value="ACTIVO">Activos</option>
-                                        <option value="INACTIVO">Inactivos</option>
-                                    </select>
+                                    <input 
+                                        type="date" 
+                                        value={prodFechaHasta} 
+                                        onChange={(e) => setProdFechaHasta(e.target.value)} 
+                                        className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20" 
+                                    />
                                     {hasProdActiveFilters && (
                                         <button
                                             type="button"
@@ -2005,12 +2657,12 @@ const ReportesPage: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3">
-                            <div className="relative w-full max-w-sm">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+                            <div className="relative w-full max-w-md">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <input 
                                     type="text" 
-                                    placeholder="Buscar código, nombre de producto..." 
+                                    placeholder="Buscar por código, nombre o descripción..." 
                                     value={prodSearchTerm} 
                                     onChange={(e) => setProdSearchTerm(e.target.value)} 
                                     className="w-full pl-9 pr-8 p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20" 
@@ -2021,37 +2673,82 @@ const ReportesPage: React.FC = () => {
                                     </button>
                                 )}
                             </div>
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const hoy = format(new Date(), 'yyyy-MM-dd');
+                                        setProdFechaHasta(hoy);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                                        prodFechaHasta === format(new Date(), 'yyyy-MM-dd')
+                                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                            : 'bg-muted/40 text-muted-foreground hover:bg-accent'
+                                    }`}
+                                >
+                                    A la fecha de hoy
+                                </button>
+                                {prodFechaHasta && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setProdFechaDesde('');
+                                            setProdFechaHasta('');
+                                        }}
+                                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:bg-accent border transition-colors"
+                                    >
+                                        Ver Stock Actual
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
 
-                    {/* Tabla de Productos */}
+                    {/* Tabla de Productos y Existencias */}
                     <div className="bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-[900px]">
+                            <table className="w-full text-left border-collapse min-w-[1050px]">
                                 <thead>
                                     <tr className="bg-muted/50 border-b">
-                                        <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-12">#</th>
-                                        <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Código</th>
-                                        <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>
-                                        {!filtroProdMarca && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Marca</th>}
-                                        {!filtroProdCategoria && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Categoría</th>}
-                                        {!filtroProdGrupo && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Grupo</th>}
-                                        <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">P. Compra</th>
-                                        <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">P. Venta</th>
-                                        <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Margen</th>
-                                        {filtroProdEstado === 'TODOS' && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-28 text-center">Estado</th>}
+                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-10">#</th>
+                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Código</th>
+                                        {!filtroProdMarca && <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Marca</th>}
+                                        {!filtroProdCategoria && <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Categoría</th>}
+                                        {!filtroProdGrupo && <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Grupo</th>}
+                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nombre Producto</th>
+                                        
+                                        {/* Columnas dinámicas de ciudades (LP, CBBA, SCZ) */}
+                                        {!selectedSucursal && !selectedCiudad && activeCities.map(c => (
+                                            <th key={c.id} className="p-3 text-xs font-bold uppercase tracking-wider text-primary text-right w-16" title={`Existencias en ${c.nombre}`}>
+                                                {c.abrev}
+                                            </th>
+                                        ))}
+
+                                        <th className="p-3 text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 text-right bg-blue-50/40 dark:bg-blue-950/20">
+                                            Total Existencias
+                                        </th>
+                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                                            Costo Unitario
+                                        </th>
+                                        <th className="p-3 text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 text-right bg-emerald-50/40 dark:bg-emerald-950/20">
+                                            Total Bs
+                                        </th>
+                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">P. Venta</th>
+                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Margen</th>
+                                        {filtroProdEstado === 'TODOS' && <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-24 text-center">Estado</th>}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {loadingProducts ? (
+                                    {loadingProducts || loadingInventory ? (
                                         <tr>
-                                            <td colSpan={10} className="p-8 text-center text-muted-foreground animate-pulse text-sm">
-                                                Cargando catálogo de productos...
+                                            <td colSpan={14} className="p-8 text-center text-muted-foreground animate-pulse text-sm">
+                                                Cargando catálogo y existencias de productos...
                                             </td>
                                         </tr>
                                     ) : paginatedProductos.length === 0 ? (
                                         <tr>
-                                            <td colSpan={10} className="p-8 text-center text-muted-foreground text-sm">
+                                            <td colSpan={14} className="p-8 text-center text-muted-foreground text-sm">
                                                 No se encontraron productos para los filtros seleccionados.
                                             </td>
                                         </tr>
@@ -2059,20 +2756,37 @@ const ReportesPage: React.FC = () => {
                                         paginatedProductos.map((p, index) => {
                                             const pCompra = Number(p.precioCompra) || 0;
                                             const pVenta = Number(p.precioVenta) || 0;
+                                            const { stockPorCiudad, totalExistencias } = getProductStockData(p.id);
+                                            const totalBs = totalExistencias * pCompra;
                                             const margenBs = pVenta - pCompra;
                                             const margenPct = pVenta > 0 ? ((margenBs / pVenta) * 100).toFixed(1) : '0';
 
                                             return (
                                                 <tr key={p.id} className="hover:bg-accent/30 transition-colors group">
-                                                    <td className="p-4 text-sm font-mono text-muted-foreground">
+                                                    <td className="p-3 text-xs font-mono text-muted-foreground">
                                                         {(prodCurrentPage - 1) * itemsPerPage + index + 1}
                                                     </td>
-                                                    <td className="p-4 text-sm font-mono font-semibold text-foreground">
+                                                    <td className="p-3 text-xs font-mono font-bold text-foreground whitespace-nowrap">
                                                         {p.codigo}
                                                     </td>
-                                                    <td className="p-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded-lg border bg-background overflow-hidden flex items-center justify-center shrink-0">
+                                                    {!filtroProdMarca && (
+                                                        <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                                                            {p.marca?.nombre || '-'}
+                                                        </td>
+                                                    )}
+                                                    {!filtroProdCategoria && (
+                                                        <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                                                            {p.categoria?.nombre || '-'}
+                                                        </td>
+                                                    )}
+                                                    {!filtroProdGrupo && (
+                                                        <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                                                            {p.grupo?.nombre || '-'}
+                                                        </td>
+                                                    )}
+                                                    <td className="p-3">
+                                                        <div className="flex items-center gap-2.5 min-w-[200px]">
+                                                            <div className="w-7 h-7 rounded-md border bg-background overflow-hidden flex items-center justify-center shrink-0">
                                                                 {p.imagen ? (
                                                                     <img
                                                                         src={getFileUrl(p.imagen)}
@@ -2080,60 +2794,75 @@ const ReportesPage: React.FC = () => {
                                                                         className="w-full h-full object-cover"
                                                                     />
                                                                 ) : (
-                                                                    <ImageIcon className="w-4 h-4 text-muted-foreground/50" />
+                                                                    <ImageIcon className="w-3.5 h-3.5 text-muted-foreground/50" />
                                                                 )}
                                                             </div>
                                                             <div className="flex flex-col">
-                                                                <span className="text-sm font-medium text-foreground">{p.nombre}</span>
-                                                                {p.descripcion && <span className="text-[11px] text-muted-foreground line-clamp-1">{p.descripcion}</span>}
+                                                                <span className="text-xs font-semibold text-foreground leading-snug">{p.nombre}</span>
+                                                                {p.descripcion && <span className="text-[10px] text-muted-foreground line-clamp-1">{p.descripcion}</span>}
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    {!filtroProdMarca && (
-                                                        <td className="p-4 text-sm text-muted-foreground">
-                                                            {p.marca?.nombre || '-'}
-                                                        </td>
-                                                    )}
-                                                    {!filtroProdCategoria && (
-                                                        <td className="p-4 text-sm text-muted-foreground">
-                                                            {p.categoria?.nombre || '-'}
-                                                        </td>
-                                                    )}
-                                                    {!filtroProdGrupo && (
-                                                        <td className="p-4 text-sm text-muted-foreground">
-                                                            {p.grupo?.nombre || '-'}
-                                                        </td>
-                                                    )}
-                                                    <td className="p-4 text-sm font-medium text-right text-muted-foreground">
+
+                                                    {/* Stock por Ciudad */}
+                                                    {!selectedSucursal && !selectedCiudad && activeCities.map(c => {
+                                                        const qty = stockPorCiudad[c.id] || 0;
+                                                        return (
+                                                            <td key={c.id} className="p-3 text-xs font-mono text-right whitespace-nowrap">
+                                                                <span className={qty > 0 ? 'font-bold text-foreground' : 'text-muted-foreground/50'}>
+                                                                    {qty.toLocaleString('es-BO')}
+                                                                </span>
+                                                            </td>
+                                                        );
+                                                    })}
+
+                                                    {/* Total Existencias */}
+                                                    <td className="p-3 text-xs font-mono font-bold text-right text-blue-700 dark:text-blue-400 bg-blue-50/20 dark:bg-blue-950/10 whitespace-nowrap">
+                                                        {totalExistencias.toLocaleString('es-BO')}
+                                                    </td>
+
+                                                    {/* Costo Unitario / P. Compra */}
+                                                    <td className="p-3 text-xs text-right whitespace-nowrap">
                                                         <div className="flex flex-col items-end">
-                                                            <span className="font-semibold text-foreground">
-                                                                {formatCurrency(pCompra)}
+                                                            <span className="font-semibold text-foreground font-mono">
+                                                                {pCompra.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                             </span>
-                                                            <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5" title="Fecha de última compra">
-                                                                <Calendar className="w-3 h-3 text-muted-foreground/70 shrink-0" />
+                                                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 mt-0.5" title="Fecha de última compra">
+                                                                <Calendar className="w-2.5 h-2.5 text-muted-foreground/70 shrink-0" />
                                                                 {formatFechaCompra(p.fechaUltimaCompra)}
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="p-4 text-sm font-bold text-primary text-right">
-                                                        {formatCurrency(pVenta)}
+
+                                                    {/* Total Bs */}
+                                                    <td className="p-3 text-xs font-mono font-bold text-right text-emerald-700 dark:text-emerald-400 bg-emerald-50/20 dark:bg-emerald-950/10 whitespace-nowrap">
+                                                        {totalBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </td>
-                                                    <td className="p-4 text-right">
-                                                        <div className={`text-xs font-bold ${margenBs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600'}`}>
-                                                            {formatCurrency(margenBs)}
+
+                                                    {/* P. Venta */}
+                                                    <td className="p-3 text-xs font-bold text-primary text-right font-mono whitespace-nowrap">
+                                                        {pVenta.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+
+                                                    {/* Margen */}
+                                                    <td className="p-3 text-right whitespace-nowrap">
+                                                        <div className={`text-xs font-bold font-mono ${margenBs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600'}`}>
+                                                            {margenBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </div>
                                                         <div className="text-[10px] text-muted-foreground">
                                                             {margenPct}%
                                                         </div>
                                                     </td>
+
+                                                    {/* Estado */}
                                                     {filtroProdEstado === 'TODOS' && (
-                                                        <td className="p-4 text-center">
+                                                        <td className="p-3 text-center whitespace-nowrap">
                                                             {p.activo ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase tracking-wider">
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase tracking-wider">
                                                                     Activo
                                                                 </span>
                                                             ) : (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-100 text-red-700 uppercase tracking-wider">
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 uppercase tracking-wider">
                                                                     Inactivo
                                                                 </span>
                                                             )}
@@ -2144,6 +2873,44 @@ const ReportesPage: React.FC = () => {
                                         })
                                     )}
                                 </tbody>
+                                {filteredProductos.length > 0 && (
+                                    <tfoot>
+                                        <tr className="bg-muted/70 font-bold border-t-2 border-primary/20 text-xs">
+                                            <td colSpan={2 + (!filtroProdMarca ? 1 : 0) + (!filtroProdCategoria ? 1 : 0) + (!filtroProdGrupo ? 1 : 0) + 1} className="p-3 text-foreground font-black">
+                                                TOTAL GENERAL CONSOLIDADO ({filteredProductos.length} ítems)
+                                            </td>
+
+                                            {!selectedSucursal && !selectedCiudad && activeCities.map(c => {
+                                                const cityTotal = filteredProductos.reduce((acc, p) => {
+                                                    const { stockPorCiudad } = getProductStockData(p.id);
+                                                    return acc + (stockPorCiudad[c.id] || 0);
+                                                }, 0);
+                                                return (
+                                                    <td key={c.id} className="p-3 text-right font-mono font-bold text-foreground">
+                                                        {cityTotal.toLocaleString('es-BO')}
+                                                    </td>
+                                                );
+                                            })}
+
+                                            <td className="p-3 text-right font-mono font-black text-blue-700 dark:text-blue-400 bg-blue-100/30">
+                                                {metricsProductos.totalExistencias.toLocaleString('es-BO')}
+                                            </td>
+                                            <td className="p-3 text-right text-muted-foreground font-semibold">
+                                                ---
+                                            </td>
+                                            <td className="p-3 text-right font-mono font-black text-emerald-700 dark:text-emerald-400 bg-emerald-100/30">
+                                                Bs. {metricsProductos.totalValorCosto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="p-3 text-right font-mono font-bold text-primary">
+                                                Bs. {metricsProductos.totalValorVenta.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="p-3 text-right font-mono text-green-600 font-bold">
+                                                Bs. {metricsProductos.margenPotencial.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                            {filtroProdEstado === 'TODOS' && <td className="p-3"></td>}
+                                        </tr>
+                                    </tfoot>
+                                )}
                             </table>
                         </div>
 
@@ -2151,7 +2918,7 @@ const ReportesPage: React.FC = () => {
                         {totalPagesProductos > 1 && (
                             <div className="flex items-center justify-between p-4 border-t bg-muted/20">
                                 <span className="text-sm text-muted-foreground">
-                                    Mostrando {((prodCurrentPage - 1) * itemsPerPage) + 1} a {Math.min(prodCurrentPage * itemsPerPage, filteredProductos.length)} de {filteredProductos.length}
+                                    Mostrando {((prodCurrentPage - 1) * itemsPerPage) + 1} a {Math.min(prodCurrentPage * itemsPerPage, filteredProductos.length)} de {filteredProductos.length} productos
                                 </span>
                                 <div className="flex items-center gap-2">
                                     <button 
@@ -2175,7 +2942,334 @@ const ReportesPage: React.FC = () => {
                             </div>
                         )}
                     </div>
-                </>
+                </div>
+            )}
+
+            {/* ========================================== */}
+            {/* TAB: KARDEX INDIVIDUAL DE CLIENTE */}
+            {/* ========================================== */}
+            {activeTab === 'kardex-cliente' && (
+                <div className="space-y-6">
+                    {/* Barra de Búsqueda y Selección de Cliente + Fechas */}
+                    <div className="bg-card p-5 border rounded-xl shadow-sm space-y-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+                            {/* Selector de Cliente */}
+                            <div className="lg:col-span-6 space-y-1.5">
+                                <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5">
+                                        <Users className="w-4 h-4 text-primary" /> Seleccionar Cliente
+                                    </span>
+                                    {selectedKardexCliente && (
+                                        <span className="text-[11px] font-mono text-primary font-bold">
+                                            CÓDIGO: {selectedKardexCliente.codigo || 'S/C'}
+                                        </span>
+                                    )}
+                                </label>
+                                <select
+                                    value={kardexClienteId}
+                                    onChange={(e) => setKardexClienteId(e.target.value)}
+                                    className="w-full p-2.5 pl-3 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                                >
+                                    <option value="">-- Selecciona un Cliente para generar el Kardex --</option>
+                                    {clientesList?.map(c => {
+                                        const label = `${c.codigo ? `[${c.codigo}] ` : ''}${getClientDisplayName(c)}${(c.sucursal as any)?.ciudad?.nombre ? ` (${(c.sucursal as any)?.ciudad?.nombre})` : ''}`;
+                                        return (
+                                            <option key={c.id} value={c.id}>
+                                                {label}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+
+                            {/* Rango de Fechas */}
+                            <div className="lg:col-span-4 space-y-1.5">
+                                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                                    <Calendar className="w-4 h-4 text-primary" /> Rango de Fechas
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-0.5">
+                                        <span className="text-[10px] text-muted-foreground">Desde</span>
+                                        <input
+                                            type="date"
+                                            value={kardexFechaDesde}
+                                            onChange={(e) => setKardexFechaDesde(e.target.value)}
+                                            className="w-full p-2 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                                        />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        <span className="text-[10px] text-muted-foreground">Hasta</span>
+                                        <input
+                                            type="date"
+                                            value={kardexFechaHasta}
+                                            onChange={(e) => setKardexFechaHasta(e.target.value)}
+                                            className="w-full p-2 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Accesos rápidos de fecha */}
+                            <div className="lg:col-span-2 flex flex-wrap lg:flex-col gap-1.5 justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setKardexFechaDesde(format(startOfYear(new Date()), 'yyyy-MM-dd'));
+                                        setKardexFechaHasta(format(new Date(), 'yyyy-MM-dd'));
+                                    }}
+                                    className="px-2.5 py-1 text-[11px] font-semibold bg-muted/60 hover:bg-accent rounded border transition-colors text-center cursor-pointer"
+                                >
+                                    Año Actual
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setKardexFechaDesde(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+                                        setKardexFechaHasta(format(new Date(), 'yyyy-MM-dd'));
+                                    }}
+                                    className="px-2.5 py-1 text-[11px] font-semibold bg-muted/60 hover:bg-accent rounded border transition-colors text-center cursor-pointer"
+                                >
+                                    Este Mes
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setKardexFechaDesde('');
+                                        setKardexFechaHasta(format(new Date(), 'yyyy-MM-dd'));
+                                    }}
+                                    className="px-2.5 py-1 text-[11px] font-semibold bg-muted/60 hover:bg-accent rounded border transition-colors text-center cursor-pointer"
+                                >
+                                    Todo el Historial
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Toggles de Devoluciones y Muestras */}
+                        <div className="pt-2 border-t flex items-center justify-between flex-wrap gap-4 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-5 flex-wrap">
+                                <label className="flex items-center gap-2 cursor-pointer select-none font-medium text-foreground">
+                                    <input
+                                        type="checkbox"
+                                        checked={kardexIncluirDevoluciones}
+                                        onChange={(e) => setKardexIncluirDevoluciones(e.target.checked)}
+                                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                                    />
+                                    <span>Mostrar Cambios de Producto / Devoluciones <span className="text-[10px] text-muted-foreground font-normal">(producto a producto sin dinero)</span></span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none font-medium text-foreground">
+                                    <input
+                                        type="checkbox"
+                                        checked={kardexIncluirMuestras}
+                                        onChange={(e) => setKardexIncluirMuestras(e.target.checked)}
+                                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                                    />
+                                    <span>Mostrar Entregas de Muestras <span className="text-[10px] text-muted-foreground font-normal">(sin costo monetario)</span></span>
+                                </label>
+                            </div>
+                            {selectedKardexCliente && (
+                                <span className="text-[11px] text-muted-foreground italic">
+                                    {kardexTimeline.movimientos.length} movimientos registrados en el período
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {!selectedKardexCliente ? (
+                        <div className="p-12 text-center bg-card border rounded-2xl shadow-sm space-y-4">
+                            <div className="w-16 h-16 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                                <Users className="w-8 h-8" />
+                            </div>
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-bold text-foreground">Selecciona un Cliente para Visualizar su Kardex</h3>
+                                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                                    Elige un cliente del menú superior para consultar el extracto detallado de notas de venta (crédito), pagos aplicados (abono), cambios de producto y saldo progresivo.
+                                </p>
+                            </div>
+                            {/* Clientes sugeridos / rápidos */}
+                            <div className="pt-4 max-w-2xl mx-auto text-left">
+                                <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Clientes registrados recientemente:</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {clientesList?.slice(0, 6).map(c => (
+                                        <button
+                                            key={c.id}
+                                            onClick={() => setKardexClienteId(String(c.id))}
+                                            className="p-3 border rounded-xl hover:border-primary/50 hover:bg-accent/40 text-left transition-all flex items-center justify-between cursor-pointer group"
+                                        >
+                                            <div className="truncate">
+                                                <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                                                    {c.codigo ? `[${c.codigo}] ` : ''}{getClientDisplayName(c)}
+                                                </div>
+                                                <div className="text-[10px] text-muted-foreground">
+                                                    {c.persona?.telefono || (c as any).telefono || (c.sucursal as any)?.nombre || 'Cliente Registrado'}
+                                                </div>
+                                            </div>
+                                            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-5">
+                            {/* Ficha de Resumen del Cliente */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                        <Receipt className="w-4 h-4 text-blue-600" /> Saldo Inicial
+                                    </span>
+                                    <div className={`text-xl font-bold font-mono ${kardexTimeline.saldoInicial > 0 ? 'text-amber-600' : 'text-foreground'}`}>
+                                        Bs. {kardexTimeline.saldoInicial.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        {kardexFechaDesde ? `Al ${kardexFechaDesde.split('-').reverse().join('/')}` : 'Desde el inicio'}
+                                    </p>
+                                </div>
+
+                                <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                        <ShoppingCart className="w-4 h-4 text-primary" /> Total Créditos (Ventas)
+                                    </span>
+                                    <div className="text-xl font-bold font-mono text-primary">
+                                        Bs. {kardexTimeline.totalCredito.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">Cargos en el período</p>
+                                </div>
+
+                                <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                        <Wallet className="w-4 h-4 text-emerald-600" /> Total Abonos (Pagos)
+                                    </span>
+                                    <div className="text-xl font-bold font-mono text-emerald-600">
+                                        Bs. {kardexTimeline.totalAbono.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">Cobros en el período</p>
+                                </div>
+
+                                <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                        <DollarSign className="w-4 h-4 text-purple-600" /> Saldo Pendiente Final
+                                    </span>
+                                    <div className={`text-xl font-black font-mono ${kardexTimeline.saldoFinal > 0.01 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600'}`}>
+                                        Bs. {kardexTimeline.saldoFinal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        {kardexTimeline.saldoFinal <= 0.01 ? 'Cuenta al día (Sin saldo)' : 'Deuda acumulada actual'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Tabla de Movimientos del Kardex */}
+                            <div className="bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse min-w-[1050px]">
+                                        <thead>
+                                            <tr className="bg-muted/50 border-b">
+                                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-32">Fecha</th>
+                                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-32">Nro. de Nota</th>
+                                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Observación</th>
+                                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-32">Nro. de Recibo</th>
+                                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-36">Crédito</th>
+                                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-36">Abono</th>
+                                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-40">Saldo</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {/* Fila 1: Saldo Inicial si hay fecha desde */}
+                                            {kardexFechaDesde && (
+                                                <tr className="bg-muted/20 font-medium">
+                                                    <td className="p-4 text-sm font-medium text-center text-muted-foreground whitespace-nowrap">
+                                                        {kardexFechaDesde.split('-').reverse().join('/')}
+                                                    </td>
+                                                    <td className="p-4 text-sm font-mono text-center text-muted-foreground whitespace-nowrap">
+                                                        0
+                                                    </td>
+                                                    <td className="p-4 text-sm font-bold text-foreground">
+                                                        SALDO INICIAL
+                                                    </td>
+                                                    <td className="p-4 text-sm font-mono text-center text-muted-foreground whitespace-nowrap">
+                                                        0
+                                                    </td>
+                                                    <td className="p-4 text-sm font-mono font-medium text-foreground text-right whitespace-nowrap">
+                                                        {kardexTimeline.saldoInicial >= 0 ? kardexTimeline.saldoInicial.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'}
+                                                    </td>
+                                                    <td className="p-4 text-sm font-mono font-medium text-foreground text-right whitespace-nowrap">
+                                                        {kardexTimeline.saldoInicial < 0 ? Math.abs(kardexTimeline.saldoInicial).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'}
+                                                    </td>
+                                                    <td className="p-4 text-sm font-mono font-bold text-foreground text-right whitespace-nowrap">
+                                                        {kardexTimeline.saldoInicial.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                </tr>
+                                            )}
+
+                                            {kardexTimeline.movimientos.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={7} className="p-8 text-center text-muted-foreground text-sm">
+                                                        No se encontraron movimientos registrados para este cliente en el período seleccionado.
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                kardexTimeline.movimientos.map((m) => (
+                                                    <tr key={m.id} className="hover:bg-accent/30 transition-colors group">
+                                                        <td className="p-4 text-sm font-medium text-center text-foreground whitespace-nowrap">
+                                                            {m.fecha}
+                                                        </td>
+                                                        <td className="p-4 text-sm font-mono font-bold text-foreground text-center whitespace-nowrap">
+                                                            {m.nroNota}
+                                                        </td>
+                                                        <td className="p-4 text-sm">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="font-medium text-foreground">{m.observacion}</span>
+                                                                {m.badge === 'Cambio Físico' && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                                                        Cambio Físico
+                                                                    </span>
+                                                                )}
+                                                                {m.badge === 'Muestra' && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+                                                                        Muestra
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4 text-sm font-mono text-center text-muted-foreground whitespace-nowrap">
+                                                            {m.nroRecibo || '-'}
+                                                        </td>
+                                                        <td className="p-4 text-sm font-mono font-semibold text-foreground text-right whitespace-nowrap">
+                                                            {m.credito > 0 ? m.credito.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'}
+                                                        </td>
+                                                        <td className="p-4 text-sm font-mono font-semibold text-foreground text-right whitespace-nowrap">
+                                                            {m.abono > 0 ? m.abono.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'}
+                                                        </td>
+                                                        <td className="p-4 text-sm font-mono font-bold text-foreground text-right whitespace-nowrap">
+                                                            {m.saldo.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                        {/* Fila de Totales */}
+                                        <tfoot>
+                                            <tr className="bg-muted/50 font-bold border-t text-sm">
+                                                <td colSpan={4} className="p-4 text-left uppercase tracking-wider text-foreground font-black">
+                                                    TOTALES CONSOLIDADOS DEL PERÍODO
+                                                </td>
+                                                <td className="p-4 text-right font-mono font-black text-foreground">
+                                                    Bs. {kardexTimeline.totalCredito.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="p-4 text-right font-mono font-black text-foreground">
+                                                    Bs. {kardexTimeline.totalAbono.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="p-4 text-right font-mono font-black text-foreground">
+                                                    Bs. {kardexTimeline.saldoFinal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* ========================================== */}

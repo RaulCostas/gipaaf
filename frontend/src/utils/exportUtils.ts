@@ -125,7 +125,15 @@ export const exportToPDF = async (
         colKey.includes('monto') || 
         colKey.includes('precio') || 
         colKey.includes('saldo') || 
-        colKey.includes('cantidad')
+        colKey.includes('cantidad') ||
+        colKey.includes('existencia') ||
+        colKey.includes('stock') ||
+        colKey.startsWith('stock_') ||
+        colKey.includes('costo') || 
+        colKey.includes('margen') || 
+        colKey.includes('cuenta') ||
+        colKey.includes('credito') ||
+        colKey.includes('abono')
       ) {
         if (data.section === 'body') {
           data.cell.styles.halign = 'right';
@@ -196,7 +204,7 @@ export const printData = (title: string, columns: ExportColumn[], data: any[], s
 
   const isNumericCol = (key: string) => {
     const k = (key || '').toLowerCase();
-    return k.includes('ingreso') || k.includes('salida') || k.includes('saldo') || k.includes('total') || k.includes('monto') || k.includes('precio') || k.includes('costo') || k.includes('cantidad');
+    return k.includes('ingreso') || k.includes('salida') || k.includes('saldo') || k.includes('total') || k.includes('monto') || k.includes('precio') || k.includes('costo') || k.includes('cantidad') || k.includes('existencia') || k.includes('stock') || k.startsWith('stock_') || k.includes('margen') || k.includes('cuenta') || k.includes('credito') || k.includes('abono');
   };
   const isCenterCol = (key: string) => {
     const k = (key || '').toLowerCase();
@@ -346,7 +354,7 @@ export const printGroupedData = (
 
   const isNumericCol = (key: string) => {
     const k = (key || '').toLowerCase();
-    return k.includes('ingreso') || k.includes('salida') || k.includes('saldo') || k.includes('total') || k.includes('monto') || k.includes('precio') || k.includes('costo') || k.includes('cantidad') || k.includes('cobrado');
+    return k.includes('ingreso') || k.includes('salida') || k.includes('saldo') || k.includes('total') || k.includes('monto') || k.includes('precio') || k.includes('costo') || k.includes('cantidad') || k.includes('cobrado') || k.includes('credito') || k.includes('abono');
   };
   const isCenterCol = (key: string) => {
     const k = (key || '').toLowerCase();
