@@ -14,7 +14,7 @@ import { getCiudades } from '../../api/ciudadService';
 
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
-import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, User, Package, Calendar, X, Eye, Edit, AlertTriangle, FileText, Receipt, Building2, Info, CreditCard, Clock, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store } from 'lucide-react';
+import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, User, Package, Calendar, X, Eye, Edit, AlertTriangle, FileText, Receipt, Building2, Info, CreditCard, Clock, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -37,6 +37,8 @@ const ventasPage: React.FC = () => {
     const [selectedVendedor, setSelectedVendedor] = useState('all');
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
     const [error, setError] = useState<string | null>(null);
 
     // Form State
@@ -119,7 +121,7 @@ const ventasPage: React.FC = () => {
     const getProductStock = (prodId: number) => {
         if (!inventarios) return 0;
         const targetState = newVenta;
-        let invs = inventarios.filter(i => i.producto.id === prodId);
+        let invs = inventarios.filter(i => i.producto?.id === prodId);
         if (targetState.sucursalId) {
             invs = invs.filter(i => i.sucursal?.id === Number(targetState.sucursalId));
         }
@@ -174,12 +176,6 @@ const ventasPage: React.FC = () => {
     });
 
     // WhatsApp State & Mutations
-    const { data: whatsappBranches } = useQuery({
-        queryKey: ['whatsapp-branches-status'],
-        queryFn: () => whatsappService.getBranchesStatus(),
-        staleTime: 10000,
-    });
-
     const [whatsappModalData, setWhatsappModalData] = useState<{
         isOpen: boolean;
         venta: any | null;
@@ -192,6 +188,13 @@ const ventasPage: React.FC = () => {
         phone: '',
         sucursalId: '',
         customMessage: ''
+    });
+
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 1000 * 60 * 5,
+        enabled: whatsappModalData.isOpen,
     });
 
     const sendWhatsAppMutation = useMutation({
@@ -276,10 +279,11 @@ const ventasPage: React.FC = () => {
             aplicaDescuentoFijo: Boolean(venta.aplicaDescuentoFijo) || Number(venta.descuentoFijoPorcentaje || 0) > 0,
             descuentoPromocionPorcentaje: Number(venta.descuentoPromocionPorcentaje || 0),
             detalles: venta.detalles?.map((d: any) => ({
-                productoId: d.producto.id,
+                productoId: d.producto?.id || d.productoId,
                 producto: d.producto,
                 cantidad: Number(d.cantidad),
                 precioUnitario: Number(d.precioUnitario),
+                descuentoPorcentaje: Number(d.descuentoPorcentaje || 0),
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
@@ -315,10 +319,11 @@ const ventasPage: React.FC = () => {
             aplicaDescuentoFijo: Boolean(venta.aplicaDescuentoFijo) || Number(venta.descuentoFijoPorcentaje || 0) > 0,
             descuentoPromocionPorcentaje: Number(venta.descuentoPromocionPorcentaje || 0),
             detalles: venta.detalles?.map((d: any) => ({
-                productoId: d.producto.id,
+                productoId: d.producto?.id || d.productoId,
                 producto: d.producto,
                 cantidad: Number(d.cantidad),
                 precioUnitario: Number(d.precioUnitario),
+                descuentoPorcentaje: Number(d.descuentoPorcentaje || 0),
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
@@ -377,20 +382,33 @@ const ventasPage: React.FC = () => {
             doc.text(`Documento: XF`, 14, currentY);
         }
 
-        const tableColumn = ["Código", "Producto", "Lote / Venc.", "Cant.", "P.Unit", "Subtotal"];
+        const hasItemDiscount = newVenta.detalles.some((det: any) => Number(det.descuentoPorcentaje) > 0);
+
+        const tableColumn = hasItemDiscount
+            ? ["Código", "Producto", "Lote / Venc.", "Cant.", "P.Unit", "Desc. %", "Subtotal"]
+            : ["Código", "Producto", "Lote / Venc.", "Cant.", "P.Unit", "Subtotal"];
+
         const tableRows = newVenta.detalles.map((det: any) => {
             const loteInfo = det.movimientosLote && det.movimientosLote.length > 0
                 ? det.movimientosLote.map((m: any) => `${m.lote?.numeroLote || 'S/N'}${m.lote?.fechaVencimiento ? ' (' + String(m.lote.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') + ')' : ''}`).join(', ')
                 : (det.numeroLote ? `${det.numeroLote}${det.fechaVencimiento ? ' (' + String(det.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') + ')' : ''}` : '-');
 
-            return [
+            const descPct = Number(det.descuentoPorcentaje) || 0;
+
+            const row = [
                 det.producto?.codigo || '-',
                 det.producto?.nombre || '-',
                 loteInfo,
                 det.cantidad.toString(),
-                formatCurrency(det.precioUnitario),
-                formatCurrency(det.subtotal)
+                formatCurrency(det.precioUnitario)
             ];
+
+            if (hasItemDiscount) {
+                row.push(descPct > 0 ? `${descPct}%` : '0%');
+            }
+
+            row.push(formatCurrency(det.subtotal));
+            return row;
         });
 
         autoTable(doc, {
@@ -471,7 +489,6 @@ const ventasPage: React.FC = () => {
                 cantidad: 1,
                 precioUnitario: precioVentaNum,
                 descuentoPorcentaje: 0,
-            descuentoPromocionPorcentaje: 0,
                 subtotal: precioVentaNum
             }]
         });
@@ -486,13 +503,24 @@ const ventasPage: React.FC = () => {
     const updateDetail = (index: number, field: string, value: number) => {
         const newDetails = [...newVenta.detalles];
         const det = { ...newDetails[index], [field]: value };
-        det.subtotal = det.cantidad * det.precioUnitario;
+        const cant = Number(det.cantidad) || 0;
+        const pu = Number(det.precioUnitario) || 0;
+        const descPorc = Math.max(0, Math.min(100, Number(det.descuentoPorcentaje) || 0));
+        det.descuentoPorcentaje = descPorc;
+        const descMonto = (cant * pu * descPorc) / 100;
+        det.subtotal = Number(((cant * pu) - descMonto).toFixed(2));
         newDetails[index] = det;
         setNewVenta({ ...newVenta, detalles: newDetails });
     };
 
     const calculateTotals = () => {
-        const subtotal = newVenta.detalles.reduce((acc: number, det: any) => acc + (det.cantidad * det.precioUnitario), 0);
+        const subtotal = newVenta.detalles.reduce((acc: number, det: any) => {
+            const cant = Number(det.cantidad) || 0;
+            const pu = Number(det.precioUnitario) || 0;
+            const descPorc = Number(det.descuentoPorcentaje) || 0;
+            const itemSubtotal = (cant * pu) * (1 - descPorc / 100);
+            return acc + itemSubtotal;
+        }, 0);
         
         // 1. Descuento estándar
         const desc1 = (subtotal * Number(newVenta.descuentoPorcentaje || 0)) / 100;
@@ -544,7 +572,8 @@ const ventasPage: React.FC = () => {
             detalles: newVenta.detalles.map((d: any) => ({
                 producto: { id: d.productoId },
                 cantidad: d.cantidad,
-                precioUnitario: d.precioUnitario
+                precioUnitario: d.precioUnitario,
+                descuentoPorcentaje: Number(d.descuentoPorcentaje || 0)
             })),
             descuentoPorcentaje: newVenta.descuentoPorcentaje,
             aplicaDescuentoFijo: Boolean(newVenta.aplicaDescuentoFijo),
@@ -603,6 +632,17 @@ const ventasPage: React.FC = () => {
 
         return filtered;
     }, [ventas, search, selectedSucursal, selectedCiudad, selectedVendedor, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
+
+    const totalPages = Math.ceil(filteredventas.length / itemsPerPage) || 1;
+
+    const paginatedVentas = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredventas.slice(start, start + itemsPerPage);
+    }, [filteredventas, currentPage]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search, selectedSucursal, selectedCiudad, selectedVendedor, fechaDesde, fechaHasta]);
 
     const exportColumns = [
         { header: 'N° Venta', dataKey: 'numero' },
@@ -718,7 +758,6 @@ const ventasPage: React.FC = () => {
         setSearch('');
     };
 
-    if (loadingventas) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando ventas...</div>;
 
     return (
         <div className="space-y-6">
@@ -853,7 +892,17 @@ const ventasPage: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y">
-                        {filteredventas.map((s) => {
+                        {loadingventas ? (
+                            <tr>
+                                <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                        <span>Cargando ventas...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : paginatedVentas.length > 0 ? (
+                            paginatedVentas.map((s) => {
                             const desc1Calc = Number(s.descuento) || 0;
                             const descFijoCalc = Number(s.descuentoFijo) || 0;
                             const desc2Calc = Number(s.descuentoPromocion) || 0;
@@ -1017,16 +1066,44 @@ const ventasPage: React.FC = () => {
                                 </td>
                             </tr>
                         );
-                    })}
-                        {filteredventas.length === 0 && (
-                            <tr>
-                                <td colSpan={9} className="p-8 text-center text-muted-foreground">
-                                    No hay ventas registradas.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
+                    })
+                ) : (
+                    <tr>
+                        <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                            No hay ventas registradas.
+                        </td>
+                    </tr>
+                )}
+            </tbody>
                 </table>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between p-4 border-t bg-muted/20">
+                        <span className="text-sm text-muted-foreground">
+                            Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredventas.length)} de {filteredventas.length}
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                                disabled={currentPage === 1} 
+                                className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors cursor-pointer disabled:cursor-not-allowed"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <span className="text-sm font-medium px-2">
+                                Página {currentPage} de {totalPages}
+                            </span>
+                            <button 
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                                disabled={currentPage === totalPages} 
+                                className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors cursor-pointer disabled:cursor-not-allowed"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <Sheet
@@ -1246,10 +1323,10 @@ const ventasPage: React.FC = () => {
                             <h3 className="font-semibold text-sm">Detalle de Productos</h3>
                         </div>
                         <div className="p-4 space-y-4">
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 items-center">
                                 <select disabled={isViewing} 
                                     id="productSelect"
-                                    className="flex-1 p-2.5 border rounded-lg bg-background text-sm outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 min-w-0 p-2.5 border rounded-lg bg-background text-sm text-foreground outline-none disabled:opacity-50 disabled:cursor-not-allowed hover:border-primary/50 transition-all text-ellipsis overflow-hidden"
                                     defaultValue=""
                                 >
                                     <option value="" disabled>Seleccione un producto para agregar...</option>
@@ -1276,10 +1353,10 @@ const ventasPage: React.FC = () => {
                                         addProductToDetail(select.value);
                                         select.value = "";
                                     }}
-                                    className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors whitespace-nowrap flex items-center gap-2"
+                                    className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer"
                                 >
-                                    <ShoppingCart className="w-4 h-4" />
-                                    Añadir al carrito
+                                    <ShoppingCart className="w-4 h-4 shrink-0" />
+                                    <span>Añadir</span>
                                 </button>
                                 )}
                             </div>
@@ -1290,7 +1367,7 @@ const ventasPage: React.FC = () => {
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Cant.</th>
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">P.Unit</th>
-                                        
+                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Desc. %</th>
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Subtotal</th>
                                         <th className="p-3"></th>
                                     </tr>
@@ -1316,7 +1393,7 @@ const ventasPage: React.FC = () => {
                                                     <div className="font-medium text-xs flex items-center gap-1.5 flex-wrap">
                                                         <span>{det.producto?.nombre}</span>
                                                         {isExceeded && (
-                                                            <span className="px-1.5 py-0.5 bg-red-500/20 text-red-600 dark:text-red-400 rounded text-[10px] font-bold">
+                                                             <span className="px-1.5 py-0.5 bg-red-500/20 text-red-600 dark:text-red-400 rounded text-[10px] font-bold">
                                                                 Excede stock ({stockDisp} disp.)
                                                             </span>
                                                         )}
@@ -1373,9 +1450,31 @@ const ventasPage: React.FC = () => {
                                                         className="w-24 p-2 border rounded-lg bg-background text-center text-sm text-foreground focus:ring-2 focus:ring-primary/20 hover:border-primary/50 outline-none transition-all font-medium"
                                                     />
                                                 </td>
+                                                <td className="p-3 text-center">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <input disabled={isViewing} 
+                                                            type="number"
+                                                            min="0"
+                                                            max="100"
+                                                            step="0.5"
+                                                            placeholder="0"
+                                                            value={det.descuentoPorcentaje || ''}
+                                                            onChange={(e) => updateDetail(index, 'descuentoPorcentaje', parseFloat(e.target.value) || 0)}
+                                                            className="w-16 p-2 border rounded-lg bg-background text-center text-sm text-foreground focus:ring-2 focus:ring-primary/20 hover:border-primary/50 outline-none transition-all font-medium"
+                                                        />
+                                                        <span className="text-xs text-muted-foreground font-semibold">%</span>
+                                                    </div>
+                                                </td>
 
                                                 <td className={`p-3 text-center font-bold ${isExceeded ? 'text-red-600' : ''}`}>
-                                                    {formatCurrency(det.subtotal)}
+                                                    <div className="flex flex-col items-center">
+                                                        <span>{formatCurrency(det.subtotal)}</span>
+                                                        {Number(det.descuentoPorcentaje) > 0 && (
+                                                            <span className="text-[10px] font-normal text-muted-foreground line-through">
+                                                                {formatCurrency(det.cantidad * det.precioUnitario)}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="p-3 text-right">
                                                     {!isViewing && (<button type="button" onClick={() => removeDetail(index)} className="text-destructive hover:scale-110 transition-transform"><Trash2 className="w-4 h-4" /></button>)}

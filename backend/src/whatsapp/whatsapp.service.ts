@@ -1062,16 +1062,30 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 }
             };
 
+            const detalles = venta.detalles || [];
+            const hasItemDiscount = detalles.some(d => Number(d.descuentoPorcentaje) > 0);
+
             const drawTableHeader = (startY: number) => {
                 // Barra azul del encabezado (#2980b9 / RGB: 41, 128, 185)
                 doc.rect(36, startY, 523, 24).fill('#2980b9');
                 doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#ffffff');
-                doc.text('Código', 46, startY + 7, { width: 75, align: 'left' });
-                doc.text('Producto', 126, startY + 7, { width: 175, align: 'left' });
-                doc.text('Lote / Venc.', 306, startY + 7, { width: 90, align: 'left' });
-                doc.text('Cant.', 401, startY + 7, { width: 35, align: 'center' });
-                doc.text('P.Unit', 441, startY + 7, { width: 55, align: 'right' });
-                doc.text('Subtotal', 501, startY + 7, { width: 48, align: 'right' });
+
+                if (hasItemDiscount) {
+                    doc.text('Código', 46, startY + 7, { width: 70, align: 'left' });
+                    doc.text('Producto', 116, startY + 7, { width: 160, align: 'left' });
+                    doc.text('Lote / Venc.', 276, startY + 7, { width: 85, align: 'left' });
+                    doc.text('Cant.', 361, startY + 7, { width: 35, align: 'center' });
+                    doc.text('P.Unit', 396, startY + 7, { width: 50, align: 'right' });
+                    doc.text('Desc %', 446, startY + 7, { width: 45, align: 'right' });
+                    doc.text('Subtotal', 491, startY + 7, { width: 58, align: 'right' });
+                } else {
+                    doc.text('Código', 46, startY + 7, { width: 75, align: 'left' });
+                    doc.text('Producto', 126, startY + 7, { width: 175, align: 'left' });
+                    doc.text('Lote / Venc.', 306, startY + 7, { width: 90, align: 'left' });
+                    doc.text('Cant.', 401, startY + 7, { width: 35, align: 'center' });
+                    doc.text('P.Unit', 441, startY + 7, { width: 55, align: 'right' });
+                    doc.text('Subtotal', 501, startY + 7, { width: 48, align: 'right' });
+                }
             };
 
             // Página 1
@@ -1082,7 +1096,6 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
             const rowHeight = 22;
             const maxY = 680;
-            const detalles = venta.detalles || [];
 
             detalles.forEach((det, idx) => {
                 if (currentY + rowHeight > maxY) {
@@ -1107,21 +1120,32 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
                 const cantNum = Number(det.cantidad || 0);
                 const precioNum = Number(det.precioUnitario || 0);
-                const subtotalNum = Number(det.subtotal || cantNum * precioNum);
+                const descPorcNum = Number(det.descuentoPorcentaje || 0);
+                const subtotalNum = Number(det.subtotal !== undefined ? det.subtotal : (cantNum * precioNum * (1 - descPorcNum / 100)));
 
                 doc.font('Helvetica').fontSize(9).fillColor('#333333');
-                doc.text(prodCodigo, 46, currentY + 6, { width: 75, lineBreak: false, ellipsis: true });
-                doc.text(prodNombre, 126, currentY + 6, { width: 175, lineBreak: false, ellipsis: true });
-                doc.text(loteInfo, 306, currentY + 6, { width: 90, lineBreak: false, ellipsis: true });
-                doc.text(String(cantNum), 401, currentY + 6, { width: 35, align: 'center' });
-                doc.text(formatMoney(precioNum), 441, currentY + 6, { width: 55, align: 'right' });
-                doc.text(formatMoney(subtotalNum), 501, currentY + 6, { width: 48, align: 'right' });
+                if (hasItemDiscount) {
+                    doc.text(prodCodigo, 46, currentY + 6, { width: 70, lineBreak: false, ellipsis: true });
+                    doc.text(prodNombre, 116, currentY + 6, { width: 160, lineBreak: false, ellipsis: true });
+                    doc.text(loteInfo, 276, currentY + 6, { width: 85, lineBreak: false, ellipsis: true });
+                    doc.text(String(cantNum), 361, currentY + 6, { width: 35, align: 'center' });
+                    doc.text(formatMoney(precioNum), 396, currentY + 6, { width: 50, align: 'right' });
+                    doc.text(descPorcNum > 0 ? `${descPorcNum}%` : '-', 446, currentY + 6, { width: 45, align: 'right' });
+                    doc.text(formatMoney(subtotalNum), 491, currentY + 6, { width: 58, align: 'right' });
+                } else {
+                    doc.text(prodCodigo, 46, currentY + 6, { width: 75, lineBreak: false, ellipsis: true });
+                    doc.text(prodNombre, 126, currentY + 6, { width: 175, lineBreak: false, ellipsis: true });
+                    doc.text(loteInfo, 306, currentY + 6, { width: 90, lineBreak: false, ellipsis: true });
+                    doc.text(String(cantNum), 401, currentY + 6, { width: 35, align: 'center' });
+                    doc.text(formatMoney(precioNum), 441, currentY + 6, { width: 55, align: 'right' });
+                    doc.text(formatMoney(subtotalNum), 501, currentY + 6, { width: 48, align: 'right' });
+                }
 
                 currentY += rowHeight;
             });
 
             // Totales y Son en letras
-            const subtotalCalc = detalles.reduce((acc, d) => acc + (Number(d.cantidad || 0) * Number(d.precioUnitario || 0)), 0);
+            const subtotalCalc = Number(venta.subtotal || detalles.reduce((acc, d) => acc + Number(d.subtotal || ((Number(d.cantidad || 0) * Number(d.precioUnitario || 0)) * (1 - (Number(d.descuentoPorcentaje) || 0) / 100))), 0));
             const desc1 = (subtotalCalc * Number(venta.descuentoPorcentaje || 0)) / 100;
             const sub1 = subtotalCalc - desc1;
             const desc2 = (sub1 * Number(venta.descuentoPromocionPorcentaje || 0)) / 100;
@@ -1252,15 +1276,28 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 }
             };
 
+            const detalles = proforma.detalles || [];
+            const hasItemDiscount = detalles.some(d => Number(d.descuentoPorcentaje) > 0);
+
             const drawTableHeader = (startY: number) => {
                 // Barra azul del encabezado (#2980b9 / RGB: 41, 128, 185)
                 doc.rect(36, startY, 523, 24).fill('#2980b9');
                 doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#ffffff');
-                doc.text('Código', 46, startY + 7, { width: 85, align: 'left' });
-                doc.text('Producto', 136, startY + 7, { width: 200, align: 'left' });
-                doc.text('Cant.', 341, startY + 7, { width: 45, align: 'center' });
-                doc.text('P.Unit', 391, startY + 7, { width: 75, align: 'right' });
-                doc.text('Subtotal', 471, startY + 7, { width: 78, align: 'right' });
+
+                if (hasItemDiscount) {
+                    doc.text('Código', 46, startY + 7, { width: 80, align: 'left' });
+                    doc.text('Producto', 126, startY + 7, { width: 180, align: 'left' });
+                    doc.text('Cant.', 306, startY + 7, { width: 40, align: 'center' });
+                    doc.text('P.Unit', 346, startY + 7, { width: 60, align: 'right' });
+                    doc.text('Desc %', 406, startY + 7, { width: 55, align: 'right' });
+                    doc.text('Subtotal', 461, startY + 7, { width: 88, align: 'right' });
+                } else {
+                    doc.text('Código', 46, startY + 7, { width: 85, align: 'left' });
+                    doc.text('Producto', 136, startY + 7, { width: 200, align: 'left' });
+                    doc.text('Cant.', 341, startY + 7, { width: 45, align: 'center' });
+                    doc.text('P.Unit', 391, startY + 7, { width: 75, align: 'right' });
+                    doc.text('Subtotal', 471, startY + 7, { width: 78, align: 'right' });
+                }
             };
 
             // Página 1
@@ -1271,7 +1308,6 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
             const rowHeight = 22;
             const maxY = 680;
-            const detalles = proforma.detalles || [];
 
             detalles.forEach((det, idx) => {
                 if (currentY + rowHeight > maxY) {
@@ -1291,20 +1327,30 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 const prodNombre = det.producto?.nombre || '-';
                 const cantNum = Number(det.cantidad || 0);
                 const precioNum = Number(det.precioUnitario || 0);
-                const subtotalNum = Number(det.subtotal || cantNum * precioNum);
+                const descPorcNum = Number(det.descuentoPorcentaje || 0);
+                const subtotalNum = Number(det.subtotal !== undefined ? det.subtotal : (cantNum * precioNum * (1 - descPorcNum / 100)));
 
                 doc.font('Helvetica').fontSize(9).fillColor('#333333');
-                doc.text(prodCodigo, 46, currentY + 6, { width: 85, lineBreak: false, ellipsis: true });
-                doc.text(prodNombre, 136, currentY + 6, { width: 200, lineBreak: false, ellipsis: true });
-                doc.text(String(cantNum), 341, currentY + 6, { width: 45, align: 'center' });
-                doc.text(formatMoney(precioNum), 391, currentY + 6, { width: 75, align: 'right' });
-                doc.text(formatMoney(subtotalNum), 471, currentY + 6, { width: 78, align: 'right' });
+                if (hasItemDiscount) {
+                    doc.text(prodCodigo, 46, currentY + 6, { width: 80, lineBreak: false, ellipsis: true });
+                    doc.text(prodNombre, 126, currentY + 6, { width: 180, lineBreak: false, ellipsis: true });
+                    doc.text(String(cantNum), 306, currentY + 6, { width: 40, align: 'center' });
+                    doc.text(formatMoney(precioNum), 346, currentY + 6, { width: 60, align: 'right' });
+                    doc.text(descPorcNum > 0 ? `${descPorcNum}%` : '-', 406, currentY + 6, { width: 55, align: 'right' });
+                    doc.text(formatMoney(subtotalNum), 461, currentY + 6, { width: 88, align: 'right' });
+                } else {
+                    doc.text(prodCodigo, 46, currentY + 6, { width: 85, lineBreak: false, ellipsis: true });
+                    doc.text(prodNombre, 136, currentY + 6, { width: 200, lineBreak: false, ellipsis: true });
+                    doc.text(String(cantNum), 341, currentY + 6, { width: 45, align: 'center' });
+                    doc.text(formatMoney(precioNum), 391, currentY + 6, { width: 75, align: 'right' });
+                    doc.text(formatMoney(subtotalNum), 471, currentY + 6, { width: 78, align: 'right' });
+                }
 
                 currentY += rowHeight;
             });
 
             // Totales y Son en letras
-            const subtotalCalc = detalles.reduce((acc, d) => acc + (Number(d.cantidad || 0) * Number(d.precioUnitario || 0)), 0);
+            const subtotalCalc = Number(proforma.subtotal || detalles.reduce((acc, d) => acc + Number(d.subtotal || ((Number(d.cantidad || 0) * Number(d.precioUnitario || 0)) * (1 - (Number(d.descuentoPorcentaje) || 0) / 100))), 0));
             const desc1 = (subtotalCalc * Number(proforma.descuentoPorcentaje || 0)) / 100;
             const sub1 = subtotalCalc - desc1;
             const desc2 = (sub1 * Number(proforma.descuentoPromocionPorcentaje || 0)) / 100;
@@ -4617,7 +4663,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             // Generación dinámica en memoria de catálogo PDF con diseño corporativo elegante
             const productos = await this.productoRepo.find({
                 where: { activo: true },
-                relations: ['categoria', 'marca', 'grupo'],
+                relations: ['linea', 'marca', 'grupo'],
                 order: { nombre: 'ASC' }
             });
 
@@ -4721,7 +4767,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#0f172a').text(p.codigo || '-', 44, currentY + 5, { width: 80, lineBreak: false });
                 doc.font('Helvetica').fontSize(7.5).fillColor('#1e293b').text(p.nombre || '-', 130, currentY + 5, { width: 220, lineBreak: false, ellipsis: true });
                 doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(p.marca?.nombre || '-', 355, currentY + 5, { width: 90, lineBreak: false, ellipsis: true });
-                doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(p.categoria?.nombre || '-', 450, currentY + 5, { width: 90, lineBreak: false, ellipsis: true });
+                doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(p.linea?.nombre || '-', 450, currentY + 5, { width: 90, lineBreak: false, ellipsis: true });
                 doc.font('Helvetica').fontSize(7.5).fillColor('#475569').text(p.grupo?.nombre || '-', 545, currentY + 5, { width: 80, lineBreak: false, ellipsis: true });
 
                 const precioStr = `Bs. ${Number(p.precioVenta || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

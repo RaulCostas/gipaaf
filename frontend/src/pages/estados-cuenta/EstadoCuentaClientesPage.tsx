@@ -45,12 +45,6 @@ const EstadoCuentaClientesPage: React.FC = () => {
     const [viewingDetalleVenta, setViewingDetalleVenta] = useState<any | null>(null);
 
     // WhatsApp State & Mutations
-    const { data: whatsappBranches } = useQuery({
-        queryKey: ['whatsapp-branches-status'],
-        queryFn: () => whatsappService.getBranchesStatus(),
-        staleTime: 10000,
-    });
-
     const [whatsappCarteraModalData, setWhatsappCarteraModalData] = useState<{
         isOpen: boolean;
         vendedorId: string;
@@ -91,6 +85,13 @@ const EstadoCuentaClientesPage: React.FC = () => {
         phone: '',
         sucursalId: '',
         customMessage: ''
+    });
+
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 1000 * 60 * 5,
+        enabled: whatsappCarteraModalData.isOpen || whatsappClienteModalData.isOpen || whatsappVentaModalData.isOpen,
     });
 
     const sendCarteraMutation = useMutation({
@@ -710,7 +711,6 @@ const EstadoCuentaClientesPage: React.FC = () => {
         exportGroupedToExcel(getExportColumns(), groups, 'estado_cuenta_clientes', getTotalsFooter());
     };
 
-    if (loadingSales) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando estado de cuentas de clientes...</div>;
 
     return (
         <div className="space-y-6">
@@ -1032,7 +1032,16 @@ const EstadoCuentaClientesPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {paginatedVentas.length === 0 ? (
+                            {loadingSales ? (
+                                <tr>
+                                    <td colSpan={10 + (!selectedClienteId ? 1 : 0) + (!selectedVendedorId ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                            <span>Cargando estado de cuentas de clientes...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : paginatedVentas.length === 0 ? (
                                 <tr>
                                     <td colSpan={10 + (!selectedClienteId ? 1 : 0) + (!selectedVendedorId ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         No se encontraron cuentas por cobrar para los filtros seleccionados.

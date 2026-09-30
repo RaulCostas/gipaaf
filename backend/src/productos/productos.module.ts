@@ -4,10 +4,10 @@ import { ProductosService } from './productos.service';
 import { ProductosController } from './productos.controller';
 import { UploadsController } from './uploads.controller';
 import { Producto } from './producto.entity';
-import { Categoria } from '../categorias/categoria.entity';
+import { Linea } from '../lineas/linea.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Producto, Categoria])],
+  imports: [TypeOrmModule.forFeature([Producto, Linea])],
   providers: [ProductosService],
   controllers: [ProductosController, UploadsController],
   exports: [ProductosService],

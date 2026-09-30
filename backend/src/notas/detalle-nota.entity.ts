@@ -30,6 +30,12 @@ export class DetalleNota {
     @Column({ type: 'decimal', precision: 12, scale: 2 })
     subtotal: number;
 
+    @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, nullable: true })
+    descuentoPorcentaje: number;
+
+    @Column({ type: 'decimal', precision: 12, scale: 2, default: 0, nullable: true })
+    descuentoMonto: number;
+
     @Column({ nullable: true })
     numeroLote: string;
 

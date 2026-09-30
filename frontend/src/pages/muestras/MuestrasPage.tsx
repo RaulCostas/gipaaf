@@ -58,12 +58,6 @@ const MuestrasPage: React.FC = () => {
     const [currentMuestra, setCurrentMuestra] = useState<Muestra | null>(null);
 
     // WhatsApp State & Mutations
-    const { data: whatsappBranches } = useQuery({
-        queryKey: ['whatsapp-branches-status'],
-        queryFn: () => whatsappService.getBranchesStatus(),
-        staleTime: 10000,
-    });
-
     const [whatsappModalData, setWhatsappModalData] = useState<{
         isOpen: boolean;
         muestra: Muestra | null;
@@ -76,6 +70,13 @@ const MuestrasPage: React.FC = () => {
         phone: '',
         sucursalId: '',
         customMessage: ''
+    });
+
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 1000 * 60 * 5,
+        enabled: whatsappModalData.isOpen,
     });
 
     const sendWhatsAppMutation = useMutation({
@@ -707,7 +708,6 @@ const MuestrasPage: React.FC = () => {
         window.open(doc.output('bloburl'), '_blank');
     };
 
-    if (isLoading) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando muestras...</div>;
 
     return (
         <div className="space-y-6">
@@ -868,7 +868,16 @@ const MuestrasPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {paginatedMuestras.length === 0 ? (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                            <span>Cargando muestras...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : paginatedMuestras.length === 0 ? (
                                 <tr>
                                     <td colSpan={9} className="p-8 text-center text-muted-foreground">
                                         No se encontraron registros de muestras.

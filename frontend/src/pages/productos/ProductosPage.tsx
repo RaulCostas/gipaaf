@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productService } from '../../api/productService';
 import type { Producto } from '../../api/productService';
 import { getFileUrl } from '../../api/apiClient';
-import { categoryService } from '../../api/categoryService';
+import { lineaService } from '../../api/lineaService';
 import { marcaService } from '../../api/marcaService';
 import { grupoService } from '../../api/grupoService';
 import { 
@@ -28,8 +28,9 @@ const ProductosPage: React.FC = () => {
     // Pagination and Search states
     const [searchTerm, setSearchTerm] = useState('');
     const [filterMarca, setFilterMarca] = useState('');
-    const [filterCategoria, setFilterCategoria] = useState('');
+    const [filterLinea, setFilterLinea] = useState('');
     const [filterGrupo, setFilterGrupo] = useState('');
+    const [filterEstado, setFilterEstado] = useState<'all' | 'activo' | 'inactivo'>('all');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
@@ -42,9 +43,9 @@ const ProductosPage: React.FC = () => {
     const { data: marcas } = useQuery({ queryKey: ['marcas'], queryFn: marcaService.getAll });
     const { data: grupos } = useQuery({ queryKey: ['grupos'], queryFn: grupoService.getAll });
 
-    const { data: categories } = useQuery({
-        queryKey: ['categories'],
-        queryFn: categoryService.getAll,
+    const { data: lineas } = useQuery({
+        queryKey: ['lineasList'],
+        queryFn: lineaService.getAll,
     });
 
     const formatFechaCompra = (fecha?: string | Date) => {
@@ -61,7 +62,7 @@ const ProductosPage: React.FC = () => {
         { header: 'Código', dataKey: 'codigo' },
         { header: 'Nombre', dataKey: 'nombre' },
         { header: 'Marca', dataKey: 'marcaNombre' },
-        { header: 'Categoría', dataKey: 'categoriaNombre' },
+        { header: 'Línea', dataKey: 'lineaNombre' },
         { header: 'Grupo', dataKey: 'grupoNombre' },
         { header: 'Precio Compra', dataKey: 'precioCompra' },
         { header: 'Última Compra', dataKey: 'fechaUltimaCompraFormatted' },
@@ -79,7 +80,7 @@ const ProductosPage: React.FC = () => {
         return filteredProducts.map(p => ({
             ...p,
             marcaNombre: p.marca?.nombre || 'Sin marca',
-            categoriaNombre: p.categoria?.nombre || 'Sin categoría',
+            lineaNombre: p.linea?.nombre || p.categoria?.nombre || 'Sin línea',
             grupoNombre: p.grupo?.nombre || 'Sin grupo',
             fechaUltimaCompraFormatted: formatFechaCompra(p.fechaUltimaCompra)
         }));
@@ -91,13 +92,16 @@ const ProductosPage: React.FC = () => {
             const m = marcas?.find(m => m.id === Number(filterMarca));
             if (m) texts.push(`Marca: ${m.nombre}`);
         }
-        if (filterCategoria) {
-            const c = categories?.find(c => c.id === Number(filterCategoria));
-            if (c) texts.push(`Categoría: ${c.nombre}`);
+        if (filterLinea) {
+            const l = lineas?.find(l => l.id === Number(filterLinea));
+            if (l) texts.push(`Línea: ${l.nombre}`);
         }
         if (filterGrupo) {
             const g = grupos?.find(g => g.id === Number(filterGrupo));
             if (g) texts.push(`Grupo: ${g.nombre}`);
+        }
+        if (filterEstado !== 'all') {
+            texts.push(`Estado: ${filterEstado === 'activo' ? 'Activos' : 'Inactivos'}`);
         }
         if (searchTerm.trim()) {
             texts.push(`Búsqueda: "${searchTerm.trim()}"`);
@@ -144,6 +148,7 @@ const ProductosPage: React.FC = () => {
         mutationFn: productService.create,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
             setIsEditing(false);
             setCurrentProduct({});
             toast.success('Producto creado con éxito');
@@ -157,6 +162,7 @@ const ProductosPage: React.FC = () => {
         mutationFn: (data: Producto) => productService.update(data.id, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
             setIsEditing(false);
             setCurrentProduct({});
         },
@@ -165,21 +171,34 @@ const ProductosPage: React.FC = () => {
         }
     });
 
-    const deleteMutation = useMutation({
-        mutationFn: productService.delete,
+    const deactivateMutation = useMutation({
+        mutationFn: (id: number) => productService.update(id, { activo: false }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
-            toast.error('Producto desactivado');
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+            toast.success('Producto desactivado con éxito');
         },
         onError: () => {
             toast.error('Ocurrió un error al desactivar el producto');
         }
     });
 
+    const activateMutation = useMutation({
+        mutationFn: (id: number) => productService.update(id, { activo: true }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+            toast.success('Producto activado con éxito');
+        },
+        onError: () => {
+            toast.error('Ocurrió un error al activar el producto');
+        }
+    });
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        const { marca, categoria, grupo, ...safeData } = currentProduct as any;
+        const { marca, categoria, linea, grupo, ...safeData } = currentProduct as any;
         safeData.imagen = currentProduct.imagen || null;
         safeData.precioCompra = currentProduct.precioCompra !== undefined && currentProduct.precioCompra !== null && !isNaN(Number(currentProduct.precioCompra))
             ? Number(currentProduct.precioCompra)
@@ -202,7 +221,7 @@ const ProductosPage: React.FC = () => {
 
     const confirmDelete = () => {
         if (deleteConfirmId) {
-            deleteMutation.mutate(deleteConfirmId);
+            deactivateMutation.mutate(deleteConfirmId);
             setDeleteConfirmId(null);
         }
     };
@@ -213,9 +232,10 @@ const ProductosPage: React.FC = () => {
         const filtered = products.filter(p => {
             const matchSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || p.codigo.toLowerCase().includes(searchTerm.toLowerCase()) || (p.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()));
             const matchMarca = filterMarca ? p.marcaId === Number(filterMarca) : true;
-            const matchCategoria = filterCategoria ? p.categoriaId === Number(filterCategoria) : true;
+            const matchLinea = filterLinea ? (p.lineaId === Number(filterLinea) || p.categoriaId === Number(filterLinea)) : true;
             const matchGrupo = filterGrupo ? p.grupoId === Number(filterGrupo) : true;
-            return matchSearch && matchMarca && matchCategoria && matchGrupo;
+            const matchEstado = filterEstado === 'all' ? true : filterEstado === 'activo' ? p.activo !== false : p.activo === false;
+            return matchSearch && matchMarca && matchLinea && matchGrupo && matchEstado;
         });
 
         return filtered.sort((a, b) => {
@@ -223,9 +243,9 @@ const ProductosPage: React.FC = () => {
             const marcaB = b.marca?.nombre || '';
             if (marcaA !== marcaB) return marcaA.localeCompare(marcaB);
 
-            const catA = a.categoria?.nombre || '';
-            const catB = b.categoria?.nombre || '';
-            if (catA !== catB) return catA.localeCompare(catB);
+            const linA = a.linea?.nombre || a.categoria?.nombre || '';
+            const linB = b.linea?.nombre || b.categoria?.nombre || '';
+            if (linA !== linB) return linA.localeCompare(linB);
 
             const gruA = a.grupo?.nombre || '';
             const gruB = b.grupo?.nombre || '';
@@ -233,7 +253,7 @@ const ProductosPage: React.FC = () => {
 
             return a.nombre.localeCompare(b.nombre);
         });
-    }, [products, searchTerm, filterMarca, filterCategoria, filterGrupo]);
+    }, [products, searchTerm, filterMarca, filterLinea, filterGrupo, filterEstado]);
 
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage) || 1;
     
@@ -245,7 +265,7 @@ const ProductosPage: React.FC = () => {
     // Reset page to 1 when searching
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, filterMarca, filterCategoria, filterGrupo]);
+    }, [searchTerm, filterMarca, filterLinea, filterGrupo, filterEstado]);
 
     if (isLoading) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando productos...</div>;
 
@@ -319,11 +339,11 @@ const ProductosPage: React.FC = () => {
                     <Filter className="w-4 h-4 text-muted-foreground" />
                     <select 
                         className="bg-transparent border-none outline-none font-medium cursor-pointer" 
-                        value={filterCategoria} 
-                        onChange={(e) => setFilterCategoria(e.target.value)}
+                        value={filterLinea} 
+                        onChange={(e) => setFilterLinea(e.target.value)}
                     >
-                        <option value="" className="bg-background text-foreground">Todas las Categorías</option>
-                        {categories?.map(c => <option key={c.id} value={c.id} className="bg-background text-foreground">{c.nombre}</option>)}
+                        <option value="" className="bg-background text-foreground">Todas las Líneas</option>
+                        {lineas?.map(l => <option key={l.id} value={l.id} className="bg-background text-foreground">{l.nombre}</option>)}
                     </select>
                 </div>
 
@@ -339,13 +359,27 @@ const ProductosPage: React.FC = () => {
                     </select>
                 </div>
 
-                {(filterMarca || filterCategoria || filterGrupo || searchTerm) && (
+                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <select 
+                        className="bg-transparent border-none outline-none font-medium cursor-pointer" 
+                        value={filterEstado} 
+                        onChange={(e) => setFilterEstado(e.target.value as any)}
+                    >
+                        <option value="all" className="bg-background text-foreground">Todos los Estados</option>
+                        <option value="activo" className="bg-background text-foreground">Solo Activos</option>
+                        <option value="inactivo" className="bg-background text-foreground">Solo Inactivos</option>
+                    </select>
+                </div>
+
+                {(filterMarca || filterLinea || filterGrupo || filterEstado !== 'all' || searchTerm) && (
                     <button
                         type="button"
                         onClick={() => {
                             setFilterMarca('');
-                            setFilterCategoria('');
+                            setFilterLinea('');
                             setFilterGrupo('');
+                            setFilterEstado('all');
                             setSearchTerm('');
                         }}
                         className="px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent border rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -391,7 +425,7 @@ const ProductosPage: React.FC = () => {
                                 <label className="text-sm font-semibold text-foreground">Marca</label>
                                 <select
                                     value={currentProduct.marcaId || ''}
-                                    onChange={(e) => setCurrentProduct({ ...currentProduct, marcaId: parseInt(e.target.value), categoriaId: undefined, grupoId: undefined })}
+                                    onChange={(e) => setCurrentProduct({ ...currentProduct, marcaId: parseInt(e.target.value), lineaId: undefined, categoriaId: undefined, grupoId: undefined })}
                                     className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer transition-all text-sm"
                                 >
                                     <option value="">Seleccionar...</option>
@@ -402,15 +436,18 @@ const ProductosPage: React.FC = () => {
                             </div>
                             
                             <div className="space-y-1.5">
-                                <label className="text-sm font-semibold text-foreground">Categoría</label>
+                                <label className="text-sm font-semibold text-foreground">Línea</label>
                                 <select
-                                    value={currentProduct.categoriaId || ''}
-                                    onChange={(e) => setCurrentProduct({ ...currentProduct, categoriaId: parseInt(e.target.value), grupoId: undefined })}
+                                    value={currentProduct.lineaId || currentProduct.categoriaId || ''}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value);
+                                        setCurrentProduct({ ...currentProduct, lineaId: isNaN(val) ? undefined : val, categoriaId: isNaN(val) ? undefined : val, grupoId: undefined });
+                                    }}
                                     className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer transition-all text-sm"
                                 >
                                     <option value="">Seleccionar...</option>
-                                    {categories?.map((cat) => (
-                                        <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                                    {lineas?.map((lin) => (
+                                        <option key={lin.id} value={lin.id}>{lin.nombre}</option>
                                     ))}
                                 </select>
                             </div>
@@ -623,7 +660,7 @@ const ProductosPage: React.FC = () => {
                                 <th className="p-4 text-sm font-semibold text-muted-foreground w-16 text-center">Foto</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Código / Nombre</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Marca</th>
-                                <th className="p-4 text-sm font-semibold text-muted-foreground">Categoría</th>
+                                <th className="p-4 text-sm font-semibold text-muted-foreground">Línea</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Grupo</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">P. Compra</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">P. Venta</th>
@@ -669,7 +706,7 @@ const ProductosPage: React.FC = () => {
                                      </td>
                                      <td className="p-4 text-sm">
                                          <span className="px-2 py-1 bg-secondary text-secondary-foreground rounded-full text-[10px] font-semibold tracking-wide">
-                                             {prod.categoria?.nombre || 'Sin categoría'}
+                                             {prod.linea?.nombre || prod.categoria?.nombre || 'Sin línea'}
                                          </span>
                                      </td>
                                      <td className="p-4 text-sm">
@@ -709,7 +746,8 @@ const ProductosPage: React.FC = () => {
                                                     setCurrentProduct({
                                                         ...prod,
                                                         marcaId: prod.marca?.id,
-                                                        categoriaId: prod.categoria?.id,
+                                                        lineaId: prod.linea?.id || prod.categoriaId,
+                                                        categoriaId: prod.linea?.id || prod.categoriaId,
                                                         grupoId: prod.grupo?.id
                                                     }); 
                                                     setIsEditing(true); 
@@ -729,9 +767,7 @@ const ProductosPage: React.FC = () => {
                                                 </button>
                                             ) : (
                                                 <button
-                                                    onClick={() => updateMutation.mutate({ ...prod, activo: true } as Producto, {
-                                                        onSuccess: () => toast.success('Producto activado con éxito')
-                                                    })}
+                                                    onClick={() => activateMutation.mutate(prod.id)}
                                                     title="Activar"
                                                     className="p-2 text-green-600 dark:text-green-500 bg-green-500/10 hover:bg-green-500/20 hover:scale-110 active:scale-95 rounded-lg transition-all"
                                                 >

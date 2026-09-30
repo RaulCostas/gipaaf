@@ -16,6 +16,7 @@ import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 
 import { useFilters } from '../../context/FilterContext';
 import LocationPickerMap from '../../components/ui/LocationPickerMap';
+import PhoneInput from '../../components/ui/PhoneInput';
 
 const SucursalesPage: React.FC = () => {
     const queryClient = useQueryClient();
@@ -300,16 +301,11 @@ const SucursalesPage: React.FC = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-foreground">Celular</label>
-                                <div className="relative group">
-                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <input
-                                        type="text"
-                                        value={currentSucursal.telefono || ''}
-                                        onChange={(e) => setCurrentSucursal({ ...currentSucursal, telefono: e.target.value })}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
-                                        placeholder="Ej: 73202930 - 22445566"
-                                    />
-                                </div>
+                                <PhoneInput
+                                    value={currentSucursal.telefono || ''}
+                                    onChange={(val) => setCurrentSucursal({ ...currentSucursal, telefono: val })}
+                                    placeholder="71234567"
+                                />
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-foreground">Email</label>

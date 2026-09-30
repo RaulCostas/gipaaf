@@ -9,7 +9,8 @@ import { getCiudades } from '../../api/ciudadService';
 import { 
     Search, Receipt, X, ChevronLeft, ChevronRight,
     Printer, FileText, FileSpreadsheet,
-    UserCircle, ShoppingBag, DollarSign, Calendar, Clock, CheckCircle2, Eye
+    UserCircle, ShoppingBag, DollarSign, Calendar, Clock, CheckCircle2, Eye,
+    Loader2
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DetalleCompraModal from '../../components/compras/DetalleCompraModal';
@@ -289,7 +290,6 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
     };
 
 
-    if (loadingPurchases) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando estado de cuentas de proveedores...</div>;
 
     return (
         <div className="space-y-6">
@@ -493,7 +493,16 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {paginatedPurchases.length === 0 ? (
+                            {loadingPurchases ? (
+                                <tr>
+                                    <td colSpan={9 + (!selectedProveedorId ? 1 : 0) + (estadoFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                            <span>Cargando estado de cuentas de proveedores...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : paginatedPurchases.length === 0 ? (
                                 <tr>
                                     <td colSpan={9 + (!selectedProveedorId ? 1 : 0) + (estadoFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         No se encontraron compras para los filtros seleccionados.

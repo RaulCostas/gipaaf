@@ -973,7 +973,7 @@ const TraspasosPage: React.FC = () => {
                                 {statusFilter === 'TODOS' && (
                                     <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-28 text-center">Estado</th>
                                 )}
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">Acciones</th>
+                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-44">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
@@ -1097,18 +1097,18 @@ const TraspasosPage: React.FC = () => {
                                                 </button>
                                                 <button
                                                     onClick={() => handleOpenWhatsAppModal(t)}
-                                                    className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                     title="Enviar Guía de Traspaso por WhatsApp (PDF)"
                                                 >
-                                                    <MessageCircle className="w-3.5 h-3.5" />
+                                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                                 </button>
                                                 {!isAnulado && (
                                                     <button
                                                         onClick={() => setAnularConfirmId(t.id)}
-                                                        className="px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1 cursor-pointer"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                         title="Anular Traspaso (Revertir Stock)"
                                                     >
-                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
                                                     </button>
                                                 )}
                                             </div>

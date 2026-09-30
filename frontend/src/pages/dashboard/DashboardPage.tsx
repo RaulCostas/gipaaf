@@ -85,7 +85,7 @@ const DashboardPage: React.FC = () => {
         return lowStockItems.filter((inv: any) => 
             inv.producto?.nombre?.toLowerCase().includes(q) ||
             inv.producto?.codigo?.toLowerCase().includes(q) ||
-            inv.producto?.categoria?.nombre?.toLowerCase().includes(q) ||
+            (inv.producto?.linea?.nombre || inv.producto?.categoria?.nombre || '').toLowerCase().includes(q) ||
             inv.sucursal?.nombre?.toLowerCase().includes(q)
         );
     }, [lowStockItems, searchLowStock]);
@@ -388,7 +388,7 @@ const DashboardPage: React.FC = () => {
                                                         {inv.producto?.nombre}
                                                     </div>
                                                     <div className="text-[11px] text-muted-foreground">
-                                                        {inv.producto?.categoria?.nombre || 'General'}
+                                                        {inv.producto?.linea?.nombre || inv.producto?.categoria?.nombre || 'General'}
                                                     </div>
                                                 </td>
                                                 <td className="p-3 text-xs">

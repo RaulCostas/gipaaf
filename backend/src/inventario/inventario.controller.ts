@@ -30,5 +30,16 @@ export class InventarioController {
         return this.service.ajustarStock(id, cantidad, req.user?.id, observaciones); 
     }
 
+    @Put(':id/merma')
+    registrarMerma(
+        @Param('id', ParseIntPipe) id: number,
+        @Body('cantidad') cantidad: number,
+        @Body('motivo') motivo: string,
+        @Body('observaciones') observaciones: string,
+        @Request() req: any
+    ) {
+        return this.service.registrarMerma(id, cantidad, req.user?.id, motivo, observaciones);
+    }
+
     @Delete(':id') remove(@Param('id', ParseIntPipe) id: number) { return this.service.remove(id); }
 }

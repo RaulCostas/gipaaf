@@ -35,6 +35,10 @@ export const inventoryService = {
         const response = await apiClient.put<Inventario>(`/inventario/${id}/ajustar`, { cantidad, observaciones });
         return response.data;
     },
+    registrarMerma: async (id: number, cantidad: number, motivo?: string, observaciones?: string) => {
+        const response = await apiClient.put<Inventario>(`/inventario/${id}/merma`, { cantidad, motivo, observaciones });
+        return response.data;
+    },
     create: async (data: Partial<Inventario>) => {
         const response = await apiClient.post<Inventario>('/inventario', data);
         return response.data;

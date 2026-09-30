@@ -6,7 +6,7 @@ import { salesService } from '../../api/salesService';
 import { purchaseService, EstadoNota } from '../../api/purchaseService';
 import { pagoProveedorService } from '../../api/pagoProveedorService';
 import { productService, type Producto } from '../../api/productService';
-import { categoryService } from '../../api/categoryService';
+import { lineaService } from '../../api/lineaService';
 import { marcaService } from '../../api/marcaService';
 import { grupoService } from '../../api/grupoService';
 import { clientService } from '../../api/clientService';
@@ -86,7 +86,7 @@ const ReportesPage: React.FC = () => {
     // ==========================================
     // ESTADOS: PRODUCTOS
     // ==========================================
-    const [filtroProdCategoria, setFiltroProdCategoria] = useState<string>('');
+    const [filtroProdLinea, setFiltroProdLinea] = useState<string>('');
     const [filtroProdMarca, setFiltroProdMarca] = useState<string>('');
     const [filtroProdGrupo, setFiltroProdGrupo] = useState<string>('');
     const [filtroProdEstado, setFiltroProdEstado] = useState<'TODOS' | 'ACTIVO' | 'INACTIVO'>('TODOS');
@@ -178,9 +178,9 @@ const ReportesPage: React.FC = () => {
         enabled: activeTab === 'productos' || activeTab === 'estadisticas',
     });
 
-    const { data: categoriesList } = useQuery({
-        queryKey: ['categoriesListReportes'],
-        queryFn: categoryService.getAll,
+    const { data: lineasList } = useQuery({
+        queryKey: ['lineasListReportes'],
+        queryFn: lineaService.getAll,
         enabled: activeTab === 'productos',
     });
 
@@ -574,13 +574,13 @@ const ReportesPage: React.FC = () => {
     // LÓGICA PRODUCTOS Y EXISTENCIAS POR SUCURSAL
     // ==========================================
     const hasProdActiveFilters = Boolean(
-        filtroProdCategoria || filtroProdMarca || 
+        filtroProdLinea || filtroProdMarca || 
         filtroProdGrupo || filtroProdEstado !== 'TODOS' || 
         prodFechaDesde || prodFechaHasta || prodSearchTerm
     );
 
     const handleClearProdFilters = () => {
-        setFiltroProdCategoria('');
+        setFiltroProdLinea('');
         setFiltroProdMarca('');
         setFiltroProdGrupo('');
         setFiltroProdEstado('TODOS');
@@ -691,7 +691,7 @@ const ReportesPage: React.FC = () => {
         if (!productsList) return [];
         let filtered = productsList;
 
-        if (filtroProdCategoria) filtered = filtered.filter(p => String(p.categoria?.id || p.categoriaId) === filtroProdCategoria);
+        if (filtroProdLinea) filtered = filtered.filter(p => String(p.linea?.id || p.lineaId || p.categoria?.id || p.categoriaId) === filtroProdLinea);
         if (filtroProdMarca) filtered = filtered.filter(p => String(p.marca?.id || p.marcaId) === filtroProdMarca);
         if (filtroProdGrupo) filtered = filtered.filter(p => String(p.grupo?.id || p.grupoId) === filtroProdGrupo);
         if (filtroProdEstado === 'ACTIVO') filtered = filtered.filter(p => p.activo);
@@ -749,7 +749,7 @@ const ReportesPage: React.FC = () => {
         }
 
         return filtered;
-    }, [productsList, filtroProdCategoria, filtroProdMarca, filtroProdGrupo, filtroProdEstado, prodSearchTerm, prodFechaDesde, prodFechaHasta, movimientosList]);
+    }, [productsList, filtroProdLinea, filtroProdMarca, filtroProdGrupo, filtroProdEstado, prodSearchTerm, prodFechaDesde, prodFechaHasta, movimientosList]);
 
     const metricsProductos = useMemo(() => {
         let totalExistencias = 0;
@@ -793,7 +793,7 @@ const ReportesPage: React.FC = () => {
         const cols: { header: string; dataKey: string }[] = [
             { header: 'CÓDIGO DE PRODUCTO', dataKey: 'codigo' },
             { header: 'MARCA', dataKey: 'marcaNombre' },
-            { header: 'CATEGORÍA', dataKey: 'categoriaNombre' },
+            { header: 'LÍNEA', dataKey: 'lineaNombre' },
             { header: 'GRUPO', dataKey: 'grupoNombre' },
             { header: 'NOMBRE', dataKey: 'nombre' },
         ];
@@ -819,7 +819,7 @@ const ReportesPage: React.FC = () => {
     const getExportColumnsProductos = () => {
         let cols = [...exportColumnsProductos];
         if (filtroProdMarca) cols = cols.filter(c => c.dataKey !== 'marcaNombre');
-        if (filtroProdCategoria) cols = cols.filter(c => c.dataKey !== 'categoriaNombre');
+        if (filtroProdLinea) cols = cols.filter(c => c.dataKey !== 'lineaNombre');
         if (filtroProdGrupo) cols = cols.filter(c => c.dataKey !== 'grupoNombre');
         if (filtroProdEstado !== 'TODOS') cols = cols.filter(c => c.dataKey !== 'estado');
         return cols;
@@ -837,7 +837,8 @@ const ReportesPage: React.FC = () => {
                 id: p.id,
                 codigo: p.codigo,
                 marcaNombre: p.marca?.nombre || '-',
-                categoriaNombre: p.categoria?.nombre || '-',
+                lineaNombre: p.linea?.nombre || p.categoria?.nombre || '-',
+                categoriaNombre: p.linea?.nombre || p.categoria?.nombre || '-',
                 grupoNombre: p.grupo?.nombre || '-',
                 nombre: p.nombre,
                 totalExistencias: totalExistencias > 0 ? totalExistencias.toLocaleString('es-BO') : '0',
@@ -886,9 +887,9 @@ const ReportesPage: React.FC = () => {
         } else if (prodFechaDesde) {
             texts.push(`Desde: ${prodFechaDesde.split('-').reverse().join('/')}`);
         }
-        if (filtroProdCategoria) {
-            const c = categoriesList?.find(cat => String(cat.id) === filtroProdCategoria);
-            if (c) texts.push(`Categoría: ${c.nombre}`);
+        if (filtroProdLinea) {
+            const l = lineasList?.find(lin => String(lin.id) === filtroProdLinea);
+            if (l) texts.push(`Línea: ${l.nombre}`);
         }
         if (filtroProdMarca) {
             const m = marcasList?.find(mar => String(mar.id) === filtroProdMarca);
@@ -914,7 +915,7 @@ const ReportesPage: React.FC = () => {
     }, [filteredProductos, prodCurrentPage]);
 
     React.useEffect(() => setProdCurrentPage(1), [
-        filtroProdCategoria, filtroProdMarca, filtroProdGrupo, filtroProdEstado, prodFechaDesde, prodFechaHasta, prodSearchTerm
+        filtroProdLinea, filtroProdMarca, filtroProdGrupo, filtroProdEstado, prodFechaDesde, prodFechaHasta, prodSearchTerm
     ]);
 
     // ==========================================
@@ -2579,16 +2580,16 @@ const ReportesPage: React.FC = () => {
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                                     <Layers className="w-3.5 h-3.5 text-primary" /> Categoría
+                                     <Layers className="w-3.5 h-3.5 text-primary" /> Línea
                                 </label>
                                 <select 
-                                     value={filtroProdCategoria} 
-                                     onChange={(e) => setFiltroProdCategoria(e.target.value)} 
+                                     value={filtroProdLinea} 
+                                     onChange={(e) => setFiltroProdLinea(e.target.value)} 
                                      className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
                                 >
-                                     <option value="">Todas las Categorías</option>
-                                     {categoriesList?.map(c => (
-                                         <option key={c.id} value={c.id}>{c.nombre}</option>
+                                     <option value="">Todas las Líneas</option>
+                                     {lineasList?.map(l => (
+                                         <option key={l.id} value={l.id}>{l.nombre}</option>
                                      ))}
                                 </select>
                             </div>
@@ -2714,7 +2715,7 @@ const ReportesPage: React.FC = () => {
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-10">#</th>
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Código</th>
                                         {!filtroProdMarca && <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Marca</th>}
-                                        {!filtroProdCategoria && <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Categoría</th>}
+                                        {!filtroProdLinea && <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Línea</th>}
                                         {!filtroProdGrupo && <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Grupo</th>}
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nombre Producto</th>
                                         
@@ -2774,9 +2775,9 @@ const ReportesPage: React.FC = () => {
                                                             {p.marca?.nombre || '-'}
                                                         </td>
                                                     )}
-                                                    {!filtroProdCategoria && (
+                                                    {!filtroProdLinea && (
                                                         <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
-                                                            {p.categoria?.nombre || '-'}
+                                                            {p.linea?.nombre || p.categoria?.nombre || '-'}
                                                         </td>
                                                     )}
                                                     {!filtroProdGrupo && (
@@ -2876,7 +2877,7 @@ const ReportesPage: React.FC = () => {
                                 {filteredProductos.length > 0 && (
                                     <tfoot>
                                         <tr className="bg-muted/70 font-bold border-t-2 border-primary/20 text-xs">
-                                            <td colSpan={2 + (!filtroProdMarca ? 1 : 0) + (!filtroProdCategoria ? 1 : 0) + (!filtroProdGrupo ? 1 : 0) + 1} className="p-3 text-foreground font-black">
+                                            <td colSpan={2 + (!filtroProdMarca ? 1 : 0) + (!filtroProdLinea ? 1 : 0) + (!filtroProdGrupo ? 1 : 0) + 1} className="p-3 text-foreground font-black">
                                                 TOTAL GENERAL CONSOLIDADO ({filteredProductos.length} ítems)
                                             </td>
 

@@ -10,7 +10,7 @@ import { getCiudades } from '../../api/ciudadService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
 import { CostoImportacionModal } from '../../components/compras/CostoImportacionModal';
-import { X, Search, Plus, Trash2, CheckCircle, CheckCircle2, Check, Package, Calculator, Calendar, ChevronRight, Eye, Edit, Ban, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Users, Lock, Info, MessageSquare, Send, Loader2, ExternalLink, Globe, MessageCircle } from 'lucide-react';
+import { X, Search, Plus, Trash2, CheckCircle, CheckCircle2, Check, Package, Calculator, Calendar, ChevronRight, Eye, Edit, Ban, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Users, Lock, Info, MessageSquare, Send, Loader2, ExternalLink, Globe, MessageCircle, ShoppingCart } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
@@ -98,12 +98,6 @@ const ComprasPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     // WhatsApp State & Mutations
-    const { data: whatsappBranches } = useQuery({
-        queryKey: ['whatsapp-branches-status'],
-        queryFn: () => whatsappService.getBranchesStatus(),
-        staleTime: 10000,
-    });
-
     const [whatsappModalData, setWhatsappModalData] = useState<{
         isOpen: boolean;
         compra: any | null;
@@ -118,6 +112,13 @@ const ComprasPage: React.FC = () => {
         phone: '',
         sucursalId: '',
         customMessage: ''
+    });
+
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 1000 * 60 * 5,
+        enabled: whatsappModalData.isOpen,
     });
 
     const sendWhatsAppMutation = useMutation({
@@ -394,7 +395,7 @@ const ComprasPage: React.FC = () => {
             descuentoPromocionPorcentaje: Number(nota.descuentoPromocionPorcentaje || 0),
             detalles: nota.detalles.map((d: any) => ({
                 producto: d.producto,
-                productoId: d.producto.id,
+                productoId: d.producto?.id || d.productoId,
                 cantidad: Number(d.cantidad) || 0,
                 precioUnitario: Number(d.precioUnitario) || 0,
                 descuento: Number(d.descuento) || 0,
@@ -600,7 +601,6 @@ const ComprasPage: React.FC = () => {
         setSearch('');
     };
 
-    if (isLoading) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando compras...</div>;
 
     return (
         <div className="space-y-6">
@@ -732,7 +732,17 @@ const ComprasPage: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y">
-                        {filteredPurchases?.map((p) => (
+                        {isLoading ? (
+                            <tr>
+                                <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                        <span>Cargando compras...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : filteredPurchases && filteredPurchases.length > 0 ? (
+                            filteredPurchases.map((p) => (
                             <tr key={p.id} className="hover:bg-accent/50 transition-colors group">
                                 <td className="p-4">
                                     <div className="flex flex-col">
@@ -877,8 +887,15 @@ const ComprasPage: React.FC = () => {
                                     </div>
                                 </td>
                             </tr>
-                        ))}
-                    </tbody>
+                        ))
+                    ) : (
+                        <tr>
+                            <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                                No hay compras registradas.
+                            </td>
+                        </tr>
+                    )}
+                </tbody>
                 </table>
             </div>
 
@@ -983,10 +1000,10 @@ const ComprasPage: React.FC = () => {
                         </div>
                         <div className="p-4 space-y-4">
                             {!isViewing && (
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 items-center">
                                     <select 
                                         id="compraProductSelect"
-                                        className="flex-1 p-2.5 border rounded-lg bg-background text-sm outline-none"
+                                        className="flex-1 min-w-0 p-2.5 border rounded-lg bg-background text-sm text-foreground outline-none hover:border-primary/50 transition-all text-ellipsis overflow-hidden"
                                         defaultValue=""
                                     >
                                         <option value="" disabled>Seleccione un producto para agregar...</option>
@@ -1005,9 +1022,10 @@ const ComprasPage: React.FC = () => {
                                                 select.value = '';
                                             }
                                         }}
-                                        className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors whitespace-nowrap cursor-pointer"
+                                        className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer"
                                     >
-                                        Añadir
+                                        <ShoppingCart className="w-4 h-4 shrink-0" />
+                                        <span>Añadir</span>
                                     </button>
                                 </div>
                             )}

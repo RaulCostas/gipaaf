@@ -6,8 +6,8 @@ import Modal from '../../components/ui/Modal';
 import { 
     Shield, ShieldCheck, Plus, Pencil, Trash2, Search, CheckCircle2, 
     Lock, ListChecks, FileText, CheckSquare, Square, X,
-    Package, ShoppingCart, Users, TrendingUp, Settings, HelpCircle,
-    Boxes, PieChart
+    ShoppingCart, Users, TrendingUp, Settings, HelpCircle,
+    Boxes, PieChart, Power, PowerOff, ShieldAlert, ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -15,7 +15,7 @@ const SECTIONS_CONFIG = [
     {
         title: 'Existencias (Stock)',
         icon: Boxes,
-        recursos: ['PRODUCTOS', 'CATALOGOS', 'INVENTARIO', 'TRASPASOS', 'MOVIMIENTOS', 'KARDEX']
+        recursos: ['PRODUCTOS', 'CATALOGOS', 'INVENTARIO', 'TRASPASOS', 'MOVIMIENTOS', 'MERMAS', 'KARDEX']
     },
     {
         title: 'Operaciones',
@@ -60,6 +60,11 @@ const RolesPage: React.FC = () => {
     const [search, setSearch] = useState('');
     const [permSearch, setPermSearch] = useState('');
     const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
+    const [isActivo, setIsActivo] = useState(true);
+
+    // Modal state for viewing all assigned permissions of a role
+    const [viewingRolPermisos, setViewingRolPermisos] = useState<Rol | null>(null);
+    const [viewingPermSearch, setViewingPermSearch] = useState('');
 
     const { data: roles, isLoading: loadingRoles } = useQuery({
         queryKey: ['roles'],
@@ -92,6 +97,16 @@ const RolesPage: React.FC = () => {
         onError: () => toast.error('Error al actualizar el rol'),
     });
 
+    const toggleStatusMutation = useMutation({
+        mutationFn: ({ id, activo }: { id: number; activo: boolean }) =>
+            roleService.update(id, { activo } as any),
+        onSuccess: (_, vars) => {
+            queryClient.invalidateQueries({ queryKey: ['roles'] });
+            toast.success(vars.activo ? 'Rol reactivado con éxito' : 'Rol dado de baja correctamente');
+        },
+        onError: () => toast.error('Error al cambiar el estado del rol'),
+    });
+
     const deleteMutation = useMutation({
         mutationFn: roleService.delete,
         onSuccess: () => {
@@ -103,7 +118,16 @@ const RolesPage: React.FC = () => {
 
     const handleEdit = (rol: Rol) => {
         setEditingRol(rol);
-        setSelectedPermissions(rol.permisos.map(p => p.id));
+        setIsActivo(rol.activo !== false);
+        setSelectedPermissions(rol.permisos?.map(p => p.id) || []);
+        setPermSearch('');
+        setIsModalOpen(true);
+    };
+
+    const handleOpenCreate = () => {
+        setEditingRol(null);
+        setIsActivo(true);
+        setSelectedPermissions([]);
         setPermSearch('');
         setIsModalOpen(true);
     };
@@ -147,6 +171,7 @@ const RolesPage: React.FC = () => {
         const data = {
             nombre: nombre.trim().toUpperCase(),
             descripcion: descripcion ? descripcion.trim() : undefined,
+            activo: isActivo,
             permisos: selectedPermissions.map(id => ({ id }))
         };
 
@@ -158,7 +183,7 @@ const RolesPage: React.FC = () => {
     };
 
     const handleDelete = (id: number) => {
-        if (window.confirm('¿Está seguro de eliminar este rol de seguridad?')) {
+        if (window.confirm('¿Está seguro de eliminar este rol de seguridad? Esta acción no se puede deshacer.')) {
             deleteMutation.mutate(id);
         }
     };
@@ -168,7 +193,7 @@ const RolesPage: React.FC = () => {
         (r.descripcion || '').toLowerCase().includes(search.toLowerCase())
     );
 
-    // Group permissions into sections matching the sidebar menu order
+    // Group permissions for form editor
     const groupedSections = useMemo(() => {
         if (!permissions) return [];
 
@@ -182,7 +207,6 @@ const RolesPage: React.FC = () => {
             : permissions;
 
         const sections = SECTIONS_CONFIG.map(sec => {
-            // Filter and sort items within this section according to the configured recursos order
             const perms = matchingPerms.filter(p => sec.recursos.includes(p.recurso.toUpperCase()));
             perms.sort((a, b) => {
                 const indexA = sec.recursos.indexOf(a.recurso.toUpperCase());
@@ -196,7 +220,6 @@ const RolesPage: React.FC = () => {
             };
         }).filter(sec => sec.perms.length > 0);
 
-        // Catch any permissions not explicitly in SECTIONS_CONFIG
         const knownRecursos = new Set(SECTIONS_CONFIG.flatMap(s => s.recursos));
         const otherPerms = matchingPerms.filter(p => !knownRecursos.has(p.recurso.toUpperCase()));
         if (otherPerms.length > 0) {
@@ -211,6 +234,47 @@ const RolesPage: React.FC = () => {
         return sections;
     }, [permissions, permSearch]);
 
+    // Group permissions for the "Ver todos los permisos" modal
+    const viewingGroupedSections = useMemo(() => {
+        if (!viewingRolPermisos?.permisos) return [];
+
+        const s = viewingPermSearch.toLowerCase().trim();
+        const matchingPerms = s
+            ? viewingRolPermisos.permisos.filter(p =>
+                p.nombre.toLowerCase().includes(s) ||
+                p.recurso.toLowerCase().includes(s) ||
+                (p.descripcion || '').toLowerCase().includes(s)
+            )
+            : viewingRolPermisos.permisos;
+
+        const sections = SECTIONS_CONFIG.map(sec => {
+            const perms = matchingPerms.filter(p => sec.recursos.includes(p.recurso.toUpperCase()));
+            perms.sort((a, b) => {
+                const indexA = sec.recursos.indexOf(a.recurso.toUpperCase());
+                const indexB = sec.recursos.indexOf(b.recurso.toUpperCase());
+                if (indexA !== indexB) return indexA - indexB;
+                return a.id - b.id;
+            });
+            return {
+                ...sec,
+                perms
+            };
+        }).filter(sec => sec.perms.length > 0);
+
+        const knownRecursos = new Set(SECTIONS_CONFIG.flatMap(sec => sec.recursos));
+        const otherPerms = matchingPerms.filter(p => !knownRecursos.has(p.recurso.toUpperCase()));
+        if (otherPerms.length > 0) {
+            sections.push({
+                title: 'Otros',
+                icon: HelpCircle,
+                recursos: [],
+                perms: otherPerms
+            });
+        }
+
+        return sections;
+    }, [viewingRolPermisos, viewingPermSearch]);
+
     if (loadingRoles || loadingPerms) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando roles y permisos...</div>;
 
     return (
@@ -224,12 +288,7 @@ const RolesPage: React.FC = () => {
                     <p className="text-muted-foreground italic">Defina los perfiles de acceso (Roles) y sus permisos asociados en el sistema.</p>
                 </div>
                 <button
-                    onClick={() => {
-                        setEditingRol(null);
-                        setSelectedPermissions([]);
-                        setPermSearch('');
-                        setIsModalOpen(true);
-                    }}
+                    onClick={handleOpenCreate}
                     className="px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
                 >
                     <Plus className="w-4 h-4" />
@@ -254,52 +313,243 @@ const RolesPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredRoles?.map((r) => (
-                    <div key={r.id} className="bg-card border rounded-2xl p-6 hover:shadow-xl transition-all duration-300 group flex flex-col justify-between">
-                        <div>
-                            <div className="flex justify-between items-start mb-4">
-                                <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${r.nombre.toLowerCase() === 'admin' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400' : 'bg-primary/10 text-primary'}`}>
-                                    <Shield className="w-6 h-6" />
+                {filteredRoles?.map((r) => {
+                    const isAdmin = r.nombre.toLowerCase() === 'admin';
+                    const active = r.activo !== false;
+
+                    return (
+                        <div key={r.id} className={`bg-card border rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between relative overflow-hidden ${!active ? 'opacity-75 border-dashed border-destructive/40 bg-muted/20' : ''}`}>
+                            <div>
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${isAdmin ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400' : active ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive'}`}>
+                                            <Shield className="w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-lg uppercase tracking-tight text-foreground flex items-center gap-2">
+                                                {r.nombre}
+                                            </h3>
+                                            <div className="mt-0.5">
+                                                {active ? (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                                                        Activo
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-destructive/10 text-destructive uppercase tracking-wider">
+                                                        Dado de Baja
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/60">
+                                        <button 
+                                            onClick={() => handleEdit(r)} 
+                                            className="p-1.5 hover:bg-primary/15 rounded-lg text-muted-foreground hover:text-primary transition-colors" 
+                                            title="Editar Rol y Permisos"
+                                        >
+                                            <Pencil className="w-4 h-4" />
+                                        </button>
+                                        {!isAdmin && (
+                                            <>
+                                                <button 
+                                                    onClick={() => toggleStatusMutation.mutate({ id: r.id, activo: !active })} 
+                                                    className={`p-1.5 rounded-lg transition-colors ${active ? 'hover:bg-amber-500/15 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400' : 'hover:bg-emerald-500/15 text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400'}`} 
+                                                    title={active ? 'Dar de baja este perfil (Desactivar)' : 'Reactivar este perfil'}
+                                                >
+                                                    {active ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDelete(r.id)} 
+                                                    className="p-1.5 hover:bg-destructive/15 rounded-lg text-muted-foreground hover:text-destructive transition-colors" 
+                                                    title="Eliminar Rol definitivamente"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => handleEdit(r)} className="p-2 hover:bg-accent rounded-lg text-muted-foreground hover:text-primary transition-colors" title="Editar Rol">
-                                        <Pencil className="w-4 h-4" />
-                                    </button>
-                                    {r.nombre.toLowerCase() !== 'admin' && (
-                                         <button onClick={() => handleDelete(r.id)} className="p-2 hover:bg-destructive/10 rounded-lg text-muted-foreground hover:text-destructive transition-colors" title="Eliminar Rol">
-                                             <Trash2 className="w-4 h-4" />
-                                         </button>
+
+                                <p className="text-sm text-muted-foreground mb-4 line-clamp-2 min-h-[40px]">
+                                    {r.descripcion || 'Sin descripción asignada.'}
+                                </p>
+                            </div>
+
+                            <div className="space-y-3 pt-3 border-t">
+                                <div 
+                                    onClick={() => { setViewingRolPermisos(r); setViewingPermSearch(''); }}
+                                    className="flex items-center justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary cursor-pointer transition-colors group/hdr"
+                                    title="Haga clic para ver todos los permisos de este rol"
+                                >
+                                    <span className="flex items-center gap-1">
+                                        Permisos Asignados
+                                        <ExternalLink className="w-3 h-3 opacity-0 group-hover/hdr:opacity-100 transition-opacity" />
+                                    </span>
+                                    <span className="bg-primary/10 text-primary group-hover/hdr:bg-primary group-hover/hdr:text-primary-foreground px-2 py-0.5 rounded-full font-bold transition-all shadow-sm">
+                                        {r.permisos?.length || 0}
+                                    </span>
+                                </div>
+                                <div 
+                                    onClick={() => { setViewingRolPermisos(r); setViewingPermSearch(''); }}
+                                    className="flex flex-wrap gap-1.5 max-h-[80px] overflow-hidden cursor-pointer"
+                                    title="Haga clic para ver todos los permisos de este rol"
+                                >
+                                    {r.permisos?.slice(0, 4).map(p => (
+                                        <span key={p.id} className="px-2 py-0.5 bg-accent hover:bg-primary/15 text-[10px] rounded-md font-medium transition-colors">
+                                            {p.nombre}
+                                        </span>
+                                    ))}
+                                    {r.permisos && r.permisos.length > 4 && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setViewingRolPermisos(r); setViewingPermSearch(''); }}
+                                            className="px-2.5 py-0.5 bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground text-[10px] rounded-md font-bold transition-all shadow-sm flex items-center gap-1 active:scale-95"
+                                        >
+                                            +{r.permisos.length - 4} más
+                                        </button>
                                     )}
                                 </div>
-                            </div>
-
-                            <h3 className="font-bold text-xl mb-1 uppercase tracking-tight text-foreground">{r.nombre}</h3>
-                            <p className="text-sm text-muted-foreground mb-4 line-clamp-2 min-h-[40px]">
-                                {r.descripcion || 'Sin descripción asignada.'}
-                            </p>
-                        </div>
-
-                        <div className="space-y-3 pt-3 border-t">
-                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                                <span>Permisos Asignados</span>
-                                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">{r.permisos?.length || 0}</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-hidden">
-                                {r.permisos?.slice(0, 4).map(p => (
-                                    <span key={p.id} className="px-2 py-0.5 bg-accent text-[10px] rounded-md font-medium">
-                                        {p.nombre}
-                                    </span>
-                                ))}
-                                {r.permisos && r.permisos.length > 4 && (
-                                    <span className="px-2 py-0.5 bg-primary/10 text-[10px] rounded-md font-bold text-primary">
-                                        +{r.permisos.length - 4} más
-                                    </span>
+                                {!active && (
+                                    <p className="text-[11px] text-destructive italic font-medium flex items-center gap-1 mt-1">
+                                        <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                                        Perfil inactivo: los usuarios vinculados no pueden operar.
+                                    </p>
                                 )}
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
+
+            {/* Modal de Detalle: Ver Todos los Permisos Asignados */}
+            <Modal
+                isOpen={viewingRolPermisos !== null}
+                onClose={() => setViewingRolPermisos(null)}
+                title={
+                    <div className="flex items-center gap-2 text-primary font-bold">
+                        <ShieldCheck className="w-6 h-6 text-primary/80" />
+                        <span>Permisos Asignados: <span className="uppercase text-foreground">{viewingRolPermisos?.nombre}</span></span>
+                    </div>
+                }
+                className="max-w-4xl"
+            >
+                {viewingRolPermisos && (
+                    <div className="space-y-4">
+                        {/* Header Info Banner */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <h3 className="font-bold text-base uppercase text-foreground">{viewingRolPermisos.nombre}</h3>
+                                    {viewingRolPermisos.activo !== false ? (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 uppercase">
+                                            Activo
+                                        </span>
+                                    ) : (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-destructive/10 text-destructive uppercase">
+                                            Dado de Baja
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-muted-foreground">{viewingRolPermisos.descripcion || 'Sin descripción asignada.'}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-xs bg-primary/10 text-primary font-bold px-3 py-1.5 rounded-lg border border-primary/20">
+                                    {viewingRolPermisos.permisos?.length || 0} permisos activos
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Quick Search */}
+                        <div className="relative">
+                            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input
+                                type="text"
+                                placeholder="Filtrar permisos asignados (ej. mermas, ventas, traspasos)..."
+                                value={viewingPermSearch}
+                                onChange={(e) => setViewingPermSearch(e.target.value)}
+                                className="w-full pl-9 pr-3 py-2 bg-muted/40 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                        </div>
+
+                        {/* List of Assigned Permissions Grouped by Module */}
+                        <div className="max-h-[400px] overflow-y-auto px-1 py-1 space-y-4 custom-scrollbar">
+                            {viewingGroupedSections.length === 0 ? (
+                                <div className="p-8 text-center text-xs text-muted-foreground bg-muted/10 border border-dashed rounded-xl">
+                                    No se encontraron permisos asignados con ese criterio de búsqueda.
+                                </div>
+                            ) : (
+                                viewingGroupedSections.map(section => {
+                                    const SectionIcon = section.icon;
+
+                                    return (
+                                        <div key={section.title} className="space-y-2">
+                                            <div className="flex items-center justify-between py-1.5 px-3 bg-muted/60 rounded-lg border border-border/60">
+                                                <div className="flex items-center gap-2">
+                                                    <SectionIcon className="w-4 h-4 text-primary" />
+                                                    <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                                                        {section.title}
+                                                    </span>
+                                                </div>
+                                                <span className="text-[10px] bg-background px-2 py-0.5 rounded-full border text-muted-foreground font-semibold">
+                                                    {section.perms.length} permisos
+                                                </span>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                                {section.perms.map(p => (
+                                                    <div
+                                                        key={p.id}
+                                                        className="p-3 border rounded-xl bg-card border-border shadow-xs flex flex-col justify-between gap-1.5"
+                                                    >
+                                                        <div className="flex items-center justify-between gap-1">
+                                                            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary truncate">
+                                                                {p.recurso}
+                                                            </span>
+                                                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                                        </div>
+                                                        <span className="text-xs font-bold text-foreground leading-tight">{p.nombre}</span>
+                                                        {p.descripcion && (
+                                                            <span className="text-[11px] text-muted-foreground line-clamp-2">
+                                                                {p.descripcion}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Footer Action Buttons */}
+                        <div className="pt-3 flex justify-end gap-3 border-t">
+                            <button
+                                type="button"
+                                onClick={() => setViewingRolPermisos(null)}
+                                className="px-4 py-2 border rounded-xl text-sm font-semibold hover:bg-accent transition-colors"
+                            >
+                                Cerrar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const r = viewingRolPermisos;
+                                    setViewingRolPermisos(null);
+                                    handleEdit(r);
+                                }}
+                                className="px-5 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"
+                            >
+                                <Pencil className="w-4 h-4" />
+                                Modificar Permisos de este Rol
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
 
             {/* Modal Crear / Editar Rol */}
             <Modal
@@ -308,7 +558,7 @@ const RolesPage: React.FC = () => {
                 title={
                     <span className="flex items-center gap-2 text-primary font-bold">
                         <Lock className="w-6 h-6 text-primary/80" />
-                        {editingRol ? `Configurar Rol: ${editingRol.nombre}` : 'Nuevo Perfil de Usuario (Rol)'}
+                        {editingRol ? `Editar Rol: ${editingRol.nombre}` : 'Nuevo Perfil de Usuario (Rol)'}
                     </span>
                 }
                 className="max-w-4xl"
@@ -339,6 +589,26 @@ const RolesPage: React.FC = () => {
                                     placeholder="Breve resumen de responsabilidades..."
                                 />
                             </div>
+                        </div>
+
+                        {/* Estado: Activo / Inactivo */}
+                        <div className="flex items-center justify-between p-3 border rounded-xl bg-muted/20 hover:border-primary/40 transition-colors sm:col-span-2">
+                            <div className="space-y-0.5">
+                                <label className="text-xs font-bold uppercase text-foreground">Estado del Rol (Activo / Inactivo)</label>
+                                <p className="text-[11px] text-muted-foreground">
+                                    {isActivo ? 'El rol está activo y disponible para asignar a los usuarios.' : 'El rol está dado de baja (los usuarios asociados no podrán utilizar sus permisos).'}
+                                </p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    name="activo"
+                                    className="sr-only peer"
+                                    checked={isActivo}
+                                    onChange={(e) => setIsActivo(e.target.checked)}
+                                />
+                                <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                            </label>
                         </div>
                     </div>
 
@@ -377,7 +647,7 @@ const RolesPage: React.FC = () => {
                             <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                             <input
                                 type="text"
-                                placeholder="Filtrar permisos (ej. ventas, inventario, clientes)..."
+                                placeholder="Filtrar permisos (ej. ventas, inventario, mermas, clientes)..."
                                 value={permSearch}
                                 onChange={(e) => setPermSearch(e.target.value)}
                                 className="w-full pl-9 pr-3 py-1.5 bg-muted/40 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"

@@ -8,7 +8,6 @@ import {
     DeleteDateColumn,
     JoinColumn,
 } from 'typeorm';
-import { Categoria } from '../categorias/categoria.entity';
 
 @Entity('grupos')
 export class Grupo {

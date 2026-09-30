@@ -1,10 +1,11 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { MovimientoInventario } from './movimiento_inventario.entity';
 import { Nota, TipoNota, EstadoNota } from '../notas/nota.entity';
 import { Inventario } from '../inventario/inventario.entity';
 import { Sucursal } from '../sucursales/sucursal.entity';
+import { Lote } from '../inventario/lote.entity';
 
 @Injectable()
 export class MovimientosInventarioService implements OnModuleInit {
@@ -17,6 +18,8 @@ export class MovimientosInventarioService implements OnModuleInit {
         private inventarioRepo: Repository<Inventario>,
         @InjectRepository(Sucursal)
         private sucursalRepo: Repository<Sucursal>,
+        @InjectRepository(Lote)
+        private loteRepo: Repository<Lote>,
     ) {}
 
     async onModuleInit() {
@@ -192,18 +195,28 @@ export class MovimientosInventarioService implements OnModuleInit {
         }
     }
 
-    async findAll() {
-        return this.repo.createQueryBuilder('mov')
+    async findAll(tipo?: string, sucursalId?: number, ciudadId?: number) {
+        const qb = this.repo.createQueryBuilder('mov')
             .leftJoinAndSelect('mov.inventario', 'inventario')
             .leftJoinAndSelect('inventario.producto', 'producto')
-            .leftJoinAndSelect('producto.categoria', 'categoria')
+            .leftJoinAndSelect('producto.linea', 'linea')
             .leftJoinAndSelect('producto.marca', 'marca')
             .leftJoinAndSelect('producto.grupo', 'grupo')
             .leftJoinAndSelect('inventario.sucursal', 'sucursal')
             .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
             .leftJoinAndSelect('mov.usuario', 'usuario')
-            .leftJoinAndSelect('usuario.persona', 'persona')
-            .orderBy('mov.creadoEn', 'DESC')
+            .leftJoinAndSelect('usuario.persona', 'persona');
+
+        if (tipo) {
+            qb.andWhere('mov.tipo = :tipo', { tipo });
+        }
+        if (sucursalId) {
+            qb.andWhere('inventario.sucursalId = :sucursalId', { sucursalId });
+        } else if (ciudadId) {
+            qb.andWhere('sucursal.ciudadId = :ciudadId', { ciudadId });
+        }
+
+        return qb.orderBy('mov.creadoEn', 'DESC')
             .addOrderBy('mov.id', 'DESC')
             .getMany();
     }
@@ -212,7 +225,7 @@ export class MovimientosInventarioService implements OnModuleInit {
         return this.repo.createQueryBuilder('mov')
             .leftJoinAndSelect('mov.inventario', 'inventario')
             .leftJoinAndSelect('inventario.producto', 'producto')
-            .leftJoinAndSelect('producto.categoria', 'categoria')
+            .leftJoinAndSelect('producto.linea', 'linea')
             .leftJoinAndSelect('producto.marca', 'marca')
             .leftJoinAndSelect('producto.grupo', 'grupo')
             .leftJoinAndSelect('inventario.sucursal', 'sucursal')
@@ -227,5 +240,48 @@ export class MovimientosInventarioService implements OnModuleInit {
 
     create(data: Partial<MovimientoInventario>) {
         return this.repo.save(this.repo.create(data));
+    }
+
+    async update(id: number, data: { motivo?: string; observaciones?: string }) {
+        const mov = await this.repo.findOne({ where: { id } });
+        if (!mov) {
+            throw new NotFoundException('Movimiento no encontrado');
+        }
+        if (data.motivo !== undefined) mov.motivo = data.motivo;
+        if (data.observaciones !== undefined) mov.observaciones = data.observaciones;
+        return this.repo.save(mov);
+    }
+
+    async remove(id: number) {
+        const mov = await this.repo.findOne({
+            where: { id },
+            relations: ['inventario', 'inventario.producto', 'inventario.sucursal']
+        });
+        if (!mov) {
+            throw new NotFoundException('Movimiento no encontrado');
+        }
+
+        // Si es una MERMA, restaurar el stock al inventario y a los lotes
+        if (mov.tipo === 'MERMA' && mov.inventario) {
+            const cantRevertir = Math.abs(Number(mov.cantidad) || 0);
+            if (cantRevertir > 0) {
+                mov.inventario.stockActual = Number(mov.inventario.stockActual || 0) + cantRevertir;
+                await this.inventarioRepo.save(mov.inventario);
+
+                const lote = await this.loteRepo.findOne({
+                    where: {
+                        producto: { id: mov.inventario.producto?.id },
+                        sucursal: mov.inventario.sucursal ? { id: mov.inventario.sucursal.id } : undefined
+                    },
+                    order: { fechaIngreso: 'DESC' }
+                });
+                if (lote) {
+                    lote.cantidadActual = Number(lote.cantidadActual || 0) + cantRevertir;
+                    await this.loteRepo.save(lote);
+                }
+            }
+        }
+
+        return this.repo.remove(mov);
     }
 }

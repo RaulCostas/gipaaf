@@ -4,12 +4,13 @@ import { ProtectedRoute, RequirePermission } from './ProtectedRoute';
 import LoginPage from '../pages/auth/LoginPage';
 import DashboardPage from '../pages/dashboard/DashboardPage';
 import ProductosPage from '../pages/productos/ProductosPage';
-import CategoriasPage from '../pages/categorias/CategoriasPage';
+import LineasPage from '../pages/lineas/LineasPage';
 import MarcasPage from '../pages/marcas/MarcasPage';
 import GruposPage from '../pages/grupos/GruposPage';
 import ClientesPage from '../pages/clientes/ClientesPage';
 import ProveedoresPage from '../pages/proveedores/ProveedoresPage';
 import InventarioPage from '../pages/inventario/InventarioPage';
+import MermasPage from '../pages/mermas/MermasPage';
 import MovimientosPage from '../pages/movimientos/MovimientosPage';
 import TraspasosPage from '../pages/traspasos/TraspasosPage';
 import SucursalesPage from '../pages/sucursales/SucursalesPage';
@@ -58,10 +59,12 @@ const AppRouter: React.FC = () => {
                     <Route path="productos" element={<RequirePermission recurso="PRODUCTOS"><ProductosPage /></RequirePermission>} />
                     {/* Catálogos / Configuración */}
                     <Route path="marcas" element={<RequirePermission recurso="CONFIGURACION"><MarcasPage /></RequirePermission>} />
-                    <Route path="categorias" element={<RequirePermission recurso="CONFIGURACION"><CategoriasPage /></RequirePermission>} />
+                    <Route path="lineas" element={<RequirePermission recurso="CONFIGURACION"><LineasPage /></RequirePermission>} />
+                    <Route path="categorias" element={<Navigate to="/lineas" replace />} />
                     <Route path="grupos" element={<RequirePermission recurso="CONFIGURACION"><GruposPage /></RequirePermission>} />
                     <Route path="inventario" element={<RequirePermission recurso="INVENTARIO"><InventarioPage /></RequirePermission>} />
                     <Route path="movimientos" element={<RequirePermission recurso="MOVIMIENTOS"><MovimientosPage /></RequirePermission>} />
+                    <Route path="mermas" element={<RequirePermission recurso="INVENTARIO"><MermasPage /></RequirePermission>} />
                     <Route path="traspasos" element={<RequirePermission recurso="TRASPASOS"><TraspasosPage /></RequirePermission>} />
 
                     {/* Operaciones */}

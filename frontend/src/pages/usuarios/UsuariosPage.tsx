@@ -5,6 +5,7 @@ import type { Usuario } from '../../api/userService';
 import { sucursalService } from '../../api/sucursalService';
 import { personalService } from '../../api/personalService';
 import Modal from '../../components/ui/Modal';
+import PhoneInput from '../../components/ui/PhoneInput';
 import { 
     Users, UserPlus, Pencil, Trash2, Search, CheckCircle2, 
     Shield, Building2, Mail, Phone, BadgeCheck, AtSign, 
@@ -438,31 +439,26 @@ const UsuariosPage: React.FC = () => {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-bold text-muted-foreground uppercase">C.I. / Documento</label>
-                                        <div className="relative group">
-                                            <input 
-                                                name="ci" 
-                                                value={formCi}
-                                                onChange={(e) => setFormCi(e.target.value)}
-                                                className="w-full p-2.5 bg-background border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50" 
-                                                placeholder="1234567" 
-                                            />
-                                        </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-muted-foreground uppercase">C.I. / Documento</label>
+                                    <div className="relative group">
+                                        <input 
+                                            name="ci" 
+                                            value={formCi}
+                                            onChange={(e) => setFormCi(e.target.value)}
+                                            className="w-full p-2.5 bg-background border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50" 
+                                            placeholder="1234567" 
+                                        />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-bold text-muted-foreground uppercase">Celular</label>
-                                        <div className="relative group">
-                                            <input 
-                                                name="telefono" 
-                                                value={formTelefono}
-                                                onChange={(e) => setFormTelefono(e.target.value)}
-                                                className="w-full p-2.5 bg-background border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50" 
-                                                placeholder="70000000" 
-                                            />
-                                        </div>
-                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-muted-foreground uppercase">Celular</label>
+                                    <PhoneInput
+                                        name="telefono"
+                                        value={formTelefono}
+                                        onChange={(val) => setFormTelefono(val)}
+                                        placeholder="70000000"
+                                    />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-muted-foreground uppercase">Dirección</label>

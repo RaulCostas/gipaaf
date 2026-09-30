@@ -6,9 +6,10 @@ import { MovimientosInventarioController } from './movimientos.controller';
 import { Nota } from '../notas/nota.entity';
 import { Inventario } from '../inventario/inventario.entity';
 import { Sucursal } from '../sucursales/sucursal.entity';
+import { Lote } from '../inventario/lote.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([MovimientoInventario, Nota, Inventario, Sucursal])],
+    imports: [TypeOrmModule.forFeature([MovimientoInventario, Nota, Inventario, Sucursal, Lote])],
     providers: [MovimientosInventarioService],
     controllers: [MovimientosInventarioController],
     exports: [MovimientosInventarioService],

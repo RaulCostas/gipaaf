@@ -10,7 +10,7 @@ import {
     X, Save, AlignLeft, ChevronLeft, ChevronRight, Check,
     Printer, FileText, FileSpreadsheet, Calendar,
     Building2, Upload, CreditCard, ArrowDownRight,
-    FileCheck
+    FileCheck, Loader2
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import { toast } from 'sonner';
@@ -308,7 +308,6 @@ const EgresosPage: React.FC = () => {
 
     React.useEffect(() => setCurrentPage(1), [searchTerm, filtroMetodo, fechaDesde, fechaHasta]);
 
-    if (isLoading) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando egresos diarios...</div>;
 
     return (
         <div className="space-y-6">
@@ -785,7 +784,16 @@ const EgresosPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {paginatedEgresos.length === 0 ? (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={10} className="p-8 text-center text-muted-foreground">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                            <span>Cargando egresos diarios...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : paginatedEgresos.length === 0 ? (
                                 <tr>
                                     <td colSpan={10} className="p-8 text-center text-muted-foreground">
                                         No se encontraron egresos diarios registrados.

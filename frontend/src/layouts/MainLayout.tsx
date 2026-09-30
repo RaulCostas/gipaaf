@@ -6,7 +6,7 @@ import {
     FileText, FileSpreadsheet, Menu, LogOut, Sun, Moon, MapPin, 
     Receipt, Calculator, Settings, X, Home, Boxes, Wallet, Undo2, 
     Briefcase, UserCircle, Shield, Key, History, ArrowLeftRight, PieChart, DollarSign,
-    Tag, TrendingUp, MessageSquare, KeyRound, Lock
+    Tag, TrendingUp, MessageSquare, KeyRound, Lock, AlertOctagon
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getCiudades } from '../api/ciudadService';
@@ -122,6 +122,7 @@ const MainLayout: React.FC = () => {
                 { path: "/inventario", icon: Boxes, label: "Existencias (Stock)", perm: "INVENTARIO" },
                 { path: "/traspasos", icon: ArrowLeftRight, label: "Traspasos entre Sucursales", perm: "TRASPASOS" },
                 { path: "/movimientos", icon: History, label: "Movimientos (Historial)", perm: "MOVIMIENTOS" },
+                { path: "/mermas", icon: AlertOctagon, label: "Inventario de Mermas", perm: "INVENTARIO" },
             ]
         },
         {

@@ -10,6 +10,11 @@ export class ProductosService implements OnModuleInit {
     async onModuleInit() {
         try {
             await this.repo.query(`
+                UPDATE productos
+                SET activo = false, "eliminadoEn" = NULL
+                WHERE "eliminadoEn" IS NOT NULL;
+            `);
+            await this.repo.query(`
                 UPDATE productos p
                 SET "fechaUltimaCompra" = sub.max_fecha
                 FROM (
@@ -30,14 +35,18 @@ export class ProductosService implements OnModuleInit {
         if (search) {
             return this.repo.find({
                 where: [{ nombre: ILike(`%${search}%`) }, { codigo: ILike(`%${search}%`) }],
-                relations: ['categoria', 'marca', 'grupo'],
+                relations: ['linea', 'marca', 'grupo'],
+                order: { nombre: 'ASC' }
             });
         }
-        return this.repo.find({ relations: ['categoria', 'marca', 'grupo'] });
+        return this.repo.find({ 
+            relations: ['linea', 'marca', 'grupo'],
+            order: { nombre: 'ASC' }
+        });
     }
 
     async findOne(id: number) {
-        const p = await this.repo.findOne({ where: { id }, relations: ['categoria', 'marca', 'grupo'] });
+        const p = await this.repo.findOne({ where: { id }, relations: ['linea', 'marca', 'grupo'] });
         if (!p) throw new NotFoundException(`Producto ${id} no encontrado`);
         return p;
     }
@@ -54,6 +63,7 @@ export class ProductosService implements OnModuleInit {
 
     async remove(id: number) {
         const p = await this.findOne(id);
-        return this.repo.softRemove(p);
+        p.activo = false;
+        return this.repo.save(p);
     }
 }

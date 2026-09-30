@@ -144,7 +144,7 @@ export class ReportsService {
     async getLowStockProducts(ciudadId?: string, sucursalId?: string) {
         const stockQb = this.inventarioRepo.createQueryBuilder('inv')
             .leftJoinAndSelect('inv.producto', 'producto')
-            .leftJoinAndSelect('producto.categoria', 'categoria')
+            .leftJoinAndSelect('producto.linea', 'linea')
             .leftJoinAndSelect('producto.marca', 'marca')
             .leftJoinAndSelect('inv.sucursal', 'sucursal')
             .leftJoinAndSelect('sucursal.ciudad', 'ciudad')

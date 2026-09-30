@@ -28,7 +28,7 @@ const MovimientosPage: React.FC = () => {
 
     const { data: movimientos, isLoading } = useQuery({
         queryKey: ['movimientos'],
-        queryFn: movimientoService.getAll,
+        queryFn: () => movimientoService.getAll(),
         staleTime: 30000,
     });
 

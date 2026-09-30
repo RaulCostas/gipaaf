@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
+import PhoneInput from '../../components/ui/PhoneInput';
 
 const ProveedoresPage: React.FC = () => {
     const queryClient = useQueryClient();
@@ -282,16 +283,11 @@ const ProveedoresPage: React.FC = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-foreground">Celular</label>
-                                <div className="relative group">
-                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: 70012345"
-                                        value={currentSupplier.persona?.telefono || ''}
-                                        onChange={(e) => setCurrentSupplier({ ...currentSupplier, persona: { ...currentSupplier.persona!, telefono: e.target.value }})}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
-                                    />
-                                </div>
+                                <PhoneInput
+                                    value={currentSupplier.persona?.telefono || ''}
+                                    onChange={(val) => setCurrentSupplier({ ...currentSupplier, persona: { ...currentSupplier.persona!, telefono: val }})}
+                                    placeholder="70012345"
+                                />
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-foreground">Email de Contacto</label>

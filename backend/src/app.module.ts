@@ -9,7 +9,7 @@ import { PermisosModule } from './permisos/permisos.module';
 import { SucursalesModule } from './sucursales/sucursales.module';
 import { ClientesModule } from './clientes/clientes.module';
 import { ProveedoresModule } from './proveedores/proveedores.module';
-import { CategoriasModule } from './categorias/categorias.module';
+import { LineasModule } from './lineas/lineas.module';
 import { MarcasModule } from './marcas/marcas.module';
 import { GruposModule } from './grupos/grupos.module';
 import { ProductosModule } from './productos/productos.module';
@@ -77,7 +77,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     ClientesModule,
     ProveedoresModule,
     MarcasModule,
-    CategoriasModule,
+    LineasModule,
     GruposModule,
     ProductosModule,
     InventarioModule,

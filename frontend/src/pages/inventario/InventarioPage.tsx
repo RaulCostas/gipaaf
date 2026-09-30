@@ -2,21 +2,21 @@ import { Settings2 } from 'lucide-react';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { inventoryService } from '../../api/inventoryService';
-import { categoryService } from '../../api/categoryService';
+import { lineaService } from '../../api/lineaService';
 import { marcaService } from '../../api/marcaService';
 import { grupoService } from '../../api/grupoService';
 import { getCiudades } from '../../api/ciudadService';
 import { sucursalService } from '../../api/sucursalService';
 import Modal from '../../components/ui/Modal';
 import { 
-    Boxes, Search, Filter, AlertTriangle, 
+    Boxes, Search, Filter, AlertTriangle, AlertOctagon,
     Printer, FileText, FileSpreadsheet, X, 
     ChevronLeft, ChevronRight, Check,
     ArrowUpRight, History, Tag, Layers
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
-import { formatQuantity } from '../../utils/currencyUtils';
+import { formatQuantity, formatCurrency } from '../../utils/currencyUtils';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -27,8 +27,9 @@ const InventarioPage: React.FC = () => {
 
     const canAjustar = isAdmin || hasAction('INVENTARIO', 'AJUSTAR');
     const canModificarLimites = isAdmin || hasAction('INVENTARIO', 'LIMITES') || hasAction('INVENTARIO', 'GESTIONAR_LIMITES');
+    const canMerma = isAdmin || hasAction('INVENTARIO', 'MERMA') || hasAction('INVENTARIO', 'AJUSTAR');
     
-    const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
+    const [selectedLinea, setSelectedLinea] = useState<number | 'all'>('all');
     const [selectedMarca, setSelectedMarca] = useState<number | 'all'>('all');
     const [selectedGrupo, setSelectedGrupo] = useState<number | 'all'>('all');
     const [searchTerm, setSearchTerm] = useState('');
@@ -37,12 +38,15 @@ const InventarioPage: React.FC = () => {
     
     const [isAdjusting, setIsAdjusting] = useState(false);
     const [isEditingLimits, setIsEditingLimits] = useState(false);
+    const [isMermaOpen, setIsMermaOpen] = useState(false);
     const [limits, setLimits] = useState({ id: 0, productName: '', stockMinimo: 0, stockMaximo: 0 });
     const [adjustment, setAdjustment] = useState({ id: 0, cantidadStr: '', currentStock: 0, productName: '', observaciones: '' });
+    const [mermaData, setMermaData] = useState({ id: 0, productName: '', codigo: '', currentStock: 0, cantidadStr: '', motivo: 'Vencimiento / Caducidad', observaciones: '' });
 
     const cantidad = parseFloat(adjustment.cantidadStr) || 0;
+    const cantidadMerma = parseFloat(mermaData.cantidadStr) || 0;
 
-    const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: categoryService.getAll });
+    const { data: lineas } = useQuery({ queryKey: ['lineasList'], queryFn: lineaService.getAll });
     const { data: marcas } = useQuery({ queryKey: ['marcas'], queryFn: marcaService.getAll });
     const { data: grupos } = useQuery({ queryKey: ['grupos'], queryFn: grupoService.getAll });
     const { data: ciudades } = useQuery({ queryKey: ['ciudades'], queryFn: getCiudades });
@@ -74,12 +78,28 @@ const InventarioPage: React.FC = () => {
         onError: () => toast.error('Error al ajustar el stock')
     });
 
+    const mermaMutation = useMutation({
+        mutationFn: ({ id, cantidad, motivo, observaciones }: { id: number, cantidad: number, motivo?: string, observaciones?: string }) => 
+            inventoryService.registrarMerma(id, cantidad, motivo, observaciones),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+            queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+            setIsMermaOpen(false);
+            toast.success('Merma registrada con éxito');
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Error al registrar la merma');
+        }
+    });
+
     const exportColumns = [
         { header: 'Producto', dataKey: 'producto' },
         { header: 'Marca', dataKey: 'marca' },
         { header: 'Código', dataKey: 'codigo' },
         { header: 'Sucursal', dataKey: 'sucursal' },
         { header: 'Stock Actual', dataKey: 'stock' },
+        { header: 'Stock Mínimo', dataKey: 'stockMinimo' },
+        { header: 'Precio Venta', dataKey: 'precioVenta' },
         { header: 'Lote(s) / Vencimiento', dataKey: 'lotesInfo' },
         { header: 'Estado', dataKey: 'estado' }
     ];
@@ -132,9 +152,11 @@ const InventarioPage: React.FC = () => {
                 (inv.sucursal as any)?.id === Number(selectedSucursal) ||
                 (inv as any)?.sucursalId === Number(selectedSucursal);
 
-            const matchesCategory = selectedCategory === 'all' || 
-                inv.producto?.categoria?.id === Number(selectedCategory) ||
-                inv.producto?.categoriaId === Number(selectedCategory);
+            const matchesLinea = selectedLinea === 'all' || 
+                inv.producto?.linea?.id === Number(selectedLinea) ||
+                inv.producto?.lineaId === Number(selectedLinea) ||
+                inv.producto?.categoria?.id === Number(selectedLinea) ||
+                inv.producto?.categoriaId === Number(selectedLinea);
 
             const matchesMarca = selectedMarca === 'all' || 
                 inv.producto?.marca?.id === Number(selectedMarca) ||
@@ -145,11 +167,11 @@ const InventarioPage: React.FC = () => {
                 inv.producto?.grupo?.id === Number(selectedGrupo) ||
                 inv.producto?.grupoId === Number(selectedGrupo);
             
-            return matchesSearch && matchesCiudad && matchesSucursal && matchesCategory && matchesMarca && matchesGrupo;
+            return matchesSearch && matchesCiudad && matchesSucursal && matchesLinea && matchesMarca && matchesGrupo;
         });
         
         return filtered.sort((a, b) => (a.producto?.nombre || '').localeCompare(b.producto?.nombre || ''));
-    }, [inventory, searchTerm, selectedCiudad, selectedSucursal, selectedCategory, selectedMarca, selectedGrupo, marcas]);
+    }, [inventory, searchTerm, selectedCiudad, selectedSucursal, selectedLinea, selectedMarca, selectedGrupo, marcas]);
 
     const getFormattedData = () => {
         return filteredInventory.map(inv => {
@@ -167,6 +189,8 @@ const InventarioPage: React.FC = () => {
                 codigo: inv.producto?.codigo || '-',
                 sucursal: `${(inv.sucursal as any)?.nombre || '-'} (${(inv.sucursal as any)?.ciudad?.nombre || '-'})`,
                 stock: `${formatQuantity(inv.stockActual)} ${inv.producto?.unidadMedida || ''}`,
+                stockMinimo: formatQuantity(inv.stockMinimo || 0),
+                precioVenta: formatCurrency(inv.producto?.precioVenta || 0),
                 lotesInfo,
                 estado: Number(inv.stockActual) <= Number(inv.stockMinimo) ? 'Stock Bajo' : 'Normal'
             };
@@ -194,10 +218,10 @@ const InventarioPage: React.FC = () => {
             if (m) texts.push(`Marca: ${m.nombre}`);
         }
 
-        // Categorias
-        if (selectedCategory !== 'all') {
-            const c = categories?.find(c => c.id === selectedCategory);
-            if (c) texts.push(`Categoría: ${c.nombre}`);
+        // Lineas
+        if (selectedLinea !== 'all') {
+            const l = lineas?.find(l => l.id === selectedLinea);
+            if (l) texts.push(`Línea: ${l.nombre}`);
         }
 
         // Grupos
@@ -236,9 +260,9 @@ const InventarioPage: React.FC = () => {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedCiudad, selectedSucursal, selectedCategory, selectedMarca, selectedGrupo]);
+    }, [searchTerm, selectedCiudad, selectedSucursal, selectedLinea, selectedMarca, selectedGrupo]);
 
-    const hasActiveFilters = selectedMarca !== 'all' || selectedCategory !== 'all' || selectedGrupo !== 'all' || !!searchTerm;
+    const hasActiveFilters = selectedMarca !== 'all' || selectedLinea !== 'all' || selectedGrupo !== 'all' || !!searchTerm;
 
     return (
         <div className="space-y-6">
@@ -306,17 +330,17 @@ const InventarioPage: React.FC = () => {
                     </select>
                 </div>
 
-                {/* Filtro por Categoría */}
+                {/* Filtro por Línea */}
                 <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
                     <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
                     <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                        value={selectedLinea}
+                        onChange={(e) => setSelectedLinea(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                         className="bg-transparent border-none outline-none font-medium cursor-pointer"
                     >
-                        <option value="all" className="bg-background text-foreground">Todas las Categorías</option>
-                        {categories?.map(c => (
-                            <option key={c.id} value={c.id} className="bg-background text-foreground">{c.nombre}</option>
+                        <option value="all" className="bg-background text-foreground">Todas las Líneas</option>
+                        {lineas?.map(l => (
+                            <option key={l.id} value={l.id} className="bg-background text-foreground">{l.nombre}</option>
                         ))}
                     </select>
                 </div>
@@ -341,7 +365,7 @@ const InventarioPage: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => {
-                            setSelectedCategory('all');
+                            setSelectedLinea('all');
                             setSelectedMarca('all');
                             setSelectedGrupo('all');
                             setSearchTerm('');
@@ -367,17 +391,18 @@ const InventarioPage: React.FC = () => {
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Lotes / Vencimiento</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Stock Actual</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Stock Mínimo</th>
+                                <th className="p-4 text-sm font-semibold text-muted-foreground text-right">Precio Venta</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Estado</th>
-                                {(canAjustar || canModificarLimites) && (
-                                    <th className="p-4 text-sm font-semibold text-muted-foreground text-right w-32">Acciones</th>
+                                {(canAjustar || canModificarLimites || canMerma) && (
+                                    <th className="p-4 text-sm font-semibold text-muted-foreground text-right w-44">Acciones</th>
                                 )}
                             </tr>
                         </thead>
                         <tbody className="divide-y">
                             {isLoading ? (
-                                <tr><td colSpan={7 + (!selectedSucursal ? 1 : 0) + (canAjustar || canModificarLimites ? 1 : 0)} className="p-8 text-center text-muted-foreground animate-pulse">Cargando existencias...</td></tr>
+                                <tr><td colSpan={8 + (!selectedSucursal ? 1 : 0) + (canAjustar || canModificarLimites || canMerma ? 1 : 0)} className="p-8 text-center text-muted-foreground animate-pulse">Cargando existencias...</td></tr>
                             ) : paginatedInventory.length === 0 ? (
-                                <tr><td colSpan={7 + (!selectedSucursal ? 1 : 0) + (canAjustar || canModificarLimites ? 1 : 0)} className="p-8 text-center text-muted-foreground">No se encontraron productos en inventario.</td></tr>
+                                <tr><td colSpan={8 + (!selectedSucursal ? 1 : 0) + (canAjustar || canModificarLimites || canMerma ? 1 : 0)} className="p-8 text-center text-muted-foreground">No se encontraron productos en inventario.</td></tr>
                             ) : paginatedInventory.map((inv, index) => {
                                 const isLowStock = Number(inv.stockActual) <= Number(inv.stockMinimo);
                                 const itemLotes = (inv as any).lotes || [];
@@ -431,7 +456,7 @@ const InventarioPage: React.FC = () => {
                                                                         Lote: {lote.numeroLote || 'S/N'}
                                                                     </span>
                                                                     <span className="font-bold text-primary text-[11px]">
-                                                                        {formatQuantity(lote.cantidadActual)} {inv.producto.unidadMedida || 'u.'}
+                                                                        {formatQuantity(lote.cantidadActual)} {inv.producto?.unidadMedida || 'u.'}
                                                                     </span>
                                                                 </div>
                                                                 {hasVenc && (
@@ -461,11 +486,14 @@ const InventarioPage: React.FC = () => {
                                                 {formatQuantity(inv.stockActual)}
                                             </span>
                                             <span className="text-[10px] text-muted-foreground ml-1">
-                                                {inv.producto.unidadMedida}
+                                                {inv.producto?.unidadMedida || 'u.'}
                                             </span>
                                         </td>
                                         <td className="p-4 text-center text-sm text-muted-foreground font-medium">
                                             {formatQuantity(inv.stockMinimo || 0)}
+                                        </td>
+                                        <td className="p-4 text-right text-sm font-bold text-primary">
+                                            {formatCurrency(inv.producto?.precioVenta || 0)}
                                         </td>
                                         <td className="p-4 text-center">
                                             {isLowStock ? (
@@ -478,9 +506,29 @@ const InventarioPage: React.FC = () => {
                                                 </span>
                                             )}
                                         </td>
-                                        {(canAjustar || canModificarLimites) && (
+                                        {(canAjustar || canModificarLimites || canMerma) && (
                                             <td className="p-4 text-sm text-right">
-                                                <div className="flex justify-end gap-2">
+                                                <div className="flex justify-end gap-1.5">
+                                                    {canMerma && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setMermaData({
+                                                                    id: inv.id,
+                                                                    productName: inv.producto?.nombre || 'Producto',
+                                                                    codigo: inv.producto?.codigo || '',
+                                                                    currentStock: Number(inv.stockActual),
+                                                                    cantidadStr: '',
+                                                                    motivo: 'Vencimiento / Caducidad',
+                                                                    observaciones: ''
+                                                                });
+                                                                setIsMermaOpen(true);
+                                                            }}
+                                                            className="px-2.5 py-1.5 bg-destructive/10 text-destructive hover:bg-destructive hover:text-white rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer"
+                                                            title="Registrar Merma"
+                                                        >
+                                                            <AlertOctagon className="w-3 h-3" /> Merma
+                                                        </button>
+                                                    )}
                                                     {canAjustar && (
                                                         <button
                                                             onClick={() => {
@@ -488,12 +536,12 @@ const InventarioPage: React.FC = () => {
                                                                     id: inv.id,
                                                                     cantidadStr: '',
                                                                     currentStock: Number(inv.stockActual),
-                                                                    productName: inv.producto.nombre,
+                                                                    productName: inv.producto?.nombre || 'Producto',
                                                                     observaciones: ''
                                                                 });
                                                                 setIsAdjusting(true);
                                                             }}
-                                                            className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-bold hover:bg-primary hover:text-white transition-all inline-flex items-center gap-1.5"
+                                                            className="px-2.5 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-bold hover:bg-primary hover:text-white transition-all inline-flex items-center gap-1 cursor-pointer"
                                                         >
                                                             <Boxes className="w-3 h-3" /> Ajustar
                                                         </button>
@@ -503,13 +551,13 @@ const InventarioPage: React.FC = () => {
                                                             onClick={() => {
                                                                 setLimits({
                                                                     id: inv.id,
-                                                                    productName: inv.producto.nombre,
+                                                                    productName: inv.producto?.nombre || 'Producto',
                                                                     stockMinimo: Number(inv.stockMinimo || 0),
                                                                     stockMaximo: Number(inv.stockMaximo || 0)
                                                                 });
                                                                 setIsEditingLimits(true);
                                                             }}
-                                                            className="px-3 py-1.5 bg-secondary/10 text-secondary-foreground rounded-lg text-xs font-bold hover:bg-secondary hover:text-secondary-foreground transition-all inline-flex items-center gap-1.5"
+                                                            className="px-2.5 py-1.5 bg-secondary/10 text-secondary-foreground rounded-lg text-xs font-bold hover:bg-secondary hover:text-secondary-foreground transition-all inline-flex items-center gap-1 cursor-pointer"
                                                             title="Editar Límites"
                                                         >
                                                             <Settings2 className="w-3 h-3" /> Límites
@@ -669,6 +717,133 @@ const InventarioPage: React.FC = () => {
                             className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
                         >
                             <Check className="w-4 h-4" /> {limitsMutation.isPending ? 'Guardando...' : 'Guardar Límites'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Modal de Registro de Merma */}
+            <Modal 
+                isOpen={isMermaOpen} 
+                onClose={() => setIsMermaOpen(false)} 
+                title={
+                    <span className="flex items-center gap-2 text-destructive font-bold">
+                        <AlertOctagon className="w-6 h-6 text-destructive" />
+                        Registrar Merma de Producto
+                    </span>
+                }
+            >
+                <div className="space-y-6">
+                    <div className="p-4 bg-muted/50 rounded-xl space-y-2 border">
+                        <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Producto Seleccionado</div>
+                        <div className="text-lg font-bold">{mermaData.productName}</div>
+                        {mermaData.codigo && (
+                            <div className="text-xs font-mono text-muted-foreground">Código: {mermaData.codigo}</div>
+                        )}
+                        <div className="flex justify-between items-center pt-2 border-t mt-2">
+                            <span className="text-sm text-muted-foreground">Stock Actual Disponible:</span>
+                            <span className="text-sm font-bold text-primary">{formatQuantity(mermaData.currentStock)}</span>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-sm font-medium block mb-1">Cantidad a Mermar (Reducir)</label>
+                            <input
+                                type="number"
+                                min="1"
+                                max={mermaData.currentStock}
+                                step="any"
+                                value={mermaData.cantidadStr}
+                                onChange={(e) => setMermaData({ ...mermaData, cantidadStr: e.target.value })}
+                                className="w-full p-3.5 border rounded-xl bg-background text-lg font-bold focus:border-destructive focus:ring-2 focus:ring-destructive/20 outline-none transition-all text-center"
+                                placeholder="Ej: 5"
+                            />
+                            {cantidadMerma > mermaData.currentStock && (
+                                <p className="text-xs text-destructive font-semibold mt-1">
+                                    La cantidad no puede superar el stock actual ({mermaData.currentStock}).
+                                </p>
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="text-sm font-medium block mb-1">Motivo de la Merma</label>
+                            <select
+                                value={mermaData.motivo}
+                                onChange={(e) => setMermaData({ ...mermaData, motivo: e.target.value })}
+                                className="w-full p-2.5 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-destructive/20 focus:border-destructive"
+                            >
+                                <option value="Vencimiento / Caducidad">Vencimiento / Caducidad</option>
+                                <option value="Deterioro / Daño físico">Deterioro / Daño físico</option>
+                                <option value="Rotura / Avería">Rotura / Avería</option>
+                                <option value="Pérdida / Extravío">Pérdida / Extravío</option>
+                                <option value="Defecto de fábrica">Defecto de fábrica</option>
+                                <option value="Otro">Otro motivo</option>
+                            </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="text-sm font-medium block text-muted-foreground">Observaciones / Detalle (Opcional)</label>
+                            <textarea
+                                value={mermaData.observaciones}
+                                onChange={(e) => setMermaData({ ...mermaData, observaciones: e.target.value })}
+                                className="w-full p-3 border rounded-lg bg-background text-sm focus:border-destructive focus:ring-2 focus:ring-destructive/20 outline-none transition-all resize-none min-h-[80px]"
+                                placeholder="Explique la causa de la merma, lote afectado o detalles adicionales..."
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className={`p-3 border rounded-xl bg-background flex items-center gap-3 ${!cantidadMerma ? 'opacity-60' : ''}`}>
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                !cantidadMerma || cantidadMerma <= 0 || cantidadMerma > mermaData.currentStock
+                                    ? 'bg-muted text-muted-foreground' 
+                                    : 'bg-red-100 text-red-600 dark:bg-red-950/50'
+                            }`}>
+                                <AlertOctagon className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Nuevo Stock</span>
+                                <span className={`text-sm font-bold ${
+                                    !cantidadMerma || cantidadMerma <= 0 || cantidadMerma > mermaData.currentStock
+                                        ? 'text-foreground' 
+                                        : 'text-red-600 dark:text-red-400'
+                                }`}>
+                                    {formatQuantity(Math.max(0, Number(mermaData.currentStock) - cantidadMerma))}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="p-3 border rounded-xl bg-background flex items-center gap-3 opacity-60">
+                            <div className="w-8 h-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
+                                <History className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Tipo Movimiento</span>
+                                <span className="text-sm font-bold truncate text-destructive">Merma de Stock</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end space-x-3 pt-6 mt-6 border-t border-border/50">
+                        <button 
+                            type="button" 
+                            onClick={() => setIsMermaOpen(false)} 
+                            className="flex items-center gap-2 px-5 py-2.5 border rounded-lg text-sm font-semibold hover:bg-accent hover:scale-[1.02] active:scale-95 transition-all shadow-sm cursor-pointer"
+                        >
+                            <X className="w-4 h-4" /> Descartar
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => mermaMutation.mutate({ 
+                                id: mermaData.id, 
+                                cantidad: cantidadMerma, 
+                                motivo: mermaData.motivo, 
+                                observaciones: mermaData.observaciones 
+                            })}
+                            disabled={!cantidadMerma || cantidadMerma <= 0 || cantidadMerma > mermaData.currentStock || mermaMutation.isPending}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                        >
+                            <Check className="w-4 h-4" /> {mermaMutation.isPending ? 'Registrando...' : 'Confirmar Merma'}
                         </button>
                     </div>
                 </div>

@@ -94,12 +94,6 @@ const PagosProveedoresPage: React.FC = () => {
     const [viewingDetalleCompra, setViewingDetalleCompra] = useState<any | null>(null);
 
     // WhatsApp State & Mutations
-    const { data: whatsappBranches } = useQuery({
-        queryKey: ['whatsapp-branches-status'],
-        queryFn: () => whatsappService.getBranchesStatus(),
-        staleTime: 10000,
-    });
-
     const [whatsappModalData, setWhatsappModalData] = useState<{
         isOpen: boolean;
         pago: PagoProveedor | null;
@@ -114,6 +108,13 @@ const PagosProveedoresPage: React.FC = () => {
         phone: '',
         sucursalId: '',
         customMessage: ''
+    });
+
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 1000 * 60 * 5,
+        enabled: whatsappModalData.isOpen,
     });
 
     const sendWhatsAppMutation = useMutation({
@@ -280,11 +281,11 @@ const PagosProveedoresPage: React.FC = () => {
         { header: 'Proveedor', dataKey: 'proveedorNombre' },
         { header: 'Moneda Pago', dataKey: 'moneda' },
         { header: 'Método', dataKey: 'metodoPago' },
-        { header: 'Referencia', dataKey: 'referencia' },
+        { header: 'Nro. Recibo', dataKey: 'referencia' },
         { header: 'Total Compra', dataKey: 'totalCompraFormateado' },
         { header: 'Monto Pagado', dataKey: 'montoFormateado' },
         { header: 'Saldo Pendiente', dataKey: 'saldoFormateado' },
-        { header: 'Estado', dataKey: 'estado' }
+        { header: 'Observaciones / Glosa', dataKey: 'observaciones' }
     ];
 
     // Mutations
@@ -491,17 +492,20 @@ const PagosProveedoresPage: React.FC = () => {
             const saldoSimbolo = compraMoneda === 'USD' ? '$us' : 'Bs.';
             const saldoFormateado = p.nota ? `${saldoSimbolo} ${Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
             const totalCompraFormateado = p.nota ? `${compraMoneda === 'USD' ? '$us' : 'Bs.'} ${Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
-            const estado = !p.activo ? 'Anulado' : (Number(p.nota?.saldo) <= 0.001 ? 'Pagada' : 'Aplicado');
+            const fechaStr = p.fecha ? p.fecha.split('T')[0] : '-';
+            const observaciones = p.observaciones || p.nota?.observaciones || '-';
             return {
                 ...p,
+                fecha: fechaStr,
                 proveedorNombre: p.proveedor?.empresa
                     ? `${p.proveedor.empresa}${p.proveedor.persona ? ` (${p.proveedor.persona.nombres} ${p.proveedor.persona.apellidos})` : ''}`
                     : (p.proveedor?.persona ? `${p.proveedor.persona.nombres} ${p.proveedor.persona.apellidos}` : 'Proveedor'),
                 notaNumero: p.nota?.numero || '-',
+                referencia: p.referencia || '-',
                 totalCompraFormateado,
                 montoFormateado,
                 saldoFormateado,
-                estado
+                observaciones
             };
         });
     }, [filteredPagos]);
@@ -573,7 +577,7 @@ const PagosProveedoresPage: React.FC = () => {
             totalCompraFormateado: '',
             montoFormateado: montoStr,
             saldoFormateado: '',
-            estado: `${totals.activosCount} pagos`
+            observaciones: `${totals.activosCount} pagos`
         };
     };
 
@@ -584,11 +588,11 @@ const PagosProveedoresPage: React.FC = () => {
 
     const handlePrint = () => {
         if (!mappedExportData.length) return;
-        printData('Reporte de Pagos a Proveedores', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter());
+        printData('Reporte de Pagos a Proveedores', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter(), 'portrait');
     };
     const handleExportPDF = () => {
         if (!mappedExportData.length) return;
-        exportToPDF('Reporte de Pagos a Proveedores', getExportColumns(), mappedExportData, 'pagos_proveedores_reporte', getFiltersText(), getTotalsFooter());
+        exportToPDF('Reporte de Pagos a Proveedores', getExportColumns(), mappedExportData, 'pagos_proveedores_reporte', getFiltersText(), getTotalsFooter(), 'portrait');
     };
     const handleExportExcel = () => {
         if (!mappedExportData.length) return;
@@ -626,7 +630,6 @@ const PagosProveedoresPage: React.FC = () => {
         return filteredPagos.slice(start, start + itemsPerPage);
     }, [filteredPagos, currentPage]);
 
-    if (isLoading) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando pagos a proveedores...</div>;
 
     return (
         <div className="space-y-6">
@@ -817,7 +820,16 @@ const PagosProveedoresPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {paginatedPagos.length === 0 ? (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={13} className="p-8 text-center text-muted-foreground text-sm">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                            <span>Cargando pagos a proveedores...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : paginatedPagos.length === 0 ? (
                                 <tr>
                                     <td colSpan={13} className="p-8 text-center text-muted-foreground text-sm">
                                         No se encontraron pagos registrados.

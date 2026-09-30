@@ -1,5 +1,5 @@
 import apiClient from './apiClient';
-import type { Categoria } from './categoryService';
+import type { Linea } from './lineaService';
 
 export interface Producto {
     id: number;
@@ -11,7 +11,9 @@ export interface Producto {
     precioVenta: number;
     unidadMedida: string;
     activo: boolean;
-    categoria?: Categoria;
+    linea?: Linea;
+    lineaId?: number;
+    categoria?: Linea;
     categoriaId?: number;
     marcaId?: number;
     marca?: any;

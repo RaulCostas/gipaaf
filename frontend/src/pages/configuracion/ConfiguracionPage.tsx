@@ -4,7 +4,7 @@ import { Bookmark, Tags, Layers, Building2, MapPin, Settings } from 'lucide-reac
 
 const configModules = [
     { name: 'Marcas', path: '/marcas', icon: Bookmark, description: 'Gestionar las marcas de los productos' },
-    { name: 'Categorías', path: '/categorias', icon: Tags, description: 'Clasificar los productos en categorías' },
+    { name: 'Líneas', path: '/lineas', icon: Tags, description: 'Clasificar los productos en líneas' },
     { name: 'Grupos', path: '/grupos', icon: Layers, description: 'Organizar los productos por grupos' },
     { name: 'Sucursales', path: '/sucursales', icon: Building2, description: 'Configurar las sucursales' },
     { name: 'Ciudades', path: '/ciudades', icon: MapPin, description: 'Listado de ciudades para sucursales' },

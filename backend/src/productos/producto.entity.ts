@@ -11,7 +11,7 @@ import {
 } from 'typeorm';
 import { Marca } from '../marcas/marca.entity';
 import { Grupo } from '../grupos/grupo.entity';
-import { Categoria } from '../categorias/categoria.entity';
+import { Linea } from '../lineas/linea.entity';
 import { Inventario } from '../inventario/inventario.entity';
 
 @Entity('productos')
@@ -47,7 +47,7 @@ export class Producto {
     activo: boolean;
 
     @Column({ nullable: true })
-    categoriaId: number;
+    lineaId: number;
 
     @Column({ nullable: true })
     marcaId: number;
@@ -55,9 +55,9 @@ export class Producto {
     @Column({ nullable: true })
     grupoId: number;
 
-    @ManyToOne(() => Categoria, { eager: true })
-    @JoinColumn({ name: 'categoriaId' })
-    categoria: Categoria;
+    @ManyToOne(() => Linea, { eager: true })
+    @JoinColumn({ name: 'lineaId' })
+    linea: Linea;
 
     @ManyToOne(() => Marca, { nullable: true, eager: true })
     @JoinColumn({ name: 'marcaId' })

@@ -65,12 +65,6 @@ const CobranzasPage: React.FC = () => {
     const [anularConfirmId, setAnularConfirmId] = useState<number | null>(null);
 
     // WhatsApp State & Mutations
-    const { data: whatsappBranches } = useQuery({
-        queryKey: ['whatsapp-branches-status'],
-        queryFn: () => whatsappService.getBranchesStatus(),
-        staleTime: 10000,
-    });
-
     const [whatsappModalData, setWhatsappModalData] = useState<{
         isOpen: boolean;
         pago: PagoCobranza | null;
@@ -83,6 +77,13 @@ const CobranzasPage: React.FC = () => {
         phone: '',
         sucursalId: '',
         customMessage: ''
+    });
+
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 1000 * 60 * 5,
+        enabled: whatsappModalData.isOpen,
     });
 
     const sendWhatsAppMutation = useMutation({
@@ -482,11 +483,11 @@ const CobranzasPage: React.FC = () => {
         { header: 'Vendedor', dataKey: 'vendedorNombre' },
         { header: 'Nota de Venta', dataKey: 'notaVenta' },
         { header: 'Método', dataKey: 'metodoPago' },
-        { header: 'Referencia', dataKey: 'referencia' },
+        { header: 'Nro. Recibo', dataKey: 'referencia' },
         { header: 'Total Venta', dataKey: 'totalVentaFormateado' },
         { header: 'Monto Pagado', dataKey: 'montoFormateado' },
         { header: 'Saldo Pendiente', dataKey: 'saldoFormateado' },
-        { header: 'Estado', dataKey: 'estado' }
+        { header: 'Observaciones / Glosa', dataKey: 'observaciones' }
     ];
 
     const mappedExportData = useMemo(() => {
@@ -501,18 +502,21 @@ const CobranzasPage: React.FC = () => {
                 : (p.nota?.usuario?.persona 
                     ? `${p.nota.usuario.persona.nombres || ''} ${p.nota.usuario.persona.apellidos || ''}`.trim()
                     : (p.nota?.usuario?.username || '-'));
-            const notaVenta = p.nota?.observaciones || p.observaciones || '-';
-            const estado = !p.activo ? 'Anulado' : (Number(p.nota?.saldo) <= 0.001 ? 'Pagada' : 'Aplicado');
+            const notaVenta = p.nota?.observaciones || '-';
+            const observaciones = p.observaciones || '-';
+            const fechaStr = p.fecha ? p.fecha.split('T')[0] : '-';
             return {
                 ...p,
+                fecha: fechaStr,
                 clienteNombre: getClientDisplayName(p.cliente),
                 vendedorNombre,
                 notaVenta,
                 notaNumero: p.nota?.numero || '-',
+                referencia: p.referencia || '-',
                 totalVentaFormateado,
                 montoFormateado,
                 saldoFormateado,
-                estado
+                observaciones
             };
         });
     }, [filteredPagos]);
@@ -592,17 +596,17 @@ const CobranzasPage: React.FC = () => {
             totalVentaFormateado: '',
             montoFormateado: montoStr,
             saldoFormateado: '',
-            estado: `${totals.activosCount} cobros`
+            observaciones: `${totals.activosCount} cobros`
         };
     };
 
     const handlePrint = () => {
         if (!mappedExportData.length) return;
-        printData('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter());
+        printData('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter(), 'portrait');
     };
     const handleExportPDF = () => {
         if (!mappedExportData.length) return;
-        exportToPDF('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, 'cobranzas_clientes_reporte', getFiltersText(), getTotalsFooter());
+        exportToPDF('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, 'cobranzas_clientes_reporte', getFiltersText(), getTotalsFooter(), 'portrait');
     };
     const handleExportExcel = () => {
         if (!mappedExportData.length) return;
@@ -639,7 +643,6 @@ const CobranzasPage: React.FC = () => {
         return filteredPagos.slice(start, start + itemsPerPage);
     }, [filteredPagos, currentPage]);
 
-    if (isLoading) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando cobranzas de clientes...</div>;
 
     return (
         <div className="space-y-6">
@@ -855,7 +858,16 @@ const CobranzasPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {paginatedPagos.length === 0 ? (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={14} className="p-8 text-center text-muted-foreground text-sm">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                            <span>Cargando cobranzas de clientes...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : paginatedPagos.length === 0 ? (
                                 <tr>
                                     <td colSpan={14} className="p-8 text-center text-muted-foreground text-sm">
                                         No se encontraron cobranzas registradas.

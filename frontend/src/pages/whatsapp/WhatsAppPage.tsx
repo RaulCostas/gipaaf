@@ -12,6 +12,7 @@ import {
     Check
 } from 'lucide-react';
 import { toast } from 'sonner';
+import PhoneInput from '../../components/ui/PhoneInput';
 
 const WhatsAppPage: React.FC = () => {
     const { isAdmin, userPersonal } = useAuth();
@@ -581,12 +582,10 @@ const WhatsAppPage: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                                 <div className="md:col-span-5 space-y-1.5">
                                     <label className="text-xs font-semibold text-foreground">Número de Teléfono Destino</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ej. 72002180 o 59172002180"
+                                    <PhoneInput
                                         value={testPhone}
-                                        onChange={(e) => setTestPhone(e.target.value)}
-                                        className="w-full p-2.5 text-sm bg-background text-foreground border rounded-lg outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/90 dark:placeholder:text-zinc-400 placeholder:text-xs"
+                                        onChange={(val) => setTestPhone(val)}
+                                        placeholder="72002180"
                                     />
                                 </div>
                                 <div className="md:col-span-7 space-y-1.5">
@@ -762,7 +761,7 @@ const WhatsAppPage: React.FC = () => {
                                         </span>
                                     </div>
                                     <p className="text-xs text-muted-foreground leading-relaxed">
-                                        Genera en tiempo real un PDF con todos los productos activos registrados en el catálogo de GIPAAF con sus códigos, categorías, marcas y precios de lista vigentes.
+                                        Genera en tiempo real un PDF con todos los productos activos registrados en el catálogo de GIPAAF con sus códigos, líneas, marcas y precios de lista vigentes.
                                     </p>
                                 </div>
 

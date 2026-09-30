@@ -15,7 +15,10 @@ export class RolesService {
     create(data: Partial<Rol>) { return this.repo.save(this.repo.create(data)); }
     async update(id: number, data: Partial<Rol>) {
         const rol = await this.findOne(id);
-        Object.assign(rol, data);
+        if (data.nombre !== undefined) rol.nombre = data.nombre;
+        if (data.descripcion !== undefined) rol.descripcion = data.descripcion;
+        if (data.activo !== undefined) rol.activo = data.activo;
+        if (data.permisos !== undefined) rol.permisos = data.permisos as any;
         return this.repo.save(rol);
     }
     async remove(id: number) { const r = await this.findOne(id); return this.repo.remove(r); }

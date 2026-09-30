@@ -20,7 +20,7 @@ export class Persona {
     @Column({ length: 100 })
     apellidos: string;
 
-    @Column({ length: 20, unique: true, nullable: true })
+    @Column({ length: 20, nullable: true })
     ci: string;
 
     @Column({ length: 20, nullable: true })

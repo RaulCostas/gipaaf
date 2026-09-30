@@ -9,8 +9,8 @@ import {
     OneToMany,
 } from 'typeorm';
 
-@Entity('categorias')
-export class Categoria {
+@Entity('lineas')
+export class Linea {
     @PrimaryGeneratedColumn()
     id: number;
 
@@ -20,11 +20,11 @@ export class Categoria {
     @Column({ nullable: true })
     descripcion: string;
 
-    @ManyToOne(() => Categoria, (cat) => cat.subcategorias, { nullable: true })
-    padre: Categoria;
+    @ManyToOne(() => Linea, (lin) => lin.sublineas, { nullable: true })
+    padre: Linea;
 
-    @OneToMany(() => Categoria, (cat) => cat.padre)
-    subcategorias: Categoria[];
+    @OneToMany(() => Linea, (lin) => lin.padre)
+    sublineas: Linea[];
 
     @Column({ default: true })
     activo: boolean;

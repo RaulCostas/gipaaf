@@ -116,7 +116,7 @@ const ProformasPage: React.FC = () => {
     const getProductStock = (prodId: number) => {
         if (!inventarios) return 0;
         const targetState = newProforma;
-        let invs = inventarios.filter(i => i.producto.id === prodId);
+        let invs = inventarios.filter(i => i.producto?.id === prodId);
         if (targetState.sucursalId) {
             invs = invs.filter(i => (i.sucursal?.id === Number(targetState.sucursalId)) || ((i as any).almacen?.id === Number(targetState.sucursalId)));
         }
@@ -158,12 +158,6 @@ const ProformasPage: React.FC = () => {
     });
 
     // WhatsApp State & Mutations
-    const { data: whatsappBranches } = useQuery({
-        queryKey: ['whatsapp-branches-status'],
-        queryFn: () => whatsappService.getBranchesStatus(),
-        staleTime: 10000,
-    });
-
     const [whatsappModalData, setWhatsappModalData] = useState<{
         isOpen: boolean;
         proforma: any | null;
@@ -176,6 +170,13 @@ const ProformasPage: React.FC = () => {
         phone: '',
         sucursalId: '',
         customMessage: ''
+    });
+
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 1000 * 60 * 5,
+        enabled: whatsappModalData.isOpen,
     });
 
     const sendWhatsAppMutation = useMutation({
@@ -241,11 +242,11 @@ const ProformasPage: React.FC = () => {
             descuentoPorcentaje: Number(proforma.descuentoPorcentaje || 0),
             descuentoPromocionPorcentaje: Number(proforma.descuentoPromocionPorcentaje || 0),
             detalles: proforma.detalles?.map((d: any) => ({
-                productoId: d.producto.id,
+                productoId: d.producto?.id || d.productoId,
                 producto: d.producto,
                 cantidad: Number(d.cantidad),
                 precioUnitario: Number(d.precioUnitario),
-                
+                descuentoPorcentaje: Number(d.descuentoPorcentaje || 0),
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
@@ -268,11 +269,11 @@ const ProformasPage: React.FC = () => {
             descuentoPorcentaje: Number(proforma.descuentoPorcentaje || 0),
             descuentoPromocionPorcentaje: Number(proforma.descuentoPromocionPorcentaje || 0),
             detalles: proforma.detalles?.map((d: any) => ({
-                productoId: d.producto.id,
+                productoId: d.producto?.id || d.productoId,
                 producto: d.producto,
                 cantidad: Number(d.cantidad),
                 precioUnitario: Number(d.precioUnitario),
-                
+                descuentoPorcentaje: Number(d.descuentoPorcentaje || 0),
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
@@ -332,16 +333,27 @@ const ProformasPage: React.FC = () => {
             if (v) doc.text(`Vendedor: ${v.nombres} ${v.apellidos}`, 80, currentY);
         }
 
-        const tableColumn = ["Código", "Producto", "Cant.", "P.Unit", "Subtotal"];
+        const hasItemDiscount = newProforma.detalles.some((det: any) => Number(det.descuentoPorcentaje) > 0);
+
+        const tableColumn = hasItemDiscount
+            ? ["Código", "Producto", "Cant.", "P.Unit", "Desc. %", "Subtotal"]
+            : ["Código", "Producto", "Cant.", "P.Unit", "Subtotal"];
+
         const tableRows = newProforma.detalles.map((det: any) => {
-            return [
+            const descPct = Number(det.descuentoPorcentaje) || 0;
+            const row = [
                 det.producto?.codigo || '-',
                 det.producto?.nombre || '-',
                 det.cantidad.toString(),
-                formatCurrency(det.precioUnitario),
-                
-                formatCurrency(det.subtotal)
+                formatCurrency(det.precioUnitario)
             ];
+
+            if (hasItemDiscount) {
+                row.push(descPct > 0 ? `${descPct}%` : '0%');
+            }
+
+            row.push(formatCurrency(det.subtotal));
+            return row;
         });
 
         autoTable(doc, {
@@ -418,7 +430,6 @@ const ProformasPage: React.FC = () => {
                 cantidad: 1,
                 precioUnitario: precioVentaNum,
                 descuentoPorcentaje: 0,
-            descuentoPromocionPorcentaje: 0,
                 subtotal: precioVentaNum
             }]
         });
@@ -433,13 +444,24 @@ const ProformasPage: React.FC = () => {
     const updateDetail = (index: number, field: string, value: number) => {
         const newDetails = [...newProforma.detalles];
         const det = { ...newDetails[index], [field]: value };
-        det.subtotal = det.cantidad * det.precioUnitario;
+        const cant = Number(det.cantidad) || 0;
+        const pu = Number(det.precioUnitario) || 0;
+        const descPorc = Math.max(0, Math.min(100, Number(det.descuentoPorcentaje) || 0));
+        det.descuentoPorcentaje = descPorc;
+        const descMonto = (cant * pu * descPorc) / 100;
+        det.subtotal = Number(((cant * pu) - descMonto).toFixed(2));
         newDetails[index] = det;
         setNewProforma({ ...newProforma, detalles: newDetails });
     };
 
     const calculateTotals = () => {
-        const subtotal = newProforma.detalles.reduce((acc: number, det: any) => acc + (det.cantidad * det.precioUnitario), 0);
+        const subtotal = newProforma.detalles.reduce((acc: number, det: any) => {
+            const cant = Number(det.cantidad) || 0;
+            const pu = Number(det.precioUnitario) || 0;
+            const descPorc = Number(det.descuentoPorcentaje) || 0;
+            const itemSubtotal = (cant * pu) * (1 - descPorc / 100);
+            return acc + itemSubtotal;
+        }, 0);
         const desc1 = (subtotal * Number(newProforma.descuentoPorcentaje || 0)) / 100;
         const sub1 = subtotal - desc1;
         const desc2 = (sub1 * Number(newProforma.descuentoPromocionPorcentaje || 0)) / 100;
@@ -463,7 +485,8 @@ const ProformasPage: React.FC = () => {
             detalles: newProforma.detalles.map((d: any) => ({
                 producto: { id: d.productoId },
                 cantidad: d.cantidad,
-                precioUnitario: d.precioUnitario
+                precioUnitario: d.precioUnitario,
+                descuentoPorcentaje: Number(d.descuentoPorcentaje || 0)
             })),
             descuentoPorcentaje: newProforma.descuentoPorcentaje,
             descuentoPromocionPorcentaje: newProforma.descuentoPromocionPorcentaje
@@ -645,7 +668,6 @@ const ProformasPage: React.FC = () => {
         setSearch('');
     };
 
-    if (loadingProformas) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando proformas...</div>;
 
     return (
         <div className="space-y-6">
@@ -781,7 +803,17 @@ const ProformasPage: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y">
-                        {filteredProformas.map((s) => {
+                        {loadingProformas ? (
+                            <tr>
+                                <td colSpan={7 + (selectedVendedor === 'all' ? 1 : 0)} className="p-8 text-center text-muted-foreground">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                        <span>Cargando proformas...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : filteredProformas.length > 0 ? (
+                            filteredProformas.map((s) => {
                             const descCalc = (Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0);
                             const subTotalCalc = (Number(s.total) || 0) + descCalc;
                             const descPct = Number(s.descuentoPorcentaje) || 0;
@@ -935,15 +967,15 @@ const ProformasPage: React.FC = () => {
                                 </td>
                             </tr>
                         );
-                    })}
-                        {filteredProformas.length === 0 && (
-                            <tr>
-                                <td colSpan={7 + (selectedVendedor === 'all' ? 1 : 0)} className="p-8 text-center text-muted-foreground">
-                                    No hay proformas registradas.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
+                    })
+                ) : (
+                    <tr>
+                        <td colSpan={7 + (selectedVendedor === 'all' ? 1 : 0)} className="p-8 text-center text-muted-foreground">
+                            No hay proformas registradas.
+                        </td>
+                    </tr>
+                )}
+            </tbody>
                 </table>
             </div>
 
@@ -1054,10 +1086,10 @@ const ProformasPage: React.FC = () => {
                         </div>
                         <div className="p-4 space-y-4">
                             {!isViewing && (
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 items-center">
                                     <select
                                         id="productSelect"
-                                        className="flex-1 p-2.5 border rounded-lg bg-background text-sm outline-none"
+                                        className="flex-1 min-w-0 p-2.5 border rounded-lg bg-background text-sm text-foreground outline-none hover:border-primary/50 transition-all text-ellipsis overflow-hidden"
                                         defaultValue=""
                                     >
                                         <option value="" disabled>Seleccione un producto para agregar...</option>
@@ -1083,10 +1115,10 @@ const ProformasPage: React.FC = () => {
                                             addProductToDetail(select.value);
                                             select.value = "";
                                         }}
-                                        className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors whitespace-nowrap flex items-center gap-2"
+                                        className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer"
                                     >
-                                        <ShoppingCart className="w-4 h-4" />
-                                        Añadir al carrito
+                                        <ShoppingCart className="w-4 h-4 shrink-0" />
+                                        <span>Añadir</span>
                                     </button>
                                 </div>
                             )}
@@ -1097,7 +1129,7 @@ const ProformasPage: React.FC = () => {
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Cant.</th>
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">P.Unit</th>
-                                        
+                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Desc. %</th>
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Subtotal</th>
                                         <th className="p-3"></th>
                                     </tr>
@@ -1156,8 +1188,31 @@ const ProformasPage: React.FC = () => {
                                                         className="w-24 p-2 border rounded-lg bg-background text-center text-sm text-foreground focus:ring-2 focus:ring-primary/20 hover:border-primary/50 outline-none transition-all font-medium disabled:opacity-50 disabled:bg-muted/40"
                                                     />
                                                 </td>
+                                                <td className="p-3 text-center">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            max="100"
+                                                            step="0.5"
+                                                            placeholder="0"
+                                                            value={det.descuentoPorcentaje || ''}
+                                                            onChange={(e) => updateDetail(index, 'descuentoPorcentaje', parseFloat(e.target.value) || 0)}
+                                                            disabled={isViewing}
+                                                            className="w-16 p-2 border rounded-lg bg-background text-center text-sm text-foreground focus:ring-2 focus:ring-primary/20 hover:border-primary/50 outline-none transition-all font-medium disabled:opacity-50 disabled:bg-muted/40"
+                                                        />
+                                                        <span className="text-xs text-muted-foreground font-semibold">%</span>
+                                                    </div>
+                                                </td>
                                                 <td className={`p-3 text-center font-bold ${isExceeded ? 'text-red-600' : ''}`}>
-                                                    {formatCurrency(det.subtotal)}
+                                                    <div className="flex flex-col items-center">
+                                                        <span>{formatCurrency(det.subtotal)}</span>
+                                                        {Number(det.descuentoPorcentaje) > 0 && (
+                                                            <span className="text-[10px] font-normal text-muted-foreground line-through">
+                                                                {formatCurrency(det.cantidad * det.precioUnitario)}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="p-3 text-right">
                                                     {!isViewing && (

@@ -49,6 +49,8 @@ export const DetalleVentaModal: React.FC<DetalleVentaModalProps> = ({
             ? `${activeNota.usuario.nombres || ''} ${activeNota.usuario.apellidos || ''}`.trim() || activeNota.usuario.username || '-'
             : '-');
 
+    const hasItemDiscount = (activeNota?.detalles || []).some((d: any) => Number(d.descuentoPorcentaje) > 0);
+
     return (
         <Modal
             isOpen={isOpen}
@@ -185,13 +187,14 @@ export const DetalleVentaModal: React.FC<DetalleVentaModalProps> = ({
                                         <th className="p-3 font-semibold">Lote / Venc.</th>
                                         <th className="p-3 font-semibold text-right">Cantidad</th>
                                         <th className="p-3 font-semibold text-right">Precio Unitario</th>
+                                        {hasItemDiscount && <th className="p-3 font-semibold text-right">Desc. %</th>}
                                         <th className="p-3 font-semibold text-right">Subtotal</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
                                     {(!activeNota?.detalles || activeNota.detalles.length === 0) ? (
                                         <tr>
-                                            <td colSpan={6} className="p-6 text-center text-muted-foreground text-xs">
+                                            <td colSpan={hasItemDiscount ? 7 : 6} className="p-6 text-center text-muted-foreground text-xs">
                                                 No se encontraron productos registrados en esta venta.
                                             </td>
                                         </tr>
@@ -201,7 +204,8 @@ export const DetalleVentaModal: React.FC<DetalleVentaModalProps> = ({
                                             const prodCodigo = det.producto?.codigo || '';
                                             const cant = Number(det.cantidad) || 0;
                                             const pu = Number(det.precioUnitario) || 0;
-                                            const st = Number(det.subtotal) || (cant * pu);
+                                            const descPct = Number(det.descuentoPorcentaje) || 0;
+                                            const st = Number(det.subtotal) || (cant * pu * (1 - descPct / 100));
 
                                             return (
                                                 <tr key={det.id || idx} className="hover:bg-accent/20 transition-colors">
@@ -246,6 +250,17 @@ export const DetalleVentaModal: React.FC<DetalleVentaModalProps> = ({
                                                     </td>
                                                     <td className="p-3 text-right font-bold text-foreground">{cant}</td>
                                                     <td className="p-3 text-right text-muted-foreground">{sim} {pu.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
+                                                    {hasItemDiscount && (
+                                                        <td className="p-3 text-right">
+                                                            {descPct > 0 ? (
+                                                                <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-bold text-[11px]">
+                                                                    {descPct}%
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">-</span>
+                                                            )}
+                                                        </td>
+                                                    )}
                                                     <td className="p-3 text-right font-bold text-primary">{sim} {st.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</td>
                                                 </tr>
                                             );

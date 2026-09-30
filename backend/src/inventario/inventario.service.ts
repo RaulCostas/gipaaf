@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan, IsNull } from 'typeorm';
 import { Inventario } from './inventario.entity';
@@ -96,7 +96,7 @@ export class InventarioService implements OnModuleInit {
 
     async findAll() { 
         const inventarios = await this.repo.find({ 
-            relations: ['producto', 'producto.categoria', 'producto.marca', 'producto.grupo', 'sucursal', 'sucursal.ciudad'] 
+            relations: ['producto', 'producto.linea', 'producto.marca', 'producto.grupo', 'sucursal', 'sucursal.ciudad'] 
         }); 
 
         const lotes = await this.loteRepo.find({
@@ -108,22 +108,24 @@ export class InventarioService implements OnModuleInit {
             }
         });
 
-        return inventarios.map(inv => {
-            const itemLotes = lotes.filter(l => 
-                l.producto?.id === inv.producto?.id && 
-                (!inv.sucursal || !l.sucursal || l.sucursal.id === inv.sucursal.id)
-            );
-            return {
-                ...inv,
-                lotes: itemLotes
-            };
-        });
+        return inventarios
+            .filter(inv => inv.producto != null)
+            .map(inv => {
+                const itemLotes = lotes.filter(l => 
+                    l.producto?.id === inv.producto?.id && 
+                    (!inv.sucursal || !l.sucursal || l.sucursal.id === inv.sucursal.id)
+                );
+                return {
+                    ...inv,
+                    lotes: itemLotes
+                };
+            });
     }
 
     async findBySucursal(sucursalId: number) {
         const inventarios = await this.repo.find({ 
             where: { sucursal: { id: sucursalId } },
-            relations: ['producto', 'producto.categoria', 'producto.marca', 'producto.grupo', 'sucursal', 'sucursal.ciudad']
+            relations: ['producto', 'producto.linea', 'producto.marca', 'producto.grupo', 'sucursal', 'sucursal.ciudad']
         });
         const lotes = await this.loteRepo.find({
             where: { sucursal: { id: sucursalId }, cantidadActual: MoreThan(0) },
@@ -133,13 +135,15 @@ export class InventarioService implements OnModuleInit {
                 fechaIngreso: 'ASC' 
             }
         });
-        return inventarios.map(inv => {
-            const itemLotes = lotes.filter(l => l.producto?.id === inv.producto?.id);
-            return {
-                ...inv,
-                lotes: itemLotes
-            };
-        });
+        return inventarios
+            .filter(inv => inv.producto != null)
+            .map(inv => {
+                const itemLotes = lotes.filter(l => l.producto?.id === inv.producto?.id);
+                return {
+                    ...inv,
+                    lotes: itemLotes
+                };
+            });
     }
 
     findByAlmacen(id: number) {
@@ -149,7 +153,7 @@ export class InventarioService implements OnModuleInit {
     async findByProducto(productoId: number) {
         const inventarios = await this.repo.find({ 
             where: { producto: { id: productoId } },
-            relations: ['producto', 'producto.categoria', 'producto.marca', 'producto.grupo', 'sucursal', 'sucursal.ciudad']
+            relations: ['producto', 'producto.linea', 'producto.marca', 'producto.grupo', 'sucursal', 'sucursal.ciudad']
         });
         const lotes = await this.loteRepo.find({
             where: { producto: { id: productoId }, cantidadActual: MoreThan(0) },
@@ -185,7 +189,7 @@ export class InventarioService implements OnModuleInit {
     async findOne(id: number) {
         const inv = await this.repo.findOne({ 
             where: { id },
-            relations: ['producto', 'producto.categoria', 'producto.marca', 'producto.grupo', 'sucursal', 'sucursal.ciudad']
+            relations: ['producto', 'producto.linea', 'producto.marca', 'producto.grupo', 'sucursal', 'sucursal.ciudad']
         });
         if (!inv) throw new NotFoundException(`Inventario ${id} no encontrado`);
         const lotes = await this.loteRepo.find({
@@ -262,6 +266,52 @@ export class InventarioService implements OnModuleInit {
             tipo: 'AJUSTE',
             cantidad: cantidad,
             motivo: observaciones || 'Ajuste Manual',
+            usuario: usuarioId ? { id: usuarioId } as any : undefined
+        });
+
+        return saved;
+    }
+
+    async registrarMerma(id: number, cantidad: number, usuarioId?: number, motivo?: string, observaciones?: string) {
+        const inv = await this.findOne(id);
+        const cantMerma = Math.abs(Number(cantidad));
+        if (cantMerma <= 0) {
+            throw new BadRequestException('La cantidad de merma debe ser mayor a 0');
+        }
+
+        const stockDisponible = Number(inv.stockActual);
+        if (cantMerma > stockDisponible) {
+            throw new BadRequestException(`La cantidad de merma (${cantMerma}) supera el stock actual disponible (${stockDisponible})`);
+        }
+
+        inv.stockActual = Math.max(0, stockDisponible - cantMerma);
+        const saved = await this.repo.save(inv);
+
+        // Descontar de lotes existentes (FIFO)
+        let porDescontar = cantMerma;
+        const lotes = await this.loteRepo.find({
+            where: { producto: { id: inv.producto?.id }, sucursal: inv.sucursal ? { id: inv.sucursal.id } : undefined, cantidadActual: MoreThan(0) },
+            order: { fechaVencimiento: { direction: 'ASC', nulls: 'NULLS LAST' } as any, fechaIngreso: 'ASC' }
+        });
+        for (const l of lotes) {
+            if (porDescontar <= 0) break;
+            const disp = Number(l.cantidadActual);
+            const desc = Math.min(disp, porDescontar);
+            l.cantidadActual = disp - desc;
+            await this.loteRepo.save(l);
+            porDescontar -= desc;
+        }
+
+        const costo = Number(inv.precioCompra) || Number(inv.producto?.precioCompra) || 0;
+
+        // Registrar movimiento con tipo 'MERMA'
+        await this.movimientosService.create({
+            inventario: saved,
+            tipo: 'MERMA',
+            cantidad: -cantMerma,
+            motivo: motivo || 'Merma de Producto',
+            observaciones: observaciones || undefined,
+            costoUnitario: costo,
             usuario: usuarioId ? { id: usuarioId } as any : undefined
         });
 

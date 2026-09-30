@@ -64,12 +64,6 @@ const DevolucionesPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     // WhatsApp State & Mutations
-    const { data: whatsappBranches } = useQuery({
-        queryKey: ['whatsapp-branches-status'],
-        queryFn: () => whatsappService.getBranchesStatus(),
-        staleTime: 10000,
-    });
-
     const [whatsappModalData, setWhatsappModalData] = useState<{
         isOpen: boolean;
         devolucion: any | null;
@@ -82,6 +76,13 @@ const DevolucionesPage: React.FC = () => {
         phone: '',
         sucursalId: '',
         customMessage: ''
+    });
+
+    const { data: whatsappBranches } = useQuery({
+        queryKey: ['whatsapp-branches-status'],
+        queryFn: () => whatsappService.getBranchesStatus(),
+        staleTime: 1000 * 60 * 5,
+        enabled: whatsappModalData.isOpen,
     });
 
     const sendWhatsAppMutation = useMutation({
@@ -926,8 +927,11 @@ const DevolucionesPage: React.FC = () => {
                     <tbody className="divide-y text-xs">
                         {isLoading && (
                             <tr>
-                                <td colSpan={6 + (!selectedSucursal ? 1 : 0)} className="p-8 text-center text-muted-foreground animate-pulse">
-                                    Cargando devoluciones...
+                                <td colSpan={6 + (!selectedSucursal ? 1 : 0)} className="p-8 text-center text-muted-foreground">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                        <span>Cargando devoluciones...</span>
+                                    </div>
                                 </td>
                             </tr>
                         )}

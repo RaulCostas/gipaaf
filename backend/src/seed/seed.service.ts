@@ -13,14 +13,17 @@ const SYSTEM_PERMISSIONS = [
   { nombre: 'Ver Productos', recurso: 'PRODUCTOS', accion: 'VER', descripcion: 'Consultar catálogo de productos' },
   { nombre: 'Crear/Editar Productos', recurso: 'PRODUCTOS', accion: 'GESTIONAR', descripcion: 'Crear, modificar y actualizar precios de productos' },
   { nombre: 'Eliminar Productos', recurso: 'PRODUCTOS', accion: 'ELIMINAR', descripcion: 'Desactivar o eliminar productos' },
-  { nombre: 'Gestionar Categorías, Marcas y Grupos', recurso: 'CATALOGOS', accion: 'GESTIONAR', descripcion: 'Administrar categorías, marcas y líneas' },
+  { nombre: 'Gestionar Líneas, Marcas y Grupos', recurso: 'CATALOGOS', accion: 'GESTIONAR', descripcion: 'Administrar líneas, marcas y grupos' },
   { nombre: 'Ver Existencias (Stock)', recurso: 'INVENTARIO', accion: 'VER', descripcion: 'Consultar stock actual por sucursal' },
   { nombre: 'Ajustar Stock Manualmente', recurso: 'INVENTARIO', accion: 'AJUSTAR', descripcion: 'Realizar ajustes de inventario de entrada/salida' },
+  { nombre: 'Registrar Merma de Inventario', recurso: 'INVENTARIO', accion: 'MERMA', descripcion: 'Reducir existencias por merma, rotura o vencimiento desde inventario' },
   { nombre: 'Gestionar Límites de Stock', recurso: 'INVENTARIO', accion: 'LIMITES', descripcion: 'Configurar niveles mínimos y máximos de stock para alertas' },
   { nombre: 'Ver Traspasos entre Sucursales', recurso: 'TRASPASOS', accion: 'VER', descripcion: 'Consultar transferencias de mercadería entre sucursales' },
   { nombre: 'Crear Traspasos entre Sucursales', recurso: 'TRASPASOS', accion: 'CREAR', descripcion: 'Registrar nuevos traspasos entre sucursales con flete' },
   { nombre: 'Anular Traspasos entre Sucursales', recurso: 'TRASPASOS', accion: 'ANULAR', descripcion: 'Anular traspasos y revertir stock' },
   { nombre: 'Ver Movimientos (Historial)', recurso: 'MOVIMIENTOS', accion: 'VER', descripcion: 'Consultar movimientos y trazabilidad de inventario' },
+  { nombre: 'Ver Inventario de Mermas', recurso: 'MERMAS', accion: 'VER', descripcion: 'Consultar historial y reportes de mermas registradas' },
+  { nombre: 'Editar/Eliminar Mermas', recurso: 'MERMAS', accion: 'GESTIONAR', descripcion: 'Modificar observaciones o eliminar/revertir mermas registradas' },
 
   // Operaciones
   { nombre: 'Ver Proformas', recurso: 'PROFORMAS', accion: 'VER', descripcion: 'Consultar listado e historial de proformas' },

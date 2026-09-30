@@ -34,10 +34,11 @@ export const exportToPDF = async (
   data: any[],
   filename: string,
   subtitle?: string,
-  footer?: Record<string, string>
+  footer?: Record<string, string>,
+  orientation?: 'portrait' | 'landscape'
 ) => {
-  // Use landscape when there are 7 or more columns so text doesn't squeeze
-  const isLandscape = columns.length >= 7;
+  // Use specified orientation or fallback to landscape when there are 7 or more columns
+  const isLandscape = orientation ? orientation === 'landscape' : columns.length >= 7;
   const doc = new jsPDF({
     orientation: isLandscape ? 'landscape' : 'portrait',
     unit: 'mm',
@@ -94,8 +95,8 @@ export const exportToPDF = async (
     margin: { left: marginX, right: marginX },
     styles: {
       font: 'helvetica',
-      fontSize: isLandscape ? 8.5 : (columns.length > 5 ? 8 : 9),
-      cellPadding: isLandscape ? 2.5 : 3,
+      fontSize: !isLandscape && columns.length >= 9 ? 7.5 : (isLandscape ? 8.5 : (columns.length > 5 ? 8 : 9)),
+      cellPadding: !isLandscape && columns.length >= 9 ? 1.8 : (isLandscape ? 2.5 : 3),
       valign: 'middle',
       overflow: 'linebreak',
     },
@@ -199,8 +200,17 @@ export const exportToExcel = (columns: ExportColumn[], data: any[], filename: st
   XLSX.writeFile(workbook, `${filename}.xlsx`);
 };
 
-export const printData = (title: string, columns: ExportColumn[], data: any[], subtitle?: string, footer?: Record<string, string>) => {
+export const printData = (
+  title: string, 
+  columns: ExportColumn[], 
+  data: any[], 
+  subtitle?: string, 
+  footer?: Record<string, string>,
+  orientation?: 'portrait' | 'landscape'
+) => {
   const dateStr = format(new Date(), "dd 'de' MMMM, yyyy - HH:mm", { locale: es });
+  const isPortrait = orientation === 'portrait';
+  const pageStyle = orientation ? `size: ${orientation}; margin: 8mm;` : 'size: auto; margin: 12mm;';
 
   const isNumericCol = (key: string) => {
     const k = (key || '').toLowerCase();
@@ -217,18 +227,18 @@ export const printData = (title: string, columns: ExportColumn[], data: any[], s
       <head>
         <title>${title}</title>
         <style>
-          @page { size: auto; margin: 12mm; }
-          body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 15px; color: #1e293b; }
+          @page { ${pageStyle} }
+          body { font-family: 'Helvetica', 'Arial', sans-serif; padding: ${isPortrait && columns.length >= 9 ? '5px' : '15px'}; color: #1e293b; }
           .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: ${subtitle ? '12px' : '20px'}; border-bottom: 2px solid #cbd5e1; padding-bottom: 12px; }
           .logo { max-height: 48px; object-fit: contain; }
           .title-container { text-align: right; }
-          .report-title { font-size: 17px; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+          .report-title { font-size: ${isPortrait && columns.length >= 9 ? '15px' : '17px'}; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px; }
           .date { color: #64748b; font-size: 11px; margin: 0; }
           
           .subtitle-container { margin-bottom: 15px; font-size: 12px; color: #334155; }
           
           table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-          th, td { padding: 7px 6px; border-bottom: 1px solid #e2e8f0; font-size: 11px; }
+          th, td { padding: ${isPortrait && columns.length >= 9 ? '5px 3.5px' : '7px 6px'}; border-bottom: 1px solid #e2e8f0; font-size: ${isPortrait && columns.length >= 9 ? '9.5px' : '11px'}; }
           th { background-color: #2980b9; color: #ffffff; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           tr:nth-child(even) { background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           tfoot tr td { 

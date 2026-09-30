@@ -16,6 +16,9 @@ import { Traspaso } from '../traspasos/traspaso.entity';
 
 import { CostoImportacion } from './costo-importacion.entity';
 import { Moneda } from './nota.entity';
+import { Cliente } from '../clientes/cliente.entity';
+import { Proveedor } from '../proveedores/proveedor.entity';
+import { Personal } from '../personal/personal.entity';
 
 @Injectable()
 export class NotasService {
@@ -113,9 +116,20 @@ export class NotasService {
 
                                 let subtotalGeneral = 0;
                 const detallesConSubtotal = (data.detalles || []).map(det => {
-                    const subtotal = Number(det.cantidad) * Number(det.precioUnitario);
+                    const cant = Number(det.cantidad) || 0;
+                    const pu = Number(det.precioUnitario) || 0;
+                    const descPorc = Number(det.descuentoPorcentaje) || 0;
+                    const descMonto = Number(((cant * pu * descPorc) / 100).toFixed(2));
+                    const subtotal = Number(((cant * pu) - descMonto).toFixed(2));
                     subtotalGeneral += subtotal;
-                    return { ...det, subtotal };
+                    return {
+                        ...det,
+                        cantidad: cant,
+                        precioUnitario: pu,
+                        descuentoPorcentaje: descPorc,
+                        descuentoMonto: descMonto,
+                        subtotal
+                    };
                 });
 
                 const descPorc1 = Number(data.descuentoPorcentaje || 0);
@@ -172,130 +186,169 @@ export class NotasService {
         }
     }
 
-    async update(id: number, data: Partial<Nota> & { detalles?: Partial<DetalleNota>[] }) {
-        return this.dataSource.transaction(async (manager) => {
-            const nota = await manager.findOne(Nota, { 
-                where: { id },
-                relations: ['detalles', 'detalles.producto', 'sucursal', 'cliente', 'proveedor', 'usuario']
-            });
-            if (!nota) throw new NotFoundException(`Nota ${id} no encontrada`);
-            if (nota.estado === EstadoNota.ANULADA) throw new BadRequestException('No se pueden editar notas anuladas');
+    async update(id: number, data: any) {
+        try {
+            return await this.dataSource.transaction(async (manager) => {
+                const nota = await manager.findOne(Nota, { 
+                    where: { id },
+                    relations: ['detalles', 'detalles.producto', 'sucursal', 'cliente', 'proveedor', 'vendedor', 'usuario']
+                });
+                if (!nota) throw new NotFoundException(`Nota ${id} no encontrada`);
+                if (nota.estado === EstadoNota.ANULADA) throw new BadRequestException('No se pueden editar notas anuladas');
 
-            if (data.diasCredito !== undefined || data.fecha !== undefined) {
-                const dias = data.diasCredito !== undefined ? Number(data.diasCredito) : Number(nota.diasCredito || 0);
-                if (dias > 0) {
-                    const baseDateStr = (data.fecha || nota.fecha) ? String(data.fecha || nota.fecha).split('T')[0] : '';
-                    const baseDate = baseDateStr ? new Date(baseDateStr + 'T00:00:00') : new Date();
-                    const d = new Date(baseDate);
-                    d.setDate(d.getDate() + dias);
-                    data.fechaVencimiento = d as any;
-                } else {
-                    data.fechaVencimiento = null as any;
-                }
-            }
-
-            let targetSucursal: Sucursal | null = null;
-            if (data.sucursal?.id) {
-                targetSucursal = await manager.findOne(Sucursal, { where: { id: Number(data.sucursal.id) } });
-            } else if (nota.sucursal) {
-                targetSucursal = nota.sucursal;
-            } else {
-                targetSucursal = await manager.findOne(Sucursal, { where: { activo: true } });
-            }
-
-            if (nota.estado === EstadoNota.CONFIRMADA) {
-                if (!data.detalles) {
-                    // Si no se envían detalles, solo actualizar datos administrativos
-                    const { detalles, total, subtotal, saldo, descuento, descuentoPromocion, ...adminData } = data;
-                    Object.assign(nota, adminData);
-                    return manager.save(nota);
+                if (data.diasCredito !== undefined || data.fecha !== undefined) {
+                    const dias = data.diasCredito !== undefined ? Number(data.diasCredito) : Number(nota.diasCredito || 0);
+                    if (dias > 0) {
+                        const baseDateStr = (data.fecha || nota.fecha) ? String(data.fecha || nota.fecha).split('T')[0] : '';
+                        const baseDate = baseDateStr ? new Date(baseDateStr + 'T00:00:00') : new Date();
+                        const d = new Date(baseDate);
+                        d.setDate(d.getDate() + dias);
+                        nota.fechaVencimiento = d;
+                    } else {
+                        nota.fechaVencimiento = null as any;
+                    }
                 }
 
-                // Si se envían detalles en una nota CONFIRMADA:
-                // 1. Validar pagos/cobros ya registrados para no quedar con saldo inconsistente
+                // Resolver Sucursal
+                let targetSucursal: Sucursal | null = null;
+                const sucursalId = data.sucursal?.id || data.sucursalId || nota.sucursal?.id;
+                if (sucursalId) {
+                    targetSucursal = await manager.findOne(Sucursal, { where: { id: Number(sucursalId) } });
+                }
+                if (!targetSucursal) {
+                    targetSucursal = await manager.findOne(Sucursal, { where: { activo: true } });
+                }
+                if (targetSucursal) {
+                    nota.sucursal = targetSucursal;
+                }
+
+                // Resolver Cliente / Proveedor / Vendedor
+                if (data.cliente !== undefined) {
+                    const cliId = data.cliente?.id || data.clienteId;
+                    nota.cliente = cliId ? await manager.findOne(Cliente, { where: { id: Number(cliId) } }) as any : null;
+                }
+                if (data.proveedor !== undefined) {
+                    const provId = data.proveedor?.id || data.proveedorId;
+                    nota.proveedor = provId ? await manager.findOne(Proveedor, { where: { id: Number(provId) } }) as any : null;
+                }
+                if (data.vendedor !== undefined) {
+                    const vendId = data.vendedor?.id || data.vendedorId;
+                    nota.vendedor = vendId ? await manager.findOne(Personal, { where: { id: Number(vendId) } }) as any : null;
+                }
+
+                if (data.fecha) nota.fecha = data.fecha;
+                if (data.tipoPago !== undefined) nota.tipoPago = data.tipoPago;
+                if (data.diasCredito !== undefined) nota.diasCredito = Number(data.diasCredito || 0);
+                if (data.conFactura !== undefined) nota.conFactura = Boolean(data.conFactura);
+                if (data.numeroFactura !== undefined) nota.numeroFactura = data.numeroFactura;
+                if (data.observaciones !== undefined) nota.observaciones = data.observaciones;
+
+                if (!data.detalles || !Array.isArray(data.detalles)) {
+                    // Si no se enviaron detalles, guardar cambios administrativos
+                    return await manager.save(nota);
+                }
+
+                // Si se envían detalles:
+                // Revertir impacto si la nota estaba CONFIRMADA
                 const totalAnterior = Number(nota.total) || 0;
-                const saldoAnterior = Number(nota.saldo) !== undefined ? Number(nota.saldo) : totalAnterior;
+                const saldoAnterior = nota.saldo !== undefined && nota.saldo !== null ? Number(nota.saldo) : totalAnterior;
                 const montoPagadoOCobrado = Math.max(0, totalAnterior - saldoAnterior);
 
-                // 2. Revertir impacto de inventario y lotes anteriores
-                if (nota.tipo === TipoNota.COMPRA) {
-                    const oldLotes = await manager.find(Lote, {
-                        where: { notaIngreso: { id: nota.id } },
-                        relations: ['producto', 'sucursal']
-                    });
-
-                    for (const lote of oldLotes) {
-                        const cantUsada = Number(lote.cantidadInicial) - Number(lote.cantidadActual);
-                        if (cantUsada > 0) {
-                            throw new BadRequestException(
-                                `No se pueden modificar los productos de esta compra porque ya se vendieron o utilizaron ${cantUsada} unidades del producto "${lote.producto?.nombre}" (Lote: ${lote.numeroLote}).`
-                            );
-                        }
-                    }
-
-                    for (const lote of oldLotes) {
-                        const sucId = lote.sucursal?.id || targetSucursal?.id;
-                        if (sucId) {
-                            const inv = await manager.findOne(Inventario, {
-                                where: { producto: { id: lote.producto.id }, sucursal: { id: sucId } }
-                            });
-                            if (inv) {
-                                inv.stockActual = Math.max(0, Number(inv.stockActual) - Number(lote.cantidadActual));
-                                await manager.save(inv);
-                            }
-                        }
-                        await manager.remove(Lote, lote);
-                    }
-                } else if (nota.tipo === TipoNota.VENTA) {
-                    for (const det of nota.detalles) {
-                        const sucId = targetSucursal?.id;
-                        if (sucId) {
-                            const inv = await manager.findOne(Inventario, {
-                                where: { producto: { id: det.producto.id }, sucursal: { id: sucId } }
-                            });
-                            if (inv) {
-                                inv.stockActual = Number(inv.stockActual) + Number(det.cantidad);
-                                await manager.save(inv);
-                            }
-                        }
-
-                        const movimientos = await manager.find(MovimientoLote, {
-                            where: { detalleNota: { id: det.id } },
-                            relations: ['lote']
+                if (nota.estado === EstadoNota.CONFIRMADA) {
+                    if (nota.tipo === TipoNota.COMPRA) {
+                        const oldLotes = await manager.find(Lote, {
+                            where: { notaIngreso: { id: nota.id } },
+                            relations: ['producto', 'sucursal']
                         });
 
-                        for (const mov of movimientos) {
-                            if (mov.lote) {
-                                mov.lote.cantidadActual = Number(mov.lote.cantidadActual) + Number(mov.cantidad);
-                                await manager.save(mov.lote);
+                        for (const lote of oldLotes) {
+                            const cantUsada = Number(lote.cantidadInicial) - Number(lote.cantidadActual);
+                            if (cantUsada > 0) {
+                                throw new BadRequestException(
+                                    `No se pueden modificar los productos de esta compra porque ya se vendieron o utilizaron ${cantUsada} unidades del producto "${lote.producto?.nombre || ''}" (Lote: ${lote.numeroLote}).`
+                                );
                             }
-                            await manager.remove(MovimientoLote, mov);
+                        }
+
+                        for (const lote of oldLotes) {
+                            const sucId = lote.sucursal?.id || targetSucursal?.id;
+                            if (sucId && lote.producto?.id) {
+                                const inv = await manager.findOne(Inventario, {
+                                    where: { producto: { id: lote.producto.id }, sucursal: { id: sucId } }
+                                });
+                                if (inv) {
+                                    inv.stockActual = Math.max(0, Number(inv.stockActual) - Number(lote.cantidadActual));
+                                    await manager.save(inv);
+                                }
+                            }
+                            await manager.remove(Lote, lote);
+                        }
+                    } else if (nota.tipo === TipoNota.VENTA) {
+                        for (const det of nota.detalles || []) {
+                            const sucId = targetSucursal?.id;
+                            if (sucId && det.producto?.id) {
+                                const inv = await manager.findOne(Inventario, {
+                                    where: { producto: { id: det.producto.id }, sucursal: { id: sucId } }
+                                });
+                                if (inv) {
+                                    inv.stockActual = Number(inv.stockActual) + Number(det.cantidad);
+                                    await manager.save(inv);
+                                }
+                            }
+
+                            const movimientos = await manager.find(MovimientoLote, {
+                                where: { detalleNota: { id: det.id } },
+                                relations: ['lote']
+                            });
+
+                            for (const mov of movimientos) {
+                                if (mov.lote) {
+                                    mov.lote.cantidadActual = Number(mov.lote.cantidadActual) + Number(mov.cantidad);
+                                    await manager.save(mov.lote);
+                                }
+                                await manager.remove(MovimientoLote, mov);
+                            }
                         }
                     }
                 }
 
-                // 3. Eliminar detalles anteriores
-                await manager.delete(DetalleNota, { nota: { id } });
+                // Borrar movimientos_lote residuales antes de borrar detalles anteriores
+                for (const det of nota.detalles || []) {
+                    await manager.delete(MovimientoLote, { detalleNota: { id: det.id } });
+                }
+                // Borrar detalles anteriores de la nota
+                await manager.delete(DetalleNota, { nota: { id: nota.id } });
 
-                // 4. Calcular nuevos subtotales y crear nuevos detalles
+                // Preparar y validar nuevos detalles
                 let subtotalGeneral = 0;
-                const detallesParaCrear: any[] = [];
+                const detallesParaCrear: DetalleNota[] = [];
                 for (const det of data.detalles) {
                     const prodId = (det.producto as any)?.id || (det as any).productoId;
-                    const prod = await manager.findOne(Producto, { where: { id: prodId } });
+                    if (!prodId) continue;
+                    const prod = await manager.findOne(Producto, { where: { id: Number(prodId) } });
                     if (!prod) throw new NotFoundException(`Producto ID ${prodId} no encontrado`);
-                    
-                    const subtotal = Number(det.cantidad) * Number(det.precioUnitario);
+
+                    const cant = Number(det.cantidad) || 0;
+                    const pu = Number(det.precioUnitario) || 0;
+                    const descPorc = Number(det.descuentoPorcentaje) || 0;
+                    const descMonto = Number(((cant * pu * descPorc) / 100).toFixed(2));
+                    const subtotal = Number(((cant * pu) - descMonto).toFixed(2));
                     subtotalGeneral += subtotal;
 
                     const nuevoDet = manager.create(DetalleNota, {
                         ...det,
                         producto: prod,
-                        subtotal
+                        cantidad: cant,
+                        precioUnitario: pu,
+                        descuentoPorcentaje: descPorc,
+                        descuentoMonto: descMonto,
+                        subtotal,
+                        nota: nota
                     });
                     detallesParaCrear.push(nuevoDet);
                 }
 
+                // Calcular descuentos y totales
                 const descPorc1 = Number(data.descuentoPorcentaje !== undefined ? data.descuentoPorcentaje : (nota.descuentoPorcentaje || 0));
                 const aplicaDescFijo = data.aplicaDescuentoFijo !== undefined ? Boolean(data.aplicaDescuentoFijo) : (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) > 0 : Boolean(nota.aplicaDescuentoFijo));
                 const descPorcFijo = aplicaDescFijo ? (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) : (Number(nota.descuentoFijoPorcentaje) || 3)) : 0;
@@ -310,236 +363,201 @@ export class NotasService {
                 const descuento2 = (subtotalDespuesDescFijo * descPorc2) / 100;
                 const nuevoTotal = subtotalDespuesDescFijo - descuento2;
 
-                if (montoPagadoOCobrado > 0 && nuevoTotal < montoPagadoOCobrado) {
+                if (nota.estado === EstadoNota.CONFIRMADA && montoPagadoOCobrado > 0 && nuevoTotal < montoPagadoOCobrado) {
                     throw new BadRequestException(
                         `El nuevo total (Bs. ${nuevoTotal.toFixed(2)}) no puede ser menor a los pagos/cobros ya registrados (Bs. ${montoPagadoOCobrado.toFixed(2)}).`
                     );
                 }
 
-                const nuevoSaldo = Math.max(0, nuevoTotal - montoPagadoOCobrado);
+                const nuevoSaldo = nota.estado === EstadoNota.CONFIRMADA
+                    ? Math.max(0, nuevoTotal - montoPagadoOCobrado)
+                    : nuevoTotal;
 
-                // Guardar los nuevos detalles vinculados a la nota
+                // Guardar los nuevos detalles individualmente con nota asignada
                 const savedDetalles: DetalleNota[] = [];
                 for (const d of detallesParaCrear) {
-                    d.nota = nota;
                     savedDetalles.push(await manager.save(d));
                 }
 
-                // 5. Aplicar nuevo impacto de inventario para la nota confirmada
-                if (nota.tipo === TipoNota.COMPRA) {
-                    const costoImp = await manager.findOne(CostoImportacion, { where: { notaId: nota.id } });
-                    let factorIncremento = 1;
+                // Si la nota es CONFIRMADA, aplicar el nuevo impacto en inventario
+                if (nota.estado === EstadoNota.CONFIRMADA) {
+                    if (nota.tipo === TipoNota.COMPRA) {
+                        const costoImp = await manager.findOne(CostoImportacion, { where: { notaId: nota.id } });
+                        let factorIncremento = 1;
 
-                    if (costoImp) {
-                        const tipoCambio = Number(data.tipoCambio) || Number(costoImp.tipoCambio) || Number(nota.tipoCambio) || 6.96;
-                        let nuevoFobUsd = 0;
-                        let nuevoFobBob = 0;
-                        const moneda = data.moneda || nota.moneda;
-                        if (moneda === Moneda.USD) {
-                            nuevoFobUsd = nuevoTotal;
-                            nuevoFobBob = Number((nuevoTotal * tipoCambio).toFixed(2));
-                        } else {
-                            nuevoFobBob = nuevoTotal;
-                            nuevoFobUsd = Number((nuevoTotal / tipoCambio).toFixed(2));
-                        }
-                        const totalGastosBob = Number(costoImp.totalGastosBob) || 0;
-                        const porcentajeGastos = nuevoFobBob > 0 ? (totalGastosBob * 100) / nuevoFobBob : 0;
-                        const costoTotalBob = nuevoFobBob + totalGastosBob;
-
-                        costoImp.costoFobUsd = nuevoFobUsd;
-                        costoImp.costoFobBob = nuevoFobBob;
-                        costoImp.porcentajeGastos = porcentajeGastos;
-                        costoImp.costoTotalBob = costoTotalBob;
-                        costoImp.tipoCambio = tipoCambio;
-                        await manager.save(costoImp);
-
-                        factorIncremento = 1 + (porcentajeGastos / 100);
-                    }
-
-                    for (const det of savedDetalles) {
-                        let inv: Inventario | null = null;
-                        if (targetSucursal) {
-                            inv = await manager.findOne(Inventario, { 
-                                where: { producto: { id: det.producto.id }, sucursal: { id: targetSucursal.id } } 
-                            });
-                        }
-
-                        let precioUnitarioBob = Number(det.precioUnitario) || 0;
-                        if ((data.moneda || nota.moneda) === Moneda.USD) {
-                            const tc = Number(data.tipoCambio) || Number(nota.tipoCambio) || 6.96;
-                            precioUnitarioBob = precioUnitarioBob * tc;
-                        }
-                        const costoUnitarioFinal = Number((precioUnitarioBob * factorIncremento).toFixed(2));
-
-                        const nuevoLote = manager.create(Lote, {
-                            numeroLote: det.numeroLote || `L-${nota.numero}-${det.id}`,
-                            producto: det.producto,
-                            sucursal: targetSucursal || inv?.sucursal || undefined,
-                            cantidadInicial: det.cantidad,
-                            cantidadActual: det.cantidad,
-                            costoUnitario: costoUnitarioFinal,
-                            fechaIngreso: new Date(),
-                            fechaVencimiento: det.fechaVencimiento,
-                            notaIngreso: nota
-                        });
-                        await manager.save(nuevoLote);
-
-                        if (inv) {
-                            inv.stockActual = Number(inv.stockActual) + Number(det.cantidad);
-                            inv.precioCompra = costoUnitarioFinal;
-                            await manager.save(inv);
-                        } else if (targetSucursal) {
-                            const nuevoInv = manager.create(Inventario, {
-                                producto: det.producto,
-                                sucursal: targetSucursal,
-                                stockActual: Number(det.cantidad),
-                                stockMinimo: 0,
-                                stockMaximo: 0,
-                                precioCompra: costoUnitarioFinal,
-                                precioVenta: Number(det.producto?.precioVenta) || 0
-                            });
-                            await manager.save(nuevoInv);
-                        }
-
-                        if (det.producto?.id) {
-                            await manager.update(Producto, det.producto.id, {
-                                precioCompra: costoUnitarioFinal,
-                                fechaUltimaCompra: data.fecha || nota.fecha || new Date()
-                            });
-                        }
-                    }
-                } else if (nota.tipo === TipoNota.VENTA) {
-                    for (const det of savedDetalles) {
-                        let inv: Inventario | null = null;
-                        if (targetSucursal) {
-                            inv = await manager.findOne(Inventario, { 
-                                where: { producto: { id: det.producto.id }, sucursal: { id: targetSucursal.id } } 
-                            });
-                        }
-
-                        if (inv && Number(inv.stockActual) < Number(det.cantidad)) {
-                            throw new BadRequestException(`Stock insuficiente para ${det.producto.nombre} en la sucursal seleccionada`);
-                        }
-
-                        const lotesWhere: any = { producto: { id: det.producto.id } };
-                        if (targetSucursal) lotesWhere.sucursal = { id: targetSucursal.id };
-
-                        const lotes = await manager.find(Lote, {
-                            where: lotesWhere,
-                            order: { 
-                                fechaVencimiento: { direction: 'ASC', nulls: 'NULLS LAST' } as any,
-                                fechaIngreso: 'ASC' 
+                        if (costoImp) {
+                            const tipoCambio = Number(data.tipoCambio) || Number(costoImp.tipoCambio) || Number(nota.tipoCambio) || 6.96;
+                            let nuevoFobUsd = 0;
+                            let nuevoFobBob = 0;
+                            const moneda = data.moneda || nota.moneda;
+                            if (moneda === Moneda.USD) {
+                                nuevoFobUsd = nuevoTotal;
+                                nuevoFobBob = Number((nuevoTotal * tipoCambio).toFixed(2));
+                            } else {
+                                nuevoFobBob = nuevoTotal;
+                                nuevoFobUsd = Number((nuevoTotal / tipoCambio).toFixed(2));
                             }
-                        });
+                            const totalGastosBob = Number(costoImp.totalGastosBob) || 0;
+                            const porcentajeGastos = nuevoFobBob > 0 ? (totalGastosBob * 100) / nuevoFobBob : 0;
+                            const costoTotalBob = nuevoFobBob + totalGastosBob;
 
-                        let cantidadPorDescontar = Number(det.cantidad);
-                        for (const lote of lotes) {
-                            if (cantidadPorDescontar <= 0) break;
-                            const cantDisponible = Number(lote.cantidadActual);
-                            if (cantDisponible > 0) {
-                                const cantidadADescontar = Math.min(cantDisponible, cantidadPorDescontar);
-                                lote.cantidadActual = cantDisponible - cantidadADescontar;
-                                await manager.save(lote);
+                            costoImp.costoFobUsd = nuevoFobUsd;
+                            costoImp.costoFobBob = nuevoFobBob;
+                            costoImp.porcentajeGastos = porcentajeGastos;
+                            costoImp.costoTotalBob = costoTotalBob;
+                            costoImp.tipoCambio = tipoCambio;
+                            await manager.save(costoImp);
 
-                                const movLote = manager.create(MovimientoLote, {
-                                    lote: lote,
-                                    detalleNota: det,
-                                    cantidad: cantidadADescontar
+                            factorIncremento = 1 + (porcentajeGastos / 100);
+                        }
+
+                        for (const det of savedDetalles) {
+                            let inv: Inventario | null = null;
+                            if (targetSucursal && det.producto?.id) {
+                                inv = await manager.findOne(Inventario, { 
+                                    where: { producto: { id: det.producto.id }, sucursal: { id: targetSucursal.id } } 
                                 });
-                                await manager.save(movLote);
-
-                                cantidadPorDescontar -= cantidadADescontar;
                             }
-                        }
 
-                        if (cantidadPorDescontar > 0) {
-                            // Si hay stock en inventario pero faltaban lotes registrados, auto-crear lote para respaldar la venta
-                            const costoRef = Number(inv?.precioCompra) || Number(det.producto?.precioCompra) || 0;
-                            const autoLote = manager.create(Lote, {
-                                numeroLote: `L-STOCK-${det.producto.codigo || det.producto.id}`,
+                            let precioUnitarioBob = Number(det.precioUnitario) || 0;
+                            if ((data.moneda || nota.moneda) === Moneda.USD) {
+                                const tc = Number(data.tipoCambio) || Number(nota.tipoCambio) || 6.96;
+                                precioUnitarioBob = precioUnitarioBob * tc;
+                            }
+                            const costoUnitarioFinal = Number((precioUnitarioBob * factorIncremento).toFixed(2));
+
+                            const nuevoLote = manager.create(Lote, {
+                                numeroLote: det.numeroLote || `L-${nota.numero}-${det.id}`,
                                 producto: det.producto,
                                 sucursal: targetSucursal || inv?.sucursal || undefined,
-                                cantidadInicial: cantidadPorDescontar,
-                                cantidadActual: 0,
-                                costoUnitario: costoRef,
-                                fechaIngreso: new Date()
+                                cantidadInicial: det.cantidad,
+                                cantidadActual: det.cantidad,
+                                costoUnitario: costoUnitarioFinal,
+                                fechaIngreso: new Date(),
+                                fechaVencimiento: det.fechaVencimiento,
+                                notaIngreso: nota
                             });
-                            const savedAutoLote = await manager.save(autoLote);
+                            await manager.save(nuevoLote);
 
-                            const movLote = manager.create(MovimientoLote, {
-                                lote: savedAutoLote,
-                                detalleNota: det,
-                                cantidad: cantidadPorDescontar
-                            });
-                            await manager.save(movLote);
-                            cantidadPorDescontar = 0;
+                            if (inv) {
+                                inv.stockActual = Number(inv.stockActual) + Number(det.cantidad);
+                                if (det.precioUnitario) {
+                                    inv.precioCompra = costoUnitarioFinal;
+                                }
+                                await manager.save(inv);
+                            } else if (targetSucursal && det.producto) {
+                                const nuevoInv = manager.create(Inventario, {
+                                    producto: det.producto,
+                                    sucursal: targetSucursal,
+                                    stockActual: Number(det.cantidad),
+                                    stockMinimo: 0,
+                                    stockMaximo: 0,
+                                    precioCompra: costoUnitarioFinal,
+                                    precioVenta: Number(det.producto.precioVenta) || 0
+                                });
+                                await manager.save(nuevoInv);
+                            }
+
+                            if (det.producto?.id) {
+                                await manager.update(Producto, det.producto.id, {
+                                    precioCompra: costoUnitarioFinal,
+                                    fechaUltimaCompra: data.fecha || nota.fecha || new Date()
+                                });
+                            }
                         }
+                    } else if (nota.tipo === TipoNota.VENTA) {
+                        for (const det of savedDetalles) {
+                            let inv: Inventario | null = null;
+                            if (targetSucursal && det.producto?.id) {
+                                inv = await manager.findOne(Inventario, { 
+                                    where: { producto: { id: det.producto.id }, sucursal: { id: targetSucursal.id } } 
+                                });
+                            }
 
-                        if (inv) {
-                            inv.stockActual = Number(inv.stockActual) - Number(det.cantidad);
-                            await manager.save(inv);
+                            if (inv && Number(inv.stockActual) < Number(det.cantidad)) {
+                                throw new BadRequestException(`Stock insuficiente para ${det.producto?.nombre || 'el producto'} en la sucursal seleccionada`);
+                            }
+
+                            const lotesWhere: any = { producto: { id: det.producto.id } };
+                            if (targetSucursal) lotesWhere.sucursal = { id: targetSucursal.id };
+
+                            const lotes = await manager.find(Lote, {
+                                where: lotesWhere,
+                                order: { 
+                                    fechaVencimiento: { direction: 'ASC', nulls: 'NULLS LAST' } as any,
+                                    fechaIngreso: 'ASC' 
+                                }
+                            });
+
+                            let cantidadPorDescontar = Number(det.cantidad);
+                            for (const lote of lotes) {
+                                if (cantidadPorDescontar <= 0) break;
+                                const cantDisponible = Number(lote.cantidadActual);
+                                if (cantDisponible > 0) {
+                                    const cantidadADescontar = Math.min(cantDisponible, cantidadPorDescontar);
+                                    lote.cantidadActual = cantDisponible - cantidadADescontar;
+                                    await manager.save(lote);
+
+                                    const movLote = manager.create(MovimientoLote, {
+                                        lote: lote,
+                                        detalleNota: det,
+                                        cantidad: cantidadADescontar
+                                    });
+                                    await manager.save(movLote);
+
+                                    cantidadPorDescontar -= cantidadADescontar;
+                                }
+                            }
+
+                            if (cantidadPorDescontar > 0) {
+                                const costoRef = Number(inv?.precioCompra) || Number(det.producto?.precioCompra) || 0;
+                                const autoLote = manager.create(Lote, {
+                                    numeroLote: `L-STOCK-${det.producto.codigo || det.producto.id}`,
+                                    producto: det.producto,
+                                    sucursal: targetSucursal || inv?.sucursal || undefined,
+                                    cantidadInicial: cantidadPorDescontar,
+                                    cantidadActual: 0,
+                                    costoUnitario: costoRef,
+                                    fechaIngreso: new Date()
+                                });
+                                const savedAutoLote = await manager.save(autoLote);
+
+                                const movLote = manager.create(MovimientoLote, {
+                                    lote: savedAutoLote,
+                                    detalleNota: det,
+                                    cantidad: cantidadPorDescontar
+                                });
+                                await manager.save(movLote);
+                                cantidadPorDescontar = 0;
+                            }
+
+                            if (inv) {
+                                inv.stockActual = Number(inv.stockActual) - Number(det.cantidad);
+                                await manager.save(inv);
+                            }
                         }
                     }
                 }
 
-                data.detalles = savedDetalles as any;
-                data.subtotal = subtotalGeneral;
-                data.total = nuevoTotal;
-                data.saldo = nuevoSaldo;
-                data.descuento = descuento1;
-                data.descuentoFijo = descuentoFijo;
-                data.descuentoFijoPorcentaje = descPorcFijo;
-                data.aplicaDescuentoFijo = aplicaDescFijo;
-                data.descuentoPromocion = descuento2;
-                data.descuentoPorcentaje = descPorc1;
-                data.descuentoPromocionPorcentaje = descPorc2;
+                // Actualizar cabecera de la nota
+                nota.detalles = savedDetalles;
+                nota.subtotal = subtotalGeneral;
+                nota.total = nuevoTotal;
+                nota.saldo = nuevoSaldo;
+                nota.descuento = descuento1;
+                nota.descuentoFijo = descuentoFijo;
+                nota.descuentoFijoPorcentaje = descPorcFijo;
+                nota.aplicaDescuentoFijo = aplicaDescFijo;
+                nota.descuentoPromocion = descuento2;
+                nota.descuentoPorcentaje = descPorc1;
+                nota.descuentoPromocionPorcentaje = descPorc2;
 
-                Object.assign(nota, data);
-                return manager.save(nota);
-            }
-
-            // Para notas PENDIENTES:
-            if (data.detalles) {
-                await manager.delete(DetalleNota, { nota: { id } });
-
-                let subtotalGeneral = 0;
-                const detallesConSubtotal = data.detalles.map(det => {
-                    const subtotal = Number(det.cantidad) * Number(det.precioUnitario);
-                    subtotalGeneral += subtotal;
-                    return manager.create(DetalleNota, { ...det, subtotal });
-                });
-
-                const descPorc1 = Number(data.descuentoPorcentaje !== undefined ? data.descuentoPorcentaje : (nota.descuentoPorcentaje || 0));
-                const aplicaDescFijo = data.aplicaDescuentoFijo !== undefined ? Boolean(data.aplicaDescuentoFijo) : (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) > 0 : Boolean(nota.aplicaDescuentoFijo));
-                const descPorcFijo = aplicaDescFijo ? (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) : (Number(nota.descuentoFijoPorcentaje) || 3)) : 0;
-                const descPorc2 = Number(data.descuentoPromocionPorcentaje !== undefined ? data.descuentoPromocionPorcentaje : (nota.descuentoPromocionPorcentaje || 0));
-                
-                const descuento1 = (subtotalGeneral * descPorc1) / 100;
-                const subtotalDespuesDesc1 = subtotalGeneral - descuento1;
-                
-                const descuentoFijo = (subtotalDespuesDesc1 * descPorcFijo) / 100;
-                const subtotalDespuesDescFijo = subtotalDespuesDesc1 - descuentoFijo;
-                
-                const descuento2 = (subtotalDespuesDescFijo * descPorc2) / 100;
-                
-                const total = subtotalDespuesDescFijo - descuento2;
-
-                data.detalles = detallesConSubtotal as any;
-                data.subtotal = subtotalGeneral;
-                data.total = total;
-                data.saldo = total;
-                data.descuento = descuento1;
-                data.descuentoFijo = descuentoFijo;
-                data.descuentoFijoPorcentaje = descPorcFijo;
-                data.aplicaDescuentoFijo = aplicaDescFijo;
-                data.descuentoPromocion = descuento2;
-                data.descuentoPorcentaje = descPorc1;
-                data.descuentoPromocionPorcentaje = descPorc2;
-            }
-
-            Object.assign(nota, data);
-            return manager.save(nota);
-        });
+                return await manager.save(nota);
+            });
+        } catch (error) {
+            console.error('ERROR UPDATING NOTA:', error);
+            throw error;
+        }
     }
 
     async confirmar(id: number) {
@@ -1105,6 +1123,8 @@ export class NotasService {
                     producto: d.producto,
                     cantidad: d.cantidad,
                     precioUnitario: d.precioUnitario,
+                    descuentoPorcentaje: d.descuentoPorcentaje || 0,
+                    descuentoMonto: d.descuentoMonto || 0,
                     subtotal: d.subtotal,
                     numeroLote: d.numeroLote || undefined,
                     fechaVencimiento: d.fechaVencimiento || undefined,
