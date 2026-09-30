@@ -334,12 +334,14 @@ export const printData = (
 
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
+  iframe.style.top = '0';
+  iframe.style.left = '0';
+  iframe.style.width = isPortrait ? '210mm' : '297mm';
+  iframe.style.height = isPortrait ? '297mm' : '210mm';
   iframe.style.border = '0';
-  iframe.style.visibility = 'hidden';
+  iframe.style.zIndex = '-9999';
+  iframe.style.opacity = '0';
+  iframe.style.pointerEvents = 'none';
   document.body.appendChild(iframe);
 
   const doc = iframe.contentWindow?.document || iframe.contentDocument;
@@ -361,9 +363,9 @@ export const printData = (
     } finally {
       setTimeout(() => {
         iframe.remove();
-      }, 1000);
+      }, 1500);
     }
-  }, 350);
+  }, 400);
 };
 
 export interface GroupedExportSection {
@@ -553,12 +555,14 @@ export const printGroupedData = (
 
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
+  iframe.style.top = '0';
+  iframe.style.left = '0';
+  iframe.style.width = '297mm';
+  iframe.style.height = '210mm';
   iframe.style.border = '0';
-  iframe.style.visibility = 'hidden';
+  iframe.style.zIndex = '-9999';
+  iframe.style.opacity = '0';
+  iframe.style.pointerEvents = 'none';
   document.body.appendChild(iframe);
 
   const doc = iframe.contentWindow?.document || iframe.contentDocument;
@@ -580,9 +584,9 @@ export const printGroupedData = (
     } finally {
       setTimeout(() => {
         iframe.remove();
-      }, 1000);
+      }, 1500);
     }
-  }, 350);
+  }, 400);
 };
 
 export const exportGroupedToPDF = async (
