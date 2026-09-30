@@ -34,7 +34,7 @@ export const exportToPDF = async (
   data: any[],
   filename: string,
   subtitle?: string,
-  footer?: Record<string, string>,
+  footer?: Record<string, string> | Array<Record<string, string>>,
   orientation?: 'portrait' | 'landscape'
 ) => {
   // Use specified orientation or fallback to landscape when there are 7 or more columns
@@ -86,11 +86,14 @@ export const exportToPDF = async (
     });
   });
 
+  const footArray = footer ? (Array.isArray(footer) ? footer : [footer]) : [];
+  const footData = footArray.length > 0 ? footArray.map(f => columns.map(c => f[c.dataKey] ?? '')) : undefined;
+
   autoTable(doc, {
     head: [columns.map(c => c.header)],
     body: tableData,
-    foot: footer ? [columns.map(c => footer[c.dataKey] ?? '')] : undefined,
-    showFoot: footer ? 'lastPage' : 'never',
+    foot: footData,
+    showFoot: footData ? 'lastPage' : 'never',
     startY: tableStartY,
     margin: { left: marginX, right: marginX },
     styles: {
@@ -170,7 +173,12 @@ export const exportToPDF = async (
   doc.save(`${filename}.pdf`);
 };
 
-export const exportToExcel = (columns: ExportColumn[], data: any[], filename: string, footer?: Record<string, string>) => {
+export const exportToExcel = (
+  columns: ExportColumn[], 
+  data: any[], 
+  filename: string, 
+  footer?: Record<string, string> | Array<Record<string, string>>
+) => {
   const mappedData = data.map(row => {
     const newRow: any = {};
     columns.forEach(col => {
@@ -182,11 +190,14 @@ export const exportToExcel = (columns: ExportColumn[], data: any[], filename: st
   });
 
   if (footer) {
-    const footerRow: any = {};
-    columns.forEach(col => {
-      footerRow[col.header] = footer[col.dataKey] ?? '';
+    const footArray = Array.isArray(footer) ? footer : [footer];
+    footArray.forEach(f => {
+      const footerRow: any = {};
+      columns.forEach(col => {
+        footerRow[col.header] = f[col.dataKey] ?? '';
+      });
+      mappedData.push(footerRow);
     });
-    mappedData.push(footerRow);
   }
 
   const worksheet = XLSX.utils.json_to_sheet(mappedData);
@@ -205,7 +216,7 @@ export const printData = (
   columns: ExportColumn[], 
   data: any[], 
   subtitle?: string, 
-  footer?: Record<string, string>,
+  footer?: Record<string, string> | Array<Record<string, string>>,
   orientation?: 'portrait' | 'landscape'
 ) => {
   const dateStr = format(new Date(), "dd 'de' MMMM, yyyy - HH:mm", { locale: es });
@@ -263,7 +274,7 @@ export const printData = (
           
           table { width: 100%; border-collapse: collapse; margin-top: 4px; table-layout: auto; }
           th, td { padding: ${thPadding}; border-bottom: 1px solid #e2e8f0; font-size: ${thFontSize}; word-break: break-word; line-height: 1.25; }
-          th { background-color: #2980b9 !important; color: #ffffff !important; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          th { background-color: #2980b9 !important; color: #ffffff !important; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; white-space: nowrap; }
           tr:nth-child(even) { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           tfoot tr td { 
             background-color: #f1f5f9 !important; 
@@ -311,20 +322,24 @@ export const printData = (
                     val = val ? 'Activo' : 'Inactivo';
                   }
                   const align = isNumericCol(col.dataKey) ? 'right' : (isCenterCol(col.dataKey) ? 'center' : 'left');
-                  return `<td style="text-align: ${align};">${val ?? '-'}</td>`;
+                  const nowrap = isNumericCol(col.dataKey) || col.dataKey.toLowerCase().includes('fecha') || col.dataKey.toLowerCase().includes('metodo') ? 'white-space: nowrap;' : '';
+                  return `<td style="text-align: ${align}; ${nowrap}">${val ?? '-'}</td>`;
                 }).join('')}
               </tr>
             `).join('')}
           </tbody>
           ${footer ? `
           <tfoot>
-            <tr>
-              ${columns.map(c => {
-                const align = isNumericCol(c.dataKey) ? 'right' : (isCenterCol(c.dataKey) ? 'center' : 'left');
-                const val = footer[c.dataKey] ?? '';
-                return `<td style="text-align: ${align}; font-weight: bold;">${val}</td>`;
-              }).join('')}
-            </tr>
+            ${(Array.isArray(footer) ? footer : [footer]).map(fRow => `
+              <tr>
+                ${columns.map(c => {
+                  const align = isNumericCol(c.dataKey) ? 'right' : (isCenterCol(c.dataKey) ? 'center' : 'left');
+                  const val = fRow[c.dataKey] ?? '';
+                  const nowrap = isNumericCol(c.dataKey) ? 'white-space: nowrap;' : '';
+                  return `<td style="text-align: ${align}; font-weight: bold; ${nowrap}">${val}</td>`;
+                }).join('')}
+              </tr>
+            `).join('')}
           </tfoot>
           ` : ''}
         </table>

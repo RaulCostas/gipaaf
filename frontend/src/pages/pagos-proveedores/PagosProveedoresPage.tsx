@@ -492,7 +492,7 @@ const PagosProveedoresPage: React.FC = () => {
             const saldoSimbolo = compraMoneda === 'USD' ? '$us' : 'Bs.';
             const saldoFormateado = p.nota ? `${saldoSimbolo} ${Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
             const totalCompraFormateado = p.nota ? `${compraMoneda === 'USD' ? '$us' : 'Bs.'} ${Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
-            const fechaStr = p.fecha ? p.fecha.split('T')[0] : '-';
+            const fechaStr = p.fecha ? p.fecha.split('T')[0].split('-').reverse().join('/') : '-';
             const observaciones = p.observaciones || p.nota?.observaciones || '-';
             return {
                 ...p,
@@ -547,38 +547,66 @@ const PagosProveedoresPage: React.FC = () => {
     const getTotalsFooter = () => {
         let totalPagadoBOB = 0;
         let totalPagadoUSD = 0;
+        let totalCompraBOB = 0;
+        let totalCompraUSD = 0;
+        let totalSaldoBOB = 0;
+        let totalSaldoUSD = 0;
 
         filteredPagos.forEach(p => {
             if (!p.activo) return;
             const monto = Number(p.monto) || 0;
+            const totalCompra = Number(p.nota?.total) || 0;
+            const saldo = Number(p.nota?.saldo) || 0;
+            const notaMoneda = p.nota?.moneda || p.moneda || 'BOB';
+
             if (p.moneda === 'USD') {
                 totalPagadoUSD += monto;
             } else {
                 totalPagadoBOB += monto;
             }
+
+            if (notaMoneda === 'USD') {
+                totalCompraUSD += totalCompra;
+                totalSaldoUSD += saldo;
+            } else {
+                totalCompraBOB += totalCompra;
+                totalSaldoBOB += saldo;
+            }
         });
 
-        let montoStr = '';
-        if (totalPagadoBOB > 0 && totalPagadoUSD > 0) {
-            montoStr = `Bs. ${totalPagadoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | $us ${totalPagadoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        } else if (totalPagadoUSD > 0) {
-            montoStr = `$us ${totalPagadoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        } else {
-            montoStr = `Bs. ${totalPagadoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const rows: any[] = [];
+
+        if (totalPagadoBOB > 0 || totalCompraBOB > 0 || (totalPagadoUSD === 0 && totalCompraUSD === 0)) {
+            rows.push({
+                fecha: (totalPagadoUSD > 0 || totalCompraUSD > 0) ? 'TOTALES (Bs.)' : 'TOTALES',
+                notaNumero: '',
+                proveedorNombre: '',
+                moneda: '',
+                metodoPago: '',
+                referencia: '',
+                totalCompraFormateado: `Bs. ${totalCompraBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                montoFormateado: `Bs. ${totalPagadoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                saldoFormateado: `Bs. ${totalSaldoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                observaciones: ''
+            });
         }
 
-        return {
-            fecha: 'TOTALES',
-            notaNumero: '',
-            proveedorNombre: '',
-            moneda: '',
-            metodoPago: '',
-            referencia: '',
-            totalCompraFormateado: '',
-            montoFormateado: montoStr,
-            saldoFormateado: '',
-            observaciones: `${totals.activosCount} pagos`
-        };
+        if (totalPagadoUSD > 0 || totalCompraUSD > 0) {
+            rows.push({
+                fecha: (totalPagadoBOB > 0 || totalCompraBOB > 0) ? 'TOTALES ($us)' : 'TOTALES',
+                notaNumero: '',
+                proveedorNombre: '',
+                moneda: '',
+                metodoPago: '',
+                referencia: '',
+                totalCompraFormateado: `$us ${totalCompraUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                montoFormateado: `$us ${totalPagadoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                saldoFormateado: `$us ${totalSaldoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                observaciones: ''
+            });
+        }
+
+        return rows.length === 1 ? rows[0] : rows;
     };
 
     const getExportColumns = () => {
