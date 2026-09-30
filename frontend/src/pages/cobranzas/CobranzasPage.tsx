@@ -602,11 +602,11 @@ const CobranzasPage: React.FC = () => {
 
     const handlePrint = () => {
         if (!mappedExportData.length) return;
-        printData('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter(), 'portrait');
+        printData('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter(), 'landscape');
     };
     const handleExportPDF = () => {
         if (!mappedExportData.length) return;
-        exportToPDF('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, 'cobranzas_clientes_reporte', getFiltersText(), getTotalsFooter(), 'portrait');
+        exportToPDF('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, 'cobranzas_clientes_reporte', getFiltersText(), getTotalsFooter(), 'landscape');
     };
     const handleExportExcel = () => {
         if (!mappedExportData.length) return;

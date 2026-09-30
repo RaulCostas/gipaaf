@@ -588,11 +588,11 @@ const PagosProveedoresPage: React.FC = () => {
 
     const handlePrint = () => {
         if (!mappedExportData.length) return;
-        printData('Reporte de Pagos a Proveedores', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter(), 'portrait');
+        printData('Reporte de Pagos a Proveedores', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter(), 'landscape');
     };
     const handleExportPDF = () => {
         if (!mappedExportData.length) return;
-        exportToPDF('Reporte de Pagos a Proveedores', getExportColumns(), mappedExportData, 'pagos_proveedores_reporte', getFiltersText(), getTotalsFooter(), 'portrait');
+        exportToPDF('Reporte de Pagos a Proveedores', getExportColumns(), mappedExportData, 'pagos_proveedores_reporte', getFiltersText(), getTotalsFooter(), 'landscape');
     };
     const handleExportExcel = () => {
         if (!mappedExportData.length) return;
