@@ -2049,13 +2049,13 @@ const ReportesPage: React.FC = () => {
             printData('Reporte de Ventas Realizadas', getExportColumnsVentas(), mappedExportDataVentas, getFiltersTextVentas());
         } else if (activeTab === 'cobranzas') {
             if (!mappedExportDataCobranzas.length) return;
-            printData('Reporte de Cobranzas / Pagos de Clientes', getExportColumnsCobranzas(), mappedExportDataCobranzas, getFiltersTextCobranzas());
+            printData('Reporte de Cobranzas / Pagos de Clientes', getExportColumnsCobranzas(), mappedExportDataCobranzas, getFiltersTextCobranzas(), undefined, 'portrait');
         } else if (activeTab === 'compras') {
             if (!mappedExportDataCompras.length) return;
             printData('Reporte de Compras Realizadas', getExportColumnsCompras(), mappedExportDataCompras, getFiltersTextCompras());
         } else if (activeTab === 'pagos-proveedores') {
             if (!mappedExportDataPagosProveedores.length) return;
-            printData('Reporte de Pagos a Proveedores', getExportColumnsPagosProveedores(), mappedExportDataPagosProveedores, getFiltersTextPagosProveedores());
+            printData('Reporte de Pagos a Proveedores', getExportColumnsPagosProveedores(), mappedExportDataPagosProveedores, getFiltersTextPagosProveedores(), undefined, 'portrait');
         }
     };
 
@@ -2072,13 +2072,13 @@ const ReportesPage: React.FC = () => {
             exportToPDF('Reporte de Ventas Realizadas', getExportColumnsVentas(), mappedExportDataVentas, 'ventas_reporte', getFiltersTextVentas());
         } else if (activeTab === 'cobranzas') {
             if (!mappedExportDataCobranzas.length) return;
-            exportToPDF('Reporte de Cobranzas / Pagos de Clientes', getExportColumnsCobranzas(), mappedExportDataCobranzas, 'cobranzas_reporte', getFiltersTextCobranzas());
+            exportToPDF('Reporte de Cobranzas / Pagos de Clientes', getExportColumnsCobranzas(), mappedExportDataCobranzas, 'cobranzas_reporte', getFiltersTextCobranzas(), undefined, 'portrait');
         } else if (activeTab === 'compras') {
             if (!mappedExportDataCompras.length) return;
             exportToPDF('Reporte de Compras Realizadas', getExportColumnsCompras(), mappedExportDataCompras, 'compras_reporte', getFiltersTextCompras());
         } else if (activeTab === 'pagos-proveedores') {
             if (!mappedExportDataPagosProveedores.length) return;
-            exportToPDF('Reporte de Pagos a Proveedores', getExportColumnsPagosProveedores(), mappedExportDataPagosProveedores, 'pagos_proveedores_reporte', getFiltersTextPagosProveedores());
+            exportToPDF('Reporte de Pagos a Proveedores', getExportColumnsPagosProveedores(), mappedExportDataPagosProveedores, 'pagos_proveedores_reporte', getFiltersTextPagosProveedores(), undefined, 'portrait');
         }
     };
 

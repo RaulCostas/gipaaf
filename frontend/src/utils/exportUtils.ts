@@ -210,7 +210,8 @@ export const printData = (
 ) => {
   const dateStr = format(new Date(), "dd 'de' MMMM, yyyy - HH:mm", { locale: es });
   const isPortrait = orientation === 'portrait';
-  const pageStyle = orientation ? `size: ${orientation}; margin: 8mm;` : 'size: auto; margin: 12mm;';
+  const sizeRule = orientation ? orientation : (columns.length >= 7 ? 'landscape' : 'portrait');
+  const pageMargin = isPortrait ? (columns.length >= 9 ? '5mm' : '7mm') : '8mm';
 
   const isNumericCol = (key: string) => {
     const k = (key || '').toLowerCase();
@@ -221,40 +222,58 @@ export const printData = (
     return k === 'id' || k === 'nro' || k === 'tipo' || k === 'docnumero' || k.includes('fecha') || k.includes('estado');
   };
   
+  const isManyColsPortrait = isPortrait && columns.length >= 8;
+  const thPadding = isManyColsPortrait ? '3.5px 2px' : (isPortrait ? '5px 4px' : '7px 6px');
+  const thFontSize = isManyColsPortrait ? '8px' : (isPortrait ? '9.5px' : '11px');
+
   const html = `
     <!DOCTYPE html>
-    <html>
+    <html lang="es">
       <head>
+        <meta charset="utf-8">
         <title>${title}</title>
         <style>
-          @page { ${pageStyle} }
-          body { font-family: 'Helvetica', 'Arial', sans-serif; padding: ${isPortrait && columns.length >= 9 ? '5px' : '15px'}; color: #1e293b; }
-          .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: ${subtitle ? '12px' : '20px'}; border-bottom: 2px solid #cbd5e1; padding-bottom: 12px; }
-          .logo { max-height: 48px; object-fit: contain; }
+          @page {
+            size: ${sizeRule};
+            margin: ${pageMargin};
+          }
+          @media print {
+            @page {
+              size: ${sizeRule};
+              margin: ${pageMargin};
+            }
+            html, body {
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .header { border-bottom: 1.5px solid #64748b !important; }
+          }
+          *, *:before, *:after { box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: ${isManyColsPortrait ? '4px' : '12px'}; color: #1e293b; background: #fff; }
+          .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: ${subtitle ? '10px' : '16px'}; border-bottom: 2px solid #cbd5e1; padding-bottom: 10px; }
+          .logo { max-height: 44px; object-fit: contain; }
           .title-container { text-align: right; }
-          .report-title { font-size: ${isPortrait && columns.length >= 9 ? '15px' : '17px'}; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px; }
-          .date { color: #64748b; font-size: 11px; margin: 0; }
+          .report-title { font-size: ${isManyColsPortrait ? '13.5px' : '16px'}; font-weight: 800; color: #0f172a; margin: 0 0 3px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+          .date { color: #64748b; font-size: 10.5px; margin: 0; }
           
-          .subtitle-container { margin-bottom: 15px; font-size: 12px; color: #334155; }
+          .subtitle-container { margin-bottom: 12px; font-size: 11.5px; color: #334155; }
           
-          table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-          th, td { padding: ${isPortrait && columns.length >= 9 ? '5px 3.5px' : '7px 6px'}; border-bottom: 1px solid #e2e8f0; font-size: ${isPortrait && columns.length >= 9 ? '9.5px' : '11px'}; }
-          th { background-color: #2980b9; color: #ffffff; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          tr:nth-child(even) { background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          table { width: 100%; border-collapse: collapse; margin-top: 4px; table-layout: auto; }
+          th, td { padding: ${thPadding}; border-bottom: 1px solid #e2e8f0; font-size: ${thFontSize}; word-break: break-word; line-height: 1.25; }
+          th { background-color: #2980b9 !important; color: #ffffff !important; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          tr:nth-child(even) { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           tfoot tr td { 
-            background-color: #f1f5f9; 
-            color: #0f172a; 
+            background-color: #f1f5f9 !important; 
+            color: #0f172a !important; 
             font-weight: 800; 
-            font-size: 11.5px; 
+            font-size: ${isManyColsPortrait ? '9px' : '11px'}; 
             border-top: 2px solid #334155; 
             border-bottom: 2px solid #334155; 
             -webkit-print-color-adjust: exact; 
             print-color-adjust: exact; 
-          }
-          
-          @media print {
-            body { padding: 0; }
-            .header { border-bottom: 1px solid #94a3b8; }
           }
         </style>
       </head>
