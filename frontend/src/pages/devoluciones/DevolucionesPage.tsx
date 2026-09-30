@@ -911,8 +911,8 @@ const DevolucionesPage: React.FC = () => {
             </div>
 
             {/* Main Table */}
-            <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
-                <table className="w-full text-left border-collapse">
+            <div className="bg-card border rounded-xl shadow-sm overflow-hidden overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[950px]">
                     <thead>
                         <tr className="bg-muted/50 border-b text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                             <th className="p-4">N° / Fecha</th>
@@ -1188,8 +1188,8 @@ const DevolucionesPage: React.FC = () => {
                         )}
 
                         {/* Tabla de Devueltos */}
-                        <div className="border rounded-xl overflow-hidden bg-background">
-                            <table className="w-full text-left text-xs">
+                        <div className="border rounded-xl overflow-hidden bg-background overflow-x-auto">
+                            <table className="w-full text-left text-xs min-w-[550px]">
                                 <thead className="bg-muted/50 border-b text-[10px] font-bold uppercase text-muted-foreground">
                                     <tr>
                                         <th className="p-3">Producto Defectuoso</th>
@@ -1335,8 +1335,8 @@ const DevolucionesPage: React.FC = () => {
                         )}
 
                         {/* Tabla de Repuestos */}
-                        <div className="border rounded-xl overflow-hidden bg-background">
-                            <table className="w-full text-left text-xs">
+                        <div className="border rounded-xl overflow-hidden bg-background overflow-x-auto">
+                            <table className="w-full text-left text-xs min-w-[550px]">
                                 <thead className="bg-muted/50 border-b text-[10px] font-bold uppercase text-muted-foreground">
                                     <tr>
                                         <th className="p-3">Producto Nuevo (Reposición)</th>

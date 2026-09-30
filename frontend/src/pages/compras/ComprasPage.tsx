@@ -716,8 +716,8 @@ const ComprasPage: React.FC = () => {
                 )}
             </div>
 
-            <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
-                <table className="w-full text-left border-collapse">
+            <div className="bg-card border rounded-xl shadow-sm overflow-hidden overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[950px]">
                     <thead>
                         <tr className="bg-muted/50 border-b">
                             <th className="p-4 text-sm font-semibold text-muted-foreground">Número / Fecha</th>
@@ -1031,7 +1031,7 @@ const ComprasPage: React.FC = () => {
                             )}
 
                             <div className="bg-muted/30 border rounded-xl overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
+                            <table className="w-full text-left border-collapse min-w-[650px]">
                                 <thead>
                                     <tr className="bg-muted/50 border-y">
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>

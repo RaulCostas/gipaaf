@@ -875,8 +875,8 @@ const ventasPage: React.FC = () => {
                 )}
             </div>
 
-            <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
-                <table className="w-full text-left border-collapse">
+            <div className="bg-card border rounded-xl shadow-sm overflow-hidden overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[950px]">
                     <thead>
                         <tr className="bg-muted/50 border-b">
                             <th className="p-4 text-sm font-semibold text-muted-foreground">Número / Fecha</th>
@@ -1361,129 +1361,131 @@ const ventasPage: React.FC = () => {
                                 )}
                             </div>
 
-                            <table className="w-full text-left border-collapse mt-4">
-                                <thead>
-                                    <tr className="bg-muted/50 border-y">
-                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>
-                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Cant.</th>
-                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">P.Unit</th>
-                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Desc. %</th>
-                                        <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Subtotal</th>
-                                        <th className="p-3"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {newVenta.detalles.length === 0 && (
-                                        <tr>
-                                            <td colSpan={6} className="p-8 text-center text-muted-foreground italic">
-                                                El carrito está vacío.
-                                            </td>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse mt-4 min-w-[550px]">
+                                    <thead>
+                                        <tr className="bg-muted/50 border-y">
+                                            <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>
+                                            <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Cant.</th>
+                                            <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">P.Unit</th>
+                                            <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Desc. %</th>
+                                            <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Subtotal</th>
+                                            <th className="p-3"></th>
                                         </tr>
-                                    )}
-                                    {newVenta.detalles.map((det: any, index: number) => {
-                                        const stockDisp = getProductStock(det.productoId || det.producto?.id);
-                                        const isExceeded = det.cantidad > stockDisp;
-
-                                        const productLotes = getProductLotes(det.productoId || det.producto?.id);
-                                        const assignedLotes = det.movimientosLote && det.movimientosLote.length > 0 ? det.movimientosLote : null;
-
-                                        return (
-                                            <tr key={index} className={`transition-colors ${isExceeded ? 'bg-red-500/10 border-l-4 border-l-red-500 hover:bg-red-500/15' : 'hover:bg-accent/30'}`}>
-                                                <td className="p-3">
-                                                    <div className="font-medium text-xs flex items-center gap-1.5 flex-wrap">
-                                                        <span>{det.producto?.nombre}</span>
-                                                        {isExceeded && (
-                                                             <span className="px-1.5 py-0.5 bg-red-500/20 text-red-600 dark:text-red-400 rounded text-[10px] font-bold">
-                                                                Excede stock ({stockDisp} disp.)
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-[10px] text-muted-foreground font-mono">{det.producto?.codigo}</div>
-                                                    {assignedLotes ? (
-                                                        <div className="flex flex-wrap gap-1 mt-1">
-                                                            {assignedLotes.map((m: any, mIdx: number) => {
-                                                                const venc = m.lote?.fechaVencimiento ? String(m.lote.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') : null;
-                                                                return (
-                                                                    <span key={mIdx} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-[10px] text-primary border border-primary/20">
-                                                                        <strong>Lote:</strong> {m.lote?.numeroLote || 'S/N'} ({m.cantidad} u.) {venc ? `| Venc: ${venc}` : ''}
-                                                                    </span>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    ) : productLotes.length > 0 ? (
-                                                        <div className="flex flex-wrap gap-1 mt-1">
-                                                            {productLotes.map((l: any, lIdx: number) => {
-                                                                const venc = l.fechaVencimiento ? String(l.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') : null;
-                                                                return (
-                                                                    <span key={lIdx} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] text-muted-foreground border">
-                                                                        <strong>Lote:</strong> {l.numeroLote || 'S/N'} ({l.cantidadActual} u.) {venc ? `| Venc: ${venc}` : ''}
-                                                                    </span>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    ) : null}
-                                                </td>
-                                                <td className="p-3 text-center">
-                                                    <div className="flex flex-col items-center gap-1">
-                                                        <input disabled={isViewing} 
-                                                            type="number"
-                                                            min="1"
-                                                            value={det.cantidad}
-                                                            onChange={(e) => updateDetail(index, 'cantidad', parseFloat(e.target.value) || 0)}
-                                                            className={`w-20 p-2 border rounded-lg bg-background text-center text-sm text-foreground outline-none transition-all font-medium ${
-                                                                isExceeded 
-                                                                    ? 'border-red-500 bg-red-500/10 text-red-600 font-bold focus:ring-2 focus:ring-red-500/20' 
-                                                                    : 'focus:ring-2 focus:ring-primary/20 hover:border-primary/50'
-                                                            }`}
-                                                        />
-                                                        <span className={`text-[10px] ${isExceeded ? 'text-red-500 font-bold' : 'text-muted-foreground'}`}>
-                                                            Stock: {stockDisp}
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="p-3 text-center">
-                                                    <input disabled={isViewing} 
-                                                        type="number"
-                                                        step="0.01"
-                                                        value={det.precioUnitario}
-                                                        onChange={(e) => updateDetail(index, 'precioUnitario', parseFloat(e.target.value) || 0)}
-                                                        className="w-24 p-2 border rounded-lg bg-background text-center text-sm text-foreground focus:ring-2 focus:ring-primary/20 hover:border-primary/50 outline-none transition-all font-medium"
-                                                    />
-                                                </td>
-                                                <td className="p-3 text-center">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <input disabled={isViewing} 
-                                                            type="number"
-                                                            min="0"
-                                                            max="100"
-                                                            step="0.5"
-                                                            placeholder="0"
-                                                            value={det.descuentoPorcentaje || ''}
-                                                            onChange={(e) => updateDetail(index, 'descuentoPorcentaje', parseFloat(e.target.value) || 0)}
-                                                            className="w-16 p-2 border rounded-lg bg-background text-center text-sm text-foreground focus:ring-2 focus:ring-primary/20 hover:border-primary/50 outline-none transition-all font-medium"
-                                                        />
-                                                        <span className="text-xs text-muted-foreground font-semibold">%</span>
-                                                    </div>
-                                                </td>
-
-                                                <td className={`p-3 text-center font-bold ${isExceeded ? 'text-red-600' : ''}`}>
-                                                    <div className="flex flex-col items-center">
-                                                        <span>{formatCurrency(det.subtotal)}</span>
-                                                        {Number(det.descuentoPorcentaje) > 0 && (
-                                                            <span className="text-[10px] font-normal text-muted-foreground line-through">
-                                                                {formatCurrency(det.cantidad * det.precioUnitario)}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="p-3 text-right">
-                                                    {!isViewing && (<button type="button" onClick={() => removeDetail(index)} className="text-destructive hover:scale-110 transition-transform"><Trash2 className="w-4 h-4" /></button>)}
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {newVenta.detalles.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="p-8 text-center text-muted-foreground italic">
+                                                    El carrito está vacío.
                                                 </td>
                                             </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                                        )}
+                                        {newVenta.detalles.map((det: any, index: number) => {
+                                            const stockDisp = getProductStock(det.productoId || det.producto?.id);
+                                            const isExceeded = det.cantidad > stockDisp;
+
+                                            const productLotes = getProductLotes(det.productoId || det.producto?.id);
+                                            const assignedLotes = det.movimientosLote && det.movimientosLote.length > 0 ? det.movimientosLote : null;
+
+                                            return (
+                                                <tr key={index} className={`transition-colors ${isExceeded ? 'bg-red-500/10 border-l-4 border-l-red-500 hover:bg-red-500/15' : 'hover:bg-accent/30'}`}>
+                                                    <td className="p-3">
+                                                        <div className="font-medium text-xs flex items-center gap-1.5 flex-wrap">
+                                                            <span>{det.producto?.nombre}</span>
+                                                            {isExceeded && (
+                                                                 <span className="px-1.5 py-0.5 bg-red-500/20 text-red-600 dark:text-red-400 rounded text-[10px] font-bold">
+                                                                    Excede stock ({stockDisp} disp.)
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-[10px] text-muted-foreground font-mono">{det.producto?.codigo}</div>
+                                                        {assignedLotes ? (
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {assignedLotes.map((m: any, mIdx: number) => {
+                                                                    const venc = m.lote?.fechaVencimiento ? String(m.lote.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') : null;
+                                                                    return (
+                                                                        <span key={mIdx} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-[10px] text-primary border border-primary/20">
+                                                                            <strong>Lote:</strong> {m.lote?.numeroLote || 'S/N'} ({m.cantidad} u.) {venc ? `| Venc: ${venc}` : ''}
+                                                                        </span>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        ) : productLotes.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {productLotes.map((l: any, lIdx: number) => {
+                                                                    const venc = l.fechaVencimiento ? String(l.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') : null;
+                                                                    return (
+                                                                        <span key={lIdx} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] text-muted-foreground border">
+                                                                            <strong>Lote:</strong> {l.numeroLote || 'S/N'} ({l.cantidadActual} u.) {venc ? `| Venc: ${venc}` : ''}
+                                                                        </span>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        ) : null}
+                                                    </td>
+                                                    <td className="p-3 text-center">
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <input disabled={isViewing} 
+                                                                type="number"
+                                                                min="1"
+                                                                value={det.cantidad}
+                                                                onChange={(e) => updateDetail(index, 'cantidad', parseFloat(e.target.value) || 0)}
+                                                                className={`w-20 p-2 border rounded-lg bg-background text-center text-sm text-foreground outline-none transition-all font-medium ${
+                                                                    isExceeded 
+                                                                        ? 'border-red-500 bg-red-500/10 text-red-600 font-bold focus:ring-2 focus:ring-red-500/20' 
+                                                                        : 'focus:ring-2 focus:ring-primary/20 hover:border-primary/50'
+                                                                }`}
+                                                            />
+                                                            <span className={`text-[10px] ${isExceeded ? 'text-red-500 font-bold' : 'text-muted-foreground'}`}>
+                                                                Stock: {stockDisp}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-3 text-center">
+                                                        <input disabled={isViewing} 
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={det.precioUnitario}
+                                                            onChange={(e) => updateDetail(index, 'precioUnitario', parseFloat(e.target.value) || 0)}
+                                                            className="w-24 p-2 border rounded-lg bg-background text-center text-sm text-foreground focus:ring-2 focus:ring-primary/20 hover:border-primary/50 outline-none transition-all font-medium"
+                                                        />
+                                                    </td>
+                                                    <td className="p-3 text-center">
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            <input disabled={isViewing} 
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                step="0.5"
+                                                                placeholder="0"
+                                                                value={det.descuentoPorcentaje || ''}
+                                                                onChange={(e) => updateDetail(index, 'descuentoPorcentaje', parseFloat(e.target.value) || 0)}
+                                                                className="w-16 p-2 border rounded-lg bg-background text-center text-sm text-foreground focus:ring-2 focus:ring-primary/20 hover:border-primary/50 outline-none transition-all font-medium"
+                                                            />
+                                                            <span className="text-xs text-muted-foreground font-semibold">%</span>
+                                                        </div>
+                                                    </td>
+
+                                                    <td className={`p-3 text-center font-bold ${isExceeded ? 'text-red-600' : ''}`}>
+                                                        <div className="flex flex-col items-center">
+                                                            <span>{formatCurrency(det.subtotal)}</span>
+                                                            {Number(det.descuentoPorcentaje) > 0 && (
+                                                                <span className="text-[10px] font-normal text-muted-foreground line-through">
+                                                                    {formatCurrency(det.cantidad * det.precioUnitario)}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-3 text-right">
+                                                        {!isViewing && (<button type="button" onClick={() => removeDetail(index)} className="text-destructive hover:scale-110 transition-transform"><Trash2 className="w-4 h-4" /></button>)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 
