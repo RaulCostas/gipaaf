@@ -43,7 +43,9 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
       useFactory: (configService: ConfigService) => {
         const dbUrl = configService.get<string>('DATABASE_URL');
         const dbSsl = configService.get<string>('DB_SSL');
-        const isSsl = dbSsl === 'true' || (dbUrl && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1'));
+        const isSsl = dbSsl !== undefined 
+          ? dbSsl === 'true' 
+          : Boolean(dbUrl && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1') && !dbUrl.includes('5432'));
 
         if (dbUrl) {
           return {
