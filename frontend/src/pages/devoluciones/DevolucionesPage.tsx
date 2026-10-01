@@ -59,6 +59,7 @@ const DevolucionesPage: React.FC = () => {
     // Filter and search state
     const [search, setSearch] = useState('');
     const [selectedClientFilter, setSelectedClientFilter] = useState('all');
+    const [selectedProductFilter, setSelectedProductFilter] = useState('all');
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -168,6 +169,35 @@ const DevolucionesPage: React.FC = () => {
         queryKey: ['products'],
         queryFn: () => productService.getAll(),
     });
+
+    // Filtra solo los productos que existen en las devoluciones registradas (devueltos o repuestos)
+    const availableReturnProducts = useMemo(() => {
+        if (!returns) return [];
+        const productMap = new Map<number, { id: number; nombre: string; codigo?: string }>();
+
+        let scopedReturns = returns;
+        if (selectedSucursal) {
+            scopedReturns = scopedReturns.filter(r => r.sucursal?.id === Number(selectedSucursal) || (r.almacen as any)?.sucursal?.id === Number(selectedSucursal));
+        } else if (selectedCiudad) {
+            scopedReturns = scopedReturns.filter(r => (r.sucursal as any)?.ciudad?.id === Number(selectedCiudad) || (r.almacen as any)?.sucursal?.ciudad?.id === Number(selectedCiudad));
+        }
+
+        scopedReturns.forEach(r => {
+            (r.detalles || []).forEach((d: any) => {
+                if (d.producto && d.producto.id) {
+                    if (!productMap.has(d.producto.id)) {
+                        productMap.set(d.producto.id, {
+                            id: d.producto.id,
+                            nombre: d.producto.nombre || 'Sin Nombre',
+                            codigo: d.producto.codigo || ''
+                        });
+                    }
+                }
+            });
+        });
+
+        return Array.from(productMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }, [returns, selectedSucursal, selectedCiudad]);
 
     const { data: sucursales } = useQuery({
         queryKey: ['sucursales'],
@@ -683,6 +713,12 @@ const DevolucionesPage: React.FC = () => {
             filtered = filtered.filter(r => r.cliente?.id === Number(selectedClientFilter));
         }
 
+        if (selectedProductFilter !== 'all') {
+            filtered = filtered.filter(r => 
+                (r.detalles || []).some((d: any) => (d.producto?.id || d.productoId) === Number(selectedProductFilter))
+            );
+        }
+
         if (fechaDesde) {
             filtered = filtered.filter(r => {
                 const rFecha = r.fecha ? String(r.fecha).substring(0, 10) : '';
@@ -703,18 +739,26 @@ const DevolucionesPage: React.FC = () => {
                 const num = r.numero?.toLowerCase() || '';
                 const cliNombre = (r.cliente?.nombreTienda ? `${r.cliente.nombreTienda} ` : '') + (r.cliente?.persona ? `${r.cliente.persona.nombres} ${r.cliente.persona.apellidos}` : '');
                 const obs = (r.observaciones || '').toLowerCase();
-                return num.includes(s) || cliNombre.toLowerCase().includes(s) || obs.includes(s);
+                const hasProduct = (r.detalles || []).some((d: any) => {
+                    const prodName = d.producto?.nombre?.toLowerCase() || '';
+                    const prodCode = d.producto?.codigo?.toLowerCase() || '';
+                    const motivo = (d.motivoDefecto || '').toLowerCase();
+                    const lote = (d.numeroLote || '').toLowerCase();
+                    return prodName.includes(s) || prodCode.includes(s) || motivo.includes(s) || lote.includes(s);
+                });
+                return num.includes(s) || cliNombre.toLowerCase().includes(s) || obs.includes(s) || hasProduct;
             });
         }
 
         return filtered;
-    }, [returns, search, selectedSucursal, selectedCiudad, selectedClientFilter, fechaDesde, fechaHasta]);
+    }, [returns, search, selectedSucursal, selectedCiudad, selectedClientFilter, selectedProductFilter, fechaDesde, fechaHasta]);
 
-    const hasActiveFilters = Boolean(search || selectedClientFilter !== 'all' || fechaDesde || fechaHasta);
+    const hasActiveFilters = Boolean(search || selectedClientFilter !== 'all' || selectedProductFilter !== 'all' || fechaDesde || fechaHasta);
 
     const handleClearFilters = () => {
         setSearch('');
         setSelectedClientFilter('all');
+        setSelectedProductFilter('all');
         setFechaDesde('');
         setFechaHasta('');
     };
@@ -767,6 +811,11 @@ const DevolucionesPage: React.FC = () => {
             const cli = clients?.find(cl => cl.id === Number(selectedClientFilter));
             const cliName = getClientDisplayName(cli);
             texts.push(`Cliente: ${cliName}`);
+        }
+
+        if (selectedProductFilter !== 'all') {
+            const prod = products?.find(p => p.id === Number(selectedProductFilter));
+            if (prod) texts.push(`Producto: ${prod.nombre}`);
         }
 
         if (fechaDesde && fechaHasta) {
@@ -837,14 +886,14 @@ const DevolucionesPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Toolbar: Search, Cliente, Fechas & Limpiar */}
+            {/* Toolbar: Search, Cliente, Producto, Fechas & Limpiar */}
             <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-stretch sm:items-center">
                 {/* Search Bar */}
-                <div className="bg-card p-2 border rounded-lg shadow-sm flex items-center gap-2 flex-1 min-w-[220px] max-w-md">
+                <div className="bg-card p-2 border rounded-lg shadow-sm flex items-center gap-2 flex-1 min-w-[240px] max-w-md">
                     <Search className="w-5 h-5 text-muted-foreground ml-1 shrink-0" />
                     <input
                         type="text"
-                        placeholder="Buscar por nro, cliente u observaciones..."
+                        placeholder="Buscar por nro, cliente, producto u observaciones..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="bg-transparent border-none outline-none flex-1 text-sm placeholder:text-muted-foreground/70"
@@ -862,12 +911,31 @@ const DevolucionesPage: React.FC = () => {
                     <select
                         value={selectedClientFilter}
                         onChange={(e) => setSelectedClientFilter(e.target.value)}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm"
+                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[180px] truncate"
                     >
                         <option value="all" className="bg-background text-foreground">Todos los Clientes</option>
                         {availableClients?.map(c => (
                             <option key={c.id} value={c.id} className="bg-background text-foreground">
                                 {getClientDisplayName(c)}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Filtro por Producto (Solo productos en devoluciones / reposiciones) */}
+                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
+                    <Package className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <select
+                        value={selectedProductFilter}
+                        onChange={(e) => setSelectedProductFilter(e.target.value)}
+                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[200px] truncate"
+                    >
+                        <option value="all" className="bg-background text-foreground">
+                            {availableReturnProducts.length === 0 ? 'Sin productos devueltos' : `Todos los Productos (${availableReturnProducts.length})`}
+                        </option>
+                        {availableReturnProducts.map(p => (
+                            <option key={p.id} value={p.id} className="bg-background text-foreground">
+                                {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
                             </option>
                         ))}
                     </select>

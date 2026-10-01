@@ -64,7 +64,7 @@ interface ReportTabConfig {
 
 const REPORT_TABS: ReportTabConfig[] = [
     { id: 'estadisticas', label: 'Estadísticas (Estratégico)', action: 'ESTADISTICAS', icon: BarChart3 },
-    { id: 'productos', label: 'Reporte de Productos', action: 'PRODUCTOS', icon: Boxes },
+    { id: 'productos', label: 'Kardex de Producto', action: 'PRODUCTOS', icon: Boxes },
     { id: 'kardex-cliente', label: 'Kardex de Cliente', action: 'KARDEX_CLIENTE', icon: Users },
     { id: 'ventas', label: 'Reporte de Ventas', action: 'VENTAS', icon: ShoppingCart },
     { id: 'cobranzas', label: 'Reporte de Cobranzas', action: 'COBRANZAS', icon: Wallet },
@@ -638,36 +638,55 @@ const ReportesPage: React.FC = () => {
         return nombre.substring(0, 4).toUpperCase();
     };
 
-    const activeCities = useMemo(() => {
-        if (!ciudades || ciudades.length === 0) {
-            return [
-                { id: 1, nombre: 'La Paz', abrev: 'LP' },
-                { id: 2, nombre: 'Cochabamba', abrev: 'CBBA' },
-                { id: 3, nombre: 'Santa Cruz', abrev: 'SCZ' }
-            ];
+    const activeSucursales = useMemo(() => {
+        if (!sucursales || sucursales.length === 0) {
+            return (ciudades || [])
+                .filter(c => c.activo !== false)
+                .map(c => ({
+                    id: c.id,
+                    nombre: c.nombre,
+                    ciudadId: c.id,
+                    ciudadNombre: c.nombre,
+                    ciudadAbrev: getCiudadAbrev(c.nombre),
+                    key: `stock_suc_${c.id}`
+                }));
         }
-        return ciudades
-            .filter(c => c.activo !== false)
-            .map(c => ({
-                id: c.id,
-                nombre: c.nombre,
-                abrev: getCiudadAbrev(c.nombre)
-            }));
-    }, [ciudades]);
+        return sucursales
+            .filter(s => s.activo !== false)
+            .map(s => {
+                const ciudadObj = (s as any).ciudad || ciudades?.find(c => c.id === ((s as any).ciudadId || (s as any).ciudad?.id));
+                const ciudadNombre = ciudadObj?.nombre || '';
+                const ciudadAbrev = ciudadNombre ? getCiudadAbrev(ciudadNombre) : '';
+                return {
+                    id: s.id,
+                    nombre: s.nombre,
+                    ciudadId: ciudadObj?.id || (s as any).ciudadId,
+                    ciudadNombre,
+                    ciudadAbrev,
+                    key: `stock_suc_${s.id}`
+                };
+            })
+            .sort((a, b) => {
+                if (a.ciudadAbrev !== b.ciudadAbrev) {
+                    return a.ciudadAbrev.localeCompare(b.ciudadAbrev);
+                }
+                return a.nombre.localeCompare(b.nombre);
+            });
+    }, [sucursales, ciudades]);
 
     const getProductStockData = (prodId: number) => {
-        if (!inventoryList) return { stockPorCiudad: {}, totalExistencias: 0 };
+        if (!inventoryList) return { stockPorSucursal: {}, totalExistencias: 0 };
 
         const stockMap: Record<number, number> = {};
-        activeCities.forEach(c => { stockMap[c.id] = 0; });
+        activeSucursales.forEach(s => { stockMap[s.id] = 0; });
 
         if (prodFechaHasta) {
             const cutOffDateStr = prodFechaHasta + 'T23:59:59.999Z';
             const prodInvs = inventoryList.filter(inv => inv.producto?.id === prodId);
 
             prodInvs.forEach(inv => {
-                const ciudadId = (inv.sucursal as any)?.ciudad?.id || (inv.sucursal as any)?.ciudadId;
-                if (!ciudadId) return;
+                const sucursalId = (inv.sucursal as any)?.id || (inv.sucursal as any)?.sucursalId;
+                if (!sucursalId) return;
 
                 let currentStock = Number(inv.stockActual || 0);
 
@@ -690,32 +709,23 @@ const ReportesPage: React.FC = () => {
                 }
 
                 const finalStock = Math.max(0, currentStock);
-                stockMap[ciudadId] = (stockMap[ciudadId] || 0) + finalStock;
+                stockMap[sucursalId] = (stockMap[sucursalId] || 0) + finalStock;
             });
         } else {
             inventoryList.forEach(inv => {
                 if (inv.producto?.id === prodId) {
-                    const ciudadId = (inv.sucursal as any)?.ciudad?.id || (inv.sucursal as any)?.ciudadId;
-                    if (ciudadId) {
-                        stockMap[ciudadId] = (stockMap[ciudadId] || 0) + Number(inv.stockActual || 0);
+                    const sucursalId = (inv.sucursal as any)?.id || (inv.sucursal as any)?.sucursalId;
+                    if (sucursalId) {
+                        stockMap[sucursalId] = (stockMap[sucursalId] || 0) + Number(inv.stockActual || 0);
                     }
                 }
             });
         }
 
-        let total = 0;
-        if (selectedSucursal) {
-            const suc = sucursales?.find(s => s.id === Number(selectedSucursal));
-            const cId = (suc as any)?.ciudad?.id || (suc as any)?.ciudadId;
-            total = cId ? (stockMap[cId] || 0) : 0;
-        } else if (selectedCiudad) {
-            total = stockMap[Number(selectedCiudad)] || 0;
-        } else {
-            total = Object.values(stockMap).reduce((acc, v) => acc + v, 0);
-        }
+        const total = Object.values(stockMap).reduce((acc, v) => acc + v, 0);
 
         return {
-            stockPorCiudad: stockMap,
+            stockPorSucursal: stockMap,
             totalExistencias: total
         };
     };
@@ -810,7 +820,7 @@ const ReportesPage: React.FC = () => {
             margenPotencial,
             margenPct
         };
-    }, [filteredProductos, inventoryList, movimientosList, prodFechaHasta, selectedSucursal, selectedCiudad, activeCities]);
+    }, [filteredProductos, inventoryList, movimientosList, prodFechaHasta, selectedSucursal, selectedCiudad, activeSucursales]);
 
     const formatFechaCompra = (fecha?: string | Date) => {
         if (!fecha) return 'Sin compras';
@@ -831,11 +841,10 @@ const ReportesPage: React.FC = () => {
             { header: 'NOMBRE', dataKey: 'nombre' },
         ];
 
-        if (!selectedSucursal && !selectedCiudad) {
-            activeCities.forEach(c => {
-                cols.push({ header: c.abrev, dataKey: `stock_${c.abrev}` });
-            });
-        }
+        activeSucursales.forEach(s => {
+            const headerLabel = s.ciudadAbrev ? `${s.ciudadAbrev} (${s.nombre})` : s.nombre;
+            cols.push({ header: headerLabel.toUpperCase(), dataKey: `stock_suc_${s.id}` });
+        });
 
         cols.push(
             { header: 'TOTAL EXISTENCIAS', dataKey: 'totalExistencias' },
@@ -847,7 +856,7 @@ const ReportesPage: React.FC = () => {
         );
 
         return cols;
-    }, [activeCities, selectedSucursal, selectedCiudad]);
+    }, [activeSucursales]);
 
     const getExportColumnsProductos = () => {
         let cols = [...exportColumnsProductos];
@@ -862,7 +871,7 @@ const ReportesPage: React.FC = () => {
         return filteredProductos.map(p => {
             const pCompra = Number(p.precioCompra) || 0;
             const pVenta = Number(p.precioVenta) || 0;
-            const { stockPorCiudad, totalExistencias } = getProductStockData(p.id);
+            const { stockPorSucursal, totalExistencias } = getProductStockData(p.id);
             const totalBs = totalExistencias * pCompra;
             const margenBs = pVenta - pCompra;
 
@@ -883,14 +892,14 @@ const ReportesPage: React.FC = () => {
                 estado: p.activo ? 'Activo' : 'Inactivo'
             };
 
-            activeCities.forEach(c => {
-                const qty = stockPorCiudad[c.id] || 0;
-                row[`stock_${c.abrev}`] = qty > 0 ? qty.toLocaleString('es-BO') : '0';
+            activeSucursales.forEach(s => {
+                const qty = stockPorSucursal[s.id] || 0;
+                row[`stock_suc_${s.id}`] = qty > 0 ? qty.toLocaleString('es-BO') : '0';
             });
 
             return row;
         });
-    }, [filteredProductos, activeCities, inventoryList, movimientosList, prodFechaHasta, selectedSucursal, selectedCiudad]);
+    }, [filteredProductos, activeSucursales, inventoryList, movimientosList, prodFechaHasta]);
 
     const exportFooterProductos = useMemo(() => {
         const footer: Record<string, string> = {
@@ -899,16 +908,16 @@ const ReportesPage: React.FC = () => {
             totalBsFormatted: metricsProductos.totalValorCosto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         };
 
-        activeCities.forEach(c => {
-            const cityTotal = filteredProductos.reduce((acc, p) => {
-                const { stockPorCiudad } = getProductStockData(p.id);
-                return acc + (stockPorCiudad[c.id] || 0);
+        activeSucursales.forEach(s => {
+            const sucTotal = filteredProductos.reduce((acc, p) => {
+                const { stockPorSucursal } = getProductStockData(p.id);
+                return acc + (stockPorSucursal[s.id] || 0);
             }, 0);
-            footer[`stock_${c.abrev}`] = cityTotal.toLocaleString('es-BO');
+            footer[`stock_suc_${s.id}`] = sucTotal.toLocaleString('es-BO');
         });
 
         return footer;
-    }, [filteredProductos, activeCities, metricsProductos, inventoryList, movimientosList, prodFechaHasta]);
+    }, [filteredProductos, activeSucursales, metricsProductos, inventoryList, movimientosList, prodFechaHasta]);
 
     const getFiltersTextProductos = () => {
         const texts: string[] = [];
@@ -2729,10 +2738,17 @@ const ReportesPage: React.FC = () => {
                                         {!filtroProdGrupo && <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Grupo</th>}
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nombre Producto</th>
                                         
-                                        {/* Columnas dinámicas de ciudades (LP, CBBA, SCZ) */}
-                                        {!selectedSucursal && !selectedCiudad && activeCities.map(c => (
-                                            <th key={c.id} className="p-3 text-xs font-bold uppercase tracking-wider text-primary text-right w-16" title={`Existencias en ${c.nombre}`}>
-                                                {c.abrev}
+                                        {/* Columnas dinámicas de sucursales con Ciudad arriba y Sucursal debajo */}
+                                        {activeSucursales.map(s => (
+                                            <th key={s.id} className="p-2 text-right min-w-[90px] border-l border-r border-border/40" title={`Existencias en ${s.ciudadNombre || s.ciudadAbrev} - ${s.nombre}`}>
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-xs font-bold uppercase tracking-wider text-primary leading-tight">
+                                                        {s.ciudadAbrev || s.ciudadNombre || 'SUC'}
+                                                    </span>
+                                                    <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis max-w-[95px] leading-tight" title={s.nombre}>
+                                                        {s.nombre}
+                                                    </span>
+                                                </div>
                                             </th>
                                         ))}
 
@@ -2753,13 +2769,13 @@ const ReportesPage: React.FC = () => {
                                 <tbody className="divide-y">
                                     {loadingProducts || loadingInventory ? (
                                         <tr>
-                                            <td colSpan={14} className="p-8 text-center text-muted-foreground animate-pulse text-sm">
+                                            <td colSpan={14 + activeSucursales.length} className="p-8 text-center text-muted-foreground animate-pulse text-sm">
                                                 Cargando catálogo y existencias de productos...
                                             </td>
                                         </tr>
                                     ) : paginatedProductos.length === 0 ? (
                                         <tr>
-                                            <td colSpan={14} className="p-8 text-center text-muted-foreground text-sm">
+                                            <td colSpan={14 + activeSucursales.length} className="p-8 text-center text-muted-foreground text-sm">
                                                 No se encontraron productos para los filtros seleccionados.
                                             </td>
                                         </tr>
@@ -2767,7 +2783,7 @@ const ReportesPage: React.FC = () => {
                                         paginatedProductos.map((p, index) => {
                                             const pCompra = Number(p.precioCompra) || 0;
                                             const pVenta = Number(p.precioVenta) || 0;
-                                            const { stockPorCiudad, totalExistencias } = getProductStockData(p.id);
+                                            const { stockPorSucursal, totalExistencias } = getProductStockData(p.id);
                                             const totalBs = totalExistencias * pCompra;
                                             const margenBs = pVenta - pCompra;
                                             const margenPct = pVenta > 0 ? ((margenBs / pVenta) * 100).toFixed(1) : '0';
@@ -2815,11 +2831,11 @@ const ReportesPage: React.FC = () => {
                                                         </div>
                                                     </td>
 
-                                                    {/* Stock por Ciudad */}
-                                                    {!selectedSucursal && !selectedCiudad && activeCities.map(c => {
-                                                        const qty = stockPorCiudad[c.id] || 0;
+                                                    {/* Stock por Sucursal */}
+                                                    {activeSucursales.map(s => {
+                                                        const qty = stockPorSucursal[s.id] || 0;
                                                         return (
-                                                            <td key={c.id} className="p-3 text-xs font-mono text-right whitespace-nowrap">
+                                                            <td key={s.id} className="p-3 text-xs font-mono text-right whitespace-nowrap border-l border-r border-border/20">
                                                                 <span className={qty > 0 ? 'font-bold text-foreground' : 'text-muted-foreground/50'}>
                                                                     {qty.toLocaleString('es-BO')}
                                                                 </span>
@@ -2891,14 +2907,14 @@ const ReportesPage: React.FC = () => {
                                                 TOTAL GENERAL CONSOLIDADO ({filteredProductos.length} ítems)
                                             </td>
 
-                                            {!selectedSucursal && !selectedCiudad && activeCities.map(c => {
-                                                const cityTotal = filteredProductos.reduce((acc, p) => {
-                                                    const { stockPorCiudad } = getProductStockData(p.id);
-                                                    return acc + (stockPorCiudad[c.id] || 0);
+                                            {activeSucursales.map(s => {
+                                                const sucTotal = filteredProductos.reduce((acc, p) => {
+                                                    const { stockPorSucursal } = getProductStockData(p.id);
+                                                    return acc + (stockPorSucursal[s.id] || 0);
                                                 }, 0);
                                                 return (
-                                                    <td key={c.id} className="p-3 text-right font-mono font-bold text-foreground">
-                                                        {cityTotal.toLocaleString('es-BO')}
+                                                    <td key={s.id} className="p-3 text-right font-mono font-bold text-foreground border-l border-r border-border/30">
+                                                        {sucTotal.toLocaleString('es-BO')}
                                                     </td>
                                                 );
                                             })}

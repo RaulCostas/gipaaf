@@ -33,6 +33,7 @@ export interface Usuario {
     id: number;
     email: string;
     username: string;
+    foto?: string | null;
     activo: boolean;
     persona: Persona;
     roles: Rol[];
@@ -64,6 +65,20 @@ export const userService = {
     },
     cambiarPassword: async (data: { currentPassword: string; newPassword: string }) => {
         const response = await apiClient.post<{ success: boolean; message: string }>('/auth/cambiar-password', data);
+        return response.data;
+    },
+    forgotPassword: async (email: string) => {
+        const response = await apiClient.post<{ success: boolean; message: string }>('/auth/forgot-password', { email });
+        return response.data;
+    },
+    uploadFoto: async (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await apiClient.post<{ url: string }>('/uploads', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
         return response.data;
     },
 };

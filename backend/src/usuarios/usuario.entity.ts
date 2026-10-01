@@ -33,6 +33,9 @@ export class Usuario {
     @Column({ default: true })
     activo: boolean;
 
+    @Column({ length: 255, nullable: true })
+    foto: string;
+
     @OneToOne(() => Persona, (persona) => persona.usuario, { eager: true, cascade: true })
     @JoinColumn()
     persona: Persona;

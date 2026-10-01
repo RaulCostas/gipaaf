@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -7,7 +7,7 @@ import { Persona } from '../personas/persona.entity';
 import { Personal } from '../personal/personal.entity';
 
 @Injectable()
-export class UsuariosService {
+export class UsuariosService implements OnModuleInit {
     constructor(
         @InjectRepository(Usuario)
         private repo: Repository<Usuario>,
@@ -16,6 +16,16 @@ export class UsuariosService {
         @InjectRepository(Personal)
         private personalRepo: Repository<Personal>,
     ) { }
+
+    async onModuleInit() {
+        try {
+            await this.repo.query(`
+                ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto VARCHAR(255) NULL;
+            `);
+        } catch (e) {
+            console.error('Error auto-migrating foto column in usuarios:', e);
+        }
+    }
 
     findAll() {
         return this.repo.find();

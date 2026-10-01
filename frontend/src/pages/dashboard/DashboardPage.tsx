@@ -123,39 +123,39 @@ const DashboardPage: React.FC = () => {
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500">
             <div>
-                <h1 className="text-3xl font-black tracking-tight text-primary flex items-center gap-3">
-                    <Activity className="w-8 h-8 text-primary" />
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-primary flex items-center gap-2.5 sm:gap-3">
+                    <Activity className="w-7 h-7 sm:w-8 h-8 text-primary shrink-0" />
                     Inicio
                 </h1>
-                <p className="text-muted-foreground italic mt-1 font-medium">Resumen ejecutivo del rendimiento del negocio y alertas clave.</p>
+                <p className="text-xs sm:text-sm text-muted-foreground italic mt-1 font-medium">Resumen ejecutivo del rendimiento del negocio y alertas clave.</p>
             </div>
 
             {/* KPI Cards */}
-            <div className={`grid grid-cols-1 md:grid-cols-2 ${pendingMuestras.length > 0 ? 'lg:grid-cols-3 xl:grid-cols-5' : 'lg:grid-cols-4'} gap-6`}>
-                <div className="relative overflow-hidden group p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <TrendingUp className="w-16 h-16 text-primary" />
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${pendingMuestras.length > 0 ? 'lg:grid-cols-3 xl:grid-cols-5' : 'lg:grid-cols-4'} gap-4 sm:gap-6`}>
+                <div className="relative overflow-hidden group p-4 sm:p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300">
+                    <div className="absolute top-0 right-0 p-3 sm:p-4 opacity-10 group-hover:scale-110 transition-transform">
+                        <TrendingUp className="w-12 h-12 sm:w-16 sm:h-16 text-primary" />
                     </div>
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Ventas Hoy</h3>
+                    <h3 className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Ventas Hoy</h3>
                     <div className="flex items-baseline gap-2">
-                        <p className="text-3xl font-black mt-2 text-primary">{formatCurrency(stats?.totalSalesToday)}</p>
+                        <p className="text-2xl sm:text-3xl font-black mt-1 sm:mt-2 text-primary">{formatCurrency(stats?.totalSalesToday)}</p>
                         <span className="flex items-center text-[10px] font-bold text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded-full">
                             <ArrowUpRight className="w-3 h-3" /> 12%
                         </span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-4 font-medium uppercase tracking-tighter">Comparado con ayer</p>
+                    <p className="text-[10px] text-muted-foreground mt-3 sm:mt-4 font-medium uppercase tracking-tighter">Comparado con ayer</p>
                 </div>
 
-                <div className="relative overflow-hidden group p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+                <div className="relative overflow-hidden group p-4 sm:p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
                     <div>
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                            <AlertTriangle className="w-16 h-16 text-amber-500" />
+                        <div className="absolute top-0 right-0 p-3 sm:p-4 opacity-10 group-hover:scale-110 transition-transform">
+                            <AlertTriangle className="w-12 h-12 sm:w-16 sm:h-16 text-amber-500" />
                         </div>
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Stock Bajo</h3>
-                        <p className="text-3xl font-black mt-2 text-amber-600">{stats?.lowStock}</p>
-                        <p className="text-[10px] text-muted-foreground mt-4 font-medium uppercase tracking-tighter">Requiere reposición inmediata</p>
+                        <h3 className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Stock Bajo</h3>
+                        <p className="text-2xl sm:text-3xl font-black mt-1 sm:mt-2 text-amber-600">{stats?.lowStock}</p>
+                        <p className="text-[10px] text-muted-foreground mt-3 sm:mt-4 font-medium uppercase tracking-tighter">Requiere reposición inmediata</p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between">
                         <button
@@ -168,43 +168,43 @@ const DashboardPage: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="relative overflow-hidden group p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <Package className="w-16 h-16 text-indigo-500" />
+                <div className="relative overflow-hidden group p-4 sm:p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300">
+                    <div className="absolute top-0 right-0 p-3 sm:p-4 opacity-10 group-hover:scale-110 transition-transform">
+                        <Package className="w-12 h-12 sm:w-16 sm:h-16 text-indigo-500" />
                     </div>
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Productos</h3>
-                    <p className="text-3xl font-black mt-2 text-indigo-600">{stats?.totalProducts}</p>
-                    <p className="text-[10px] text-muted-foreground mt-4 font-medium uppercase tracking-tighter">Catálogo activo</p>
+                    <h3 className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Productos</h3>
+                    <p className="text-2xl sm:text-3xl font-black mt-1 sm:mt-2 text-indigo-600">{stats?.totalProducts}</p>
+                    <p className="text-[10px] text-muted-foreground mt-3 sm:mt-4 font-medium uppercase tracking-tighter">Catálogo activo</p>
                 </div>
 
-                <div className="relative overflow-hidden group p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <TrendingUp className="w-16 h-16 text-emerald-500" />
+                <div className="relative overflow-hidden group p-4 sm:p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300">
+                    <div className="absolute top-0 right-0 p-3 sm:p-4 opacity-10 group-hover:scale-110 transition-transform">
+                        <TrendingUp className="w-12 h-12 sm:w-16 sm:h-16 text-emerald-500" />
                     </div>
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Ventas Mensuales</h3>
+                    <h3 className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Ventas Mensuales</h3>
                     <div className="flex items-baseline gap-2">
-                        <p className="text-3xl font-black mt-2 text-emerald-600">{formatCurrency(stats?.totalSalesMonth)}</p>
+                        <p className="text-2xl sm:text-3xl font-black mt-1 sm:mt-2 text-emerald-600">{formatCurrency(stats?.totalSalesMonth)}</p>
                         <span className="flex items-center text-[10px] font-bold text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded-full">
                             <ArrowDownRight className="w-3 h-3" /> 4%
                         </span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-4 font-medium uppercase tracking-tighter">Meta del mes: Bs. 10.000,00</p>
+                    <p className="text-[10px] text-muted-foreground mt-3 sm:mt-4 font-medium uppercase tracking-tighter">Meta del mes: Bs. 10.000,00</p>
                 </div>
 
                 {pendingMuestras.length > 0 && (
-                    <div className="relative overflow-hidden group p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+                    <div className="relative overflow-hidden group p-4 sm:p-6 bg-card border rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
                         <div>
-                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                                <RotateCcw className="w-16 h-16 text-purple-500" />
+                            <div className="absolute top-0 right-0 p-3 sm:p-4 opacity-10 group-hover:scale-110 transition-transform">
+                                <RotateCcw className="w-12 h-12 sm:w-16 sm:h-16 text-purple-500" />
                             </div>
-                            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Muestras Pendientes</h3>
+                            <h3 className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Muestras Pendientes</h3>
                             <div className="flex items-baseline gap-2">
-                                <p className="text-3xl font-black mt-2 text-purple-600 dark:text-purple-400">{pendingMuestras.length}</p>
+                                <p className="text-2xl sm:text-3xl font-black mt-1 sm:mt-2 text-purple-600 dark:text-purple-400">{pendingMuestras.length}</p>
                                 <span className="flex items-center text-[10px] font-bold text-purple-600 dark:text-purple-300 bg-purple-500/10 px-1.5 py-0.5 rounded-full">
                                     {totalUnidadesPendientes} unid{totalUnidadesPendientes === 1 ? '' : 'es'}.
                                 </span>
                             </div>
-                            <p className="text-[10px] text-muted-foreground mt-4 font-medium uppercase tracking-tighter">
+                            <p className="text-[10px] text-muted-foreground mt-3 sm:mt-4 font-medium uppercase tracking-tighter">
                                 {pendingMuestras.length === 1 ? '1 muestra pendiente' : `${pendingMuestras.length} muestras pendientes`} de retorno
                             </p>
                         </div>
@@ -222,21 +222,21 @@ const DashboardPage: React.FC = () => {
             </div>
 
             {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                 {/* Sales Trend */}
-                <div className="lg:col-span-2 bg-card border rounded-3xl p-8 shadow-sm">
-                    <div className="flex justify-between items-center mb-8">
+                <div className="lg:col-span-2 bg-card border rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6 sm:mb-8">
                         <div>
-                            <h3 className="text-lg font-black tracking-tight">Tendencia de Ventas</h3>
+                            <h3 className="text-base sm:text-lg font-black tracking-tight">Tendencia de Ventas</h3>
                             <p className="text-xs text-muted-foreground font-medium">Histórico de los últimos 7 días</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 bg-primary rounded-full"></span>
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                            <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-primary rounded-full"></span>
                             <span className="text-[10px] font-bold uppercase tracking-widest">Ingresos</span>
                         </div>
                     </div>
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-[250px] sm:h-[300px] w-full min-w-0">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <AreaChart data={formattedTrend}>
                                 <defs>
                                     <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
@@ -272,18 +272,18 @@ const DashboardPage: React.FC = () => {
                                     labelStyle={{ color: 'hsl(var(--muted-foreground))', fontWeight: 'bold', marginBottom: '4px' }}
                                     formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Ingresos']}
                                 />
-                                <Area type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={4} fillOpacity={1} fill="url(#colorTotal)" />
+                                <Area type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
                 {/* Top Products */}
-                <div className="bg-card border rounded-3xl p-8 shadow-sm">
-                    <h3 className="text-lg font-black tracking-tight mb-2">Más Vendidos</h3>
-                    <p className="text-xs text-muted-foreground font-medium mb-8">Top 5 productos por cantidad</p>
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                <div className="bg-card border rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 shadow-sm min-w-0">
+                    <h3 className="text-base sm:text-lg font-black tracking-tight mb-1">Más Vendidos</h3>
+                    <p className="text-xs text-muted-foreground font-medium mb-6 sm:mb-8">Top 5 productos por cantidad</p>
+                    <div className="h-[250px] sm:h-[300px] w-full min-w-0">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <BarChart data={topProducts} layout="vertical">
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="currentColor" strokeOpacity={0.1} />
                                 <XAxis type="number" hide />
@@ -292,9 +292,9 @@ const DashboardPage: React.FC = () => {
                                     type="category"
                                     axisLine={false}
                                     tickLine={false}
-                                    tick={{ fill: 'currentColor', fontSize: 11, fontWeight: 700 }}
+                                    tick={{ fill: 'currentColor', fontSize: 10, fontWeight: 700 }}
                                     className="text-slate-700 dark:text-slate-200"
-                                    width={110}
+                                    width={90}
                                 />
                                 <Tooltip
                                     cursor={{ fill: 'transparent' }}
@@ -309,7 +309,7 @@ const DashboardPage: React.FC = () => {
                                     labelStyle={{ color: 'hsl(var(--muted-foreground))', fontWeight: 'bold', marginBottom: '4px' }}
                                     formatter={(value: any) => [value, 'Cantidad']}
                                 />
-                                <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={24}>
+                                <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={22}>
                                     {topProducts?.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
@@ -350,7 +350,7 @@ const DashboardPage: React.FC = () => {
                     </div>
 
                     {/* Tabla de Productos */}
-                    <div className="max-h-[420px] overflow-y-auto border rounded-xl">
+                    <div className="max-h-[420px] overflow-y-auto overflow-x-auto border rounded-xl">
                         {loadingLowStock ? (
                             <div className="p-8 text-center text-muted-foreground animate-pulse">
                                 Cargando alertas de stock...
@@ -362,7 +362,7 @@ const DashboardPage: React.FC = () => {
                                     : '¡Excelente! No hay productos con stock bajo en este momento.'}
                             </div>
                         ) : (
-                            <table className="w-full text-left border-collapse">
+                            <table className="w-full min-w-[580px] text-left border-collapse">
                                 <thead className="bg-muted/60 sticky top-0 border-b backdrop-blur-sm z-10">
                                     <tr className="text-xs font-semibold text-muted-foreground">
                                         <th className="p-3">Código</th>

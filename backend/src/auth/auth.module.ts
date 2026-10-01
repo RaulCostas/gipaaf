@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { MailService } from './mail.service';
 import { Usuario } from '../usuarios/usuario.entity';
 
 @Module({
@@ -26,8 +27,8 @@ import { Usuario } from '../usuarios/usuario.entity';
     }),
     TypeOrmModule.forFeature([Usuario]),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, MailService],
   controllers: [AuthController],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, MailService],
 })
 export class AuthModule { }

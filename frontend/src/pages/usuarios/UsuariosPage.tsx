@@ -1,20 +1,30 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService, roleService } from '../../api/userService';
 import type { Usuario } from '../../api/userService';
 import { sucursalService } from '../../api/sucursalService';
 import { personalService } from '../../api/personalService';
+import { useAuth } from '../../context/AuthContext';
+import { API_BASE_URL } from '../../api/apiClient';
 import Modal from '../../components/ui/Modal';
 import PhoneInput from '../../components/ui/PhoneInput';
 import { 
     Users, UserPlus, Pencil, Trash2, Search, CheckCircle2, 
     Shield, Building2, Mail, Phone, BadgeCheck, AtSign, 
-    Key, User, CreditCard, MapPin, X, Briefcase, UserCheck
+    Key, User, CreditCard, MapPin, X, Briefcase, UserCheck,
+    Camera, Image as ImageIcon, Upload, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+const getImageUrl = (url?: string | null) => {
+    if (!url) return '';
+    if (url.startsWith('http') || url.startsWith('blob:')) return url;
+    return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const UsuariosPage: React.FC = () => {
     const queryClient = useQueryClient();
+    const { refreshProfile } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null);
     const [search, setSearch] = useState('');
@@ -26,6 +36,9 @@ const UsuariosPage: React.FC = () => {
     const [formDireccion, setFormDireccion] = useState('');
     const [formSucursalId, setFormSucursalId] = useState('');
     const [selectedPersonalId, setSelectedPersonalId] = useState('');
+    const [formFoto, setFormFoto] = useState<string>('');
+    const [isUploadingFoto, setIsUploadingFoto] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { data: users, isLoading: loadingUsers } = useQuery({
         queryKey: ['users'],
@@ -67,6 +80,7 @@ const UsuariosPage: React.FC = () => {
         mutationFn: userService.create,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] });
+            refreshProfile();
             setIsModalOpen(false);
             toast.success('Usuario creado exitosamente');
         },
@@ -80,6 +94,7 @@ const UsuariosPage: React.FC = () => {
             userService.update(data.id, data.user),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] });
+            refreshProfile();
             setIsModalOpen(false);
             toast.success('Usuario actualizado correctamente');
         },
@@ -108,6 +123,7 @@ const UsuariosPage: React.FC = () => {
         setFormTelefono('');
         setFormDireccion('');
         setFormSucursalId('');
+        setFormFoto('');
         setIsModalOpen(true);
     };
 
@@ -120,7 +136,37 @@ const UsuariosPage: React.FC = () => {
         setFormTelefono(u.persona?.telefono || '');
         setFormDireccion(u.persona?.direccion || '');
         setFormSucursalId(u.sucursal?.id ? String(u.sucursal.id) : '');
+        setFormFoto(u.foto || '');
         setIsModalOpen(true);
+    };
+
+    const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            toast.error('Por favor seleccione un archivo de imagen válido (JPG, PNG, WebP)');
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error('La imagen no debe superar los 5MB');
+            return;
+        }
+
+        try {
+            setIsUploadingFoto(true);
+            const res = await userService.uploadFoto(file);
+            if (res.url) {
+                setFormFoto(res.url);
+                toast.success('Foto de perfil subida exitosamente');
+            }
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Error al subir la foto de perfil');
+        } finally {
+            setIsUploadingFoto(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
     };
 
     const handlePersonalSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -151,6 +197,7 @@ const UsuariosPage: React.FC = () => {
         const userData: any = {
             username: (formData.get('username') as string)?.trim(),
             email: (formData.get('email') as string)?.trim().toLowerCase(),
+            foto: formFoto || null,
             activo: formData.get('activo') === 'on',
             sucursal: sucursalIdVal ? { id: Number(sucursalIdVal) } : null,
             personal: selectedPersonalId ? { id: Number(selectedPersonalId) } : null,
@@ -243,8 +290,16 @@ const UsuariosPage: React.FC = () => {
 
                             <div>
                                 <div className="flex items-center gap-4 mb-4">
-                                    <div className="h-14 w-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary border border-primary/20 select-none uppercase font-black text-lg">
-                                        {initials}
+                                    <div className="h-14 w-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary border border-primary/20 select-none uppercase font-black text-lg overflow-hidden shrink-0 shadow-sm">
+                                        {u.foto ? (
+                                            <img 
+                                                src={getImageUrl(u.foto)} 
+                                                alt={fullName} 
+                                                className="w-full h-full object-cover" 
+                                            />
+                                        ) : (
+                                            <span>{initials}</span>
+                                        )}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <h3 className="font-bold text-base truncate flex items-center gap-1.5 leading-none mb-1 text-foreground" title={fullName}>
@@ -324,6 +379,78 @@ const UsuariosPage: React.FC = () => {
                 className="max-w-3xl"
             >
                 <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Foto de Perfil */}
+                    <div className="p-4 border rounded-2xl bg-card flex flex-col sm:flex-row items-center gap-4 shadow-sm">
+                        <div className="relative group shrink-0">
+                            <div className="w-20 h-20 rounded-2xl bg-primary/10 border-2 border-primary/20 overflow-hidden flex items-center justify-center text-primary shadow-inner">
+                                {formFoto ? (
+                                    <img 
+                                        src={getImageUrl(formFoto)} 
+                                        alt="Foto de perfil" 
+                                        className="w-full h-full object-cover" 
+                                    />
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center text-muted-foreground/60">
+                                        <Camera className="w-7 h-7 mb-0.5" />
+                                        <span className="text-[9px] font-bold uppercase">Sin Foto</span>
+                                    </div>
+                                )}
+                            </div>
+                            {formFoto && (
+                                <button
+                                    type="button"
+                                    onClick={() => setFormFoto('')}
+                                    className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:opacity-90 shadow-md transition-all cursor-pointer"
+                                    title="Quitar foto"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="flex-1 text-center sm:text-left space-y-1.5">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center justify-center sm:justify-start gap-1.5">
+                                <Camera className="w-3.5 h-3.5" /> Foto de Perfil del Usuario
+                            </h4>
+                            <p className="text-xs text-muted-foreground">
+                                Sube una fotografía para personalizar el perfil y la cabecera del sistema (JPG, PNG o WebP, máx. 5MB).
+                            </p>
+                            <div className="pt-1 flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleFotoUpload}
+                                    className="hidden"
+                                    id="usuario-foto-upload"
+                                />
+                                <label
+                                    htmlFor="usuario-foto-upload"
+                                    className={`px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 border border-primary/20 ${isUploadingFoto ? 'opacity-50 pointer-events-none' : ''}`}
+                                >
+                                    {isUploadingFoto ? (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Subiendo foto...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload className="w-3.5 h-3.5" /> {formFoto ? 'Cambiar Foto' : 'Subir Foto'}
+                                        </>
+                                    )}
+                                </label>
+                                {formFoto && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormFoto('')}
+                                        className="px-2.5 py-1.5 text-xs text-destructive hover:bg-destructive/10 rounded-lg font-medium transition-colors cursor-pointer"
+                                    >
+                                        Eliminar Foto
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="p-3.5 border rounded-xl bg-primary/5 border-primary/20 space-y-1.5">
                         <label className="text-xs font-bold uppercase text-primary tracking-wider flex items-center gap-1.5">
                             <Briefcase className="w-4 h-4 text-primary" /> Vincular con Ficha de Personal (Empleado)

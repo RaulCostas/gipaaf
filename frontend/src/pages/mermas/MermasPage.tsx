@@ -30,6 +30,7 @@ const MermasPage: React.FC = () => {
     const canEditarMerma = isAdmin || hasAction('INVENTARIO', 'EDITAR') || hasAction('INVENTARIO', 'MERMA') || hasAction('INVENTARIO', 'AJUSTAR');
     const canEliminarMerma = isAdmin || hasAction('INVENTARIO', 'ELIMINAR') || hasAction('INVENTARIO', 'MERMA') || hasAction('INVENTARIO', 'AJUSTAR');
 
+    const [selectedProducto, setSelectedProducto] = useState<number | 'all'>('all');
     const [selectedLinea, setSelectedLinea] = useState<number | 'all'>('all');
     const [selectedMarca, setSelectedMarca] = useState<number | 'all'>('all');
     const [selectedGrupo, setSelectedGrupo] = useState<number | 'all'>('all');
@@ -185,6 +186,40 @@ const MermasPage: React.FC = () => {
         return movimientos.filter(m => m.tipo === 'MERMA' || m.tipo === 'MERMA_DESCARTE');
     }, [movimientos]);
 
+    // Extrae exclusivamente los productos únicos presentes en las mermas registradas
+    const availableMermaProducts = useMemo(() => {
+        if (!mermasData) return [];
+        const productMap = new Map<number, { id: number; nombre: string; codigo?: string }>();
+
+        let scopedMermas = mermasData;
+        if (selectedSucursal) {
+            scopedMermas = scopedMermas.filter(m => {
+                const suc = m.inventario?.sucursal as any;
+                return suc?.id === Number(selectedSucursal) || suc?.sucursalId === Number(selectedSucursal);
+            });
+        } else if (selectedCiudad) {
+            scopedMermas = scopedMermas.filter(m => {
+                const suc = m.inventario?.sucursal as any;
+                return suc?.ciudad?.id === Number(selectedCiudad) || suc?.ciudadId === Number(selectedCiudad);
+            });
+        }
+
+        scopedMermas.forEach(m => {
+            const prod = m.inventario?.producto;
+            if (prod && prod.id) {
+                if (!productMap.has(prod.id)) {
+                    productMap.set(prod.id, {
+                        id: prod.id,
+                        nombre: prod.nombre || 'Sin Nombre',
+                        codigo: prod.codigo || ''
+                    });
+                }
+            }
+        });
+
+        return Array.from(productMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }, [mermasData, selectedSucursal, selectedCiudad]);
+
     const filteredMermas = useMemo(() => {
         const filtered = mermasData.filter(m => {
             const prod = m.inventario?.producto;
@@ -203,6 +238,10 @@ const MermasPage: React.FC = () => {
                 motivo.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 obs.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 user.toLowerCase().includes(searchTerm.toLowerCase());
+
+            // Filtro Producto
+            const matchesProducto = selectedProducto === 'all' ||
+                prod?.id === Number(selectedProducto);
 
             // Filtro Ciudad
             const suc = m.inventario?.sucursal as any;
@@ -251,11 +290,11 @@ const MermasPage: React.FC = () => {
                 }
             }
 
-            return matchesSearch && matchesCiudad && matchesSucursal && matchesLinea && matchesMarca && matchesGrupo && matchesMotivo && matchesFecha;
+            return matchesSearch && matchesProducto && matchesCiudad && matchesSucursal && matchesLinea && matchesMarca && matchesGrupo && matchesMotivo && matchesFecha;
         });
 
         return filtered.sort((a, b) => new Date(b.creadoEn).getTime() - new Date(a.creadoEn).getTime());
-    }, [mermasData, searchTerm, selectedCiudad, selectedSucursal, selectedLinea, selectedMarca, selectedGrupo, selectedMotivo, fechaDesde, fechaHasta, marcas, lineas]);
+    }, [mermasData, searchTerm, selectedProducto, selectedCiudad, selectedSucursal, selectedLinea, selectedMarca, selectedGrupo, selectedMotivo, fechaDesde, fechaHasta, marcas, lineas]);
 
     // Resumen KPIs
     const totals = useMemo(() => {
@@ -340,6 +379,10 @@ const MermasPage: React.FC = () => {
             const s = sucursales?.find(su => su.id === Number(selectedSucursal));
             if (s) texts.push(`Sucursal: ${s.nombre}`);
         }
+        if (selectedProducto !== 'all') {
+            const p = availableMermaProducts.find(pr => pr.id === selectedProducto);
+            if (p) texts.push(`Producto: ${p.nombre}`);
+        }
         if (selectedMarca !== 'all') {
             const m = marcas?.find(mr => mr.id === selectedMarca);
             if (m) texts.push(`Marca: ${m.nombre}`);
@@ -385,9 +428,9 @@ const MermasPage: React.FC = () => {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedCiudad, selectedSucursal, selectedLinea, selectedMarca, selectedGrupo, selectedMotivo, fechaDesde, fechaHasta]);
+    }, [searchTerm, selectedCiudad, selectedSucursal, selectedProducto, selectedLinea, selectedMarca, selectedGrupo, selectedMotivo, fechaDesde, fechaHasta]);
 
-    const hasActiveFilters = selectedMarca !== 'all' || selectedLinea !== 'all' || selectedGrupo !== 'all' || selectedMotivo !== 'all' || !!fechaDesde || !!fechaHasta || !!searchTerm;
+    const hasActiveFilters = selectedProducto !== 'all' || selectedMarca !== 'all' || selectedLinea !== 'all' || selectedGrupo !== 'all' || selectedMotivo !== 'all' || !!fechaDesde || !!fechaHasta || !!searchTerm;
 
     // Available products for registration modal
     const availableInventories = useMemo(() => {
@@ -514,6 +557,25 @@ const MermasPage: React.FC = () => {
                     />
                 </div>
 
+                {/* Filtro por Producto (Solo productos en mermas) */}
+                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
+                    <Package className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <select
+                        value={selectedProducto}
+                        onChange={(e) => setSelectedProducto(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                        className="bg-transparent border-none outline-none font-medium cursor-pointer max-w-[200px] truncate"
+                    >
+                        <option value="all" className="bg-background text-foreground">
+                            {availableMermaProducts.length === 0 ? 'Sin productos en mermas' : `Todos los Productos (${availableMermaProducts.length})`}
+                        </option>
+                        {availableMermaProducts.map(p => (
+                            <option key={p.id} value={p.id} className="bg-background text-foreground">
+                                {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
                 {/* Filtro por Marca */}
                 <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
                     <Tag className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -578,23 +640,27 @@ const MermasPage: React.FC = () => {
                     </select>
                 </div>
 
-                {/* Filtro Rango de Fechas */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-2 py-1.5 shadow-sm text-sm">
-                    <Calendar className="w-4 h-4 text-muted-foreground shrink-0 ml-1" />
+                {/* Filtro Fecha Desde */}
+                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
+                    <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-muted-foreground font-medium">Desde:</span>
                     <input
                         type="date"
                         value={fechaDesde}
                         onChange={(e) => setFechaDesde(e.target.value)}
-                        className="bg-transparent text-xs outline-none cursor-pointer"
-                        title="Fecha desde"
+                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm"
                     />
-                    <span className="text-muted-foreground text-xs">-</span>
+                </div>
+
+                {/* Filtro Fecha Hasta */}
+                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
+                    <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-muted-foreground font-medium">Hasta:</span>
                     <input
                         type="date"
                         value={fechaHasta}
                         onChange={(e) => setFechaHasta(e.target.value)}
-                        className="bg-transparent text-xs outline-none cursor-pointer"
-                        title="Fecha hasta"
+                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm"
                     />
                 </div>
 
@@ -603,6 +669,7 @@ const MermasPage: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => {
+                            setSelectedProducto('all');
                             setSelectedLinea('all');
                             setSelectedMarca('all');
                             setSelectedGrupo('all');

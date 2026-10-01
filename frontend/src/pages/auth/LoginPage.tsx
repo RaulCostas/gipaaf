@@ -2,13 +2,22 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { Mail, Lock, LogIn, ArrowRight } from 'lucide-react';
+import { userService } from '../../api/userService';
+import { Mail, Lock, LogIn, ArrowRight, KeyRound, X, CheckCircle2, AlertCircle, Loader2, Send } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+
+    // Forgot password states
+    const [showForgot, setShowForgot] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState('');
+    const [forgotLoading, setForgotLoading] = useState(false);
+    const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
+    const [forgotError, setForgotError] = useState<string | null>(null);
+
     const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
 
@@ -39,6 +48,22 @@ const LoginPage: React.FC = () => {
             setError(err.response?.data?.message || 'Error al iniciar sesión');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleForgotSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setForgotError(null);
+        setForgotSuccess(null);
+        setForgotLoading(true);
+
+        try {
+            const res = await userService.forgotPassword(forgotEmail);
+            setForgotSuccess(res.message || 'Se ha enviado una contraseña temporal a tu correo electrónico.');
+        } catch (err: any) {
+            setForgotError(err?.response?.data?.message || 'Error al procesar la recuperación de contraseña.');
+        } finally {
+            setForgotLoading(false);
         }
     };
 
@@ -107,6 +132,18 @@ const LoginPage: React.FC = () => {
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <label className="text-sm font-semibold text-foreground">Contraseña</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowForgot(true);
+                                            setForgotEmail(email);
+                                            setForgotSuccess(null);
+                                            setForgotError(null);
+                                        }}
+                                        className="text-xs font-semibold text-primary hover:underline cursor-pointer bg-transparent border-none"
+                                    >
+                                        ¿Olvidaste tu contraseña?
+                                    </button>
                                 </div>
                                 <div className="relative group">
                                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
@@ -125,7 +162,7 @@ const LoginPage: React.FC = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-3.5 px-4 bg-primary text-primary-foreground rounded-xl hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all font-semibold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-primary/20"
+                            className="w-full py-3.5 px-4 bg-primary text-primary-foreground rounded-xl hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all font-semibold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-primary/20 cursor-pointer"
                         >
                             {loading ? (
                                 <>
@@ -143,6 +180,104 @@ const LoginPage: React.FC = () => {
                     </form>
                 </div>
             </div>
+
+            {/* Modal de Recuperación de Contraseña */}
+            {showForgot && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-card border p-6 sm:p-8 rounded-3xl w-full max-w-md shadow-2xl relative">
+                        <button
+                            onClick={() => setShowForgot(false)}
+                            className="absolute top-5 right-5 p-1.5 text-muted-foreground hover:bg-accent rounded-full transition-colors cursor-pointer"
+                            title="Cerrar"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+
+                        <div className="text-center mb-6">
+                            <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary mx-auto mb-3 border border-primary/20 shadow-inner">
+                                <KeyRound className="w-7 h-7" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-foreground tracking-tight">Recuperar Contraseña</h3>
+                            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                                Ingresa tu correo electrónico registrado. Te enviaremos una <strong>contraseña temporal</strong> para que puedas acceder al sistema.
+                            </p>
+                        </div>
+
+                        {forgotSuccess ? (
+                            <div className="space-y-4">
+                                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-2xl flex items-start gap-3">
+                                    <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                                    <div className="text-xs leading-relaxed font-medium">
+                                        {forgotSuccess}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowForgot(false);
+                                        setForgotSuccess(null);
+                                    }}
+                                    className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-md hover:opacity-90 transition-all cursor-pointer text-sm"
+                                >
+                                    Volver al Inicio de Sesión
+                                </button>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleForgotSubmit} className="space-y-4">
+                                {forgotError && (
+                                    <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-xl flex items-start gap-2">
+                                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                        <div className="flex-1">{forgotError}</div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-1.5 text-left">
+                                    <label className="text-xs font-bold text-muted-foreground uppercase">Correo Electrónico</label>
+                                    <div className="relative group">
+                                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                                        <input
+                                            type="email"
+                                            value={forgotEmail}
+                                            onChange={(e) => setForgotEmail(e.target.value)}
+                                            placeholder="ejemplo@correo.com"
+                                            required
+                                            className="w-full pl-10 pr-3 py-2.5 bg-background border rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col gap-2 pt-2">
+                                    <button
+                                        type="submit"
+                                        disabled={forgotLoading}
+                                        className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-md hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
+                                    >
+                                        {forgotLoading ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Enviando correo...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send className="w-4 h-4" />
+                                                Enviar Contraseña Temporal
+                                            </>
+                                        )}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={forgotLoading}
+                                        onClick={() => setShowForgot(false)}
+                                        className="w-full py-2.5 bg-accent hover:bg-accent/80 text-foreground font-medium rounded-xl text-xs transition-colors cursor-pointer"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

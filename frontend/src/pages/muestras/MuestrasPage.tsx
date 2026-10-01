@@ -49,6 +49,7 @@ const MuestrasPage: React.FC = () => {
     const [estadoFilter, setEstadoFilter] = useState<string>('TODOS');
     const [clienteFilter, setClienteFilter] = useState<string>('all');
     const [vendedorFilter, setVendedorFilter] = useState<string>('all');
+    const [productoFilter, setProductoFilter] = useState<string>('all');
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -213,12 +214,42 @@ const MuestrasPage: React.FC = () => {
         return filtered;
     }, [sucursales, selectedSucursal, selectedCiudad]);
 
+    // Extrae exclusivamente los productos únicos presentes en las notas de muestras registradas
+    const availableMuestraProducts = useMemo(() => {
+        if (!muestrasList) return [];
+        const productMap = new Map<number, { id: number; nombre: string; codigo?: string }>();
+
+        let scopedMuestras = muestrasList;
+        if (selectedSucursal) {
+            scopedMuestras = scopedMuestras.filter(m => m.sucursal?.id === Number(selectedSucursal));
+        } else if (selectedCiudad) {
+            scopedMuestras = scopedMuestras.filter(m => (m.sucursal?.ciudad as any)?.id === Number(selectedCiudad));
+        }
+
+        scopedMuestras.forEach(m => {
+            (m.detalles || []).forEach(d => {
+                if (d.producto && d.producto.id) {
+                    if (!productMap.has(d.producto.id)) {
+                        productMap.set(d.producto.id, {
+                            id: d.producto.id,
+                            nombre: d.producto.nombre || 'Sin Nombre',
+                            codigo: d.producto.codigo || ''
+                        });
+                    }
+                }
+            });
+        });
+
+        return Array.from(productMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }, [muestrasList, selectedSucursal, selectedCiudad]);
+
     // Check active filters
     const hasActiveFilters = Boolean(
         searchTerm ||
         estadoFilter !== 'TODOS' ||
         clienteFilter !== 'all' ||
         vendedorFilter !== 'all' ||
+        productoFilter !== 'all' ||
         fechaDesde ||
         fechaHasta
     );
@@ -228,6 +259,7 @@ const MuestrasPage: React.FC = () => {
         setEstadoFilter('TODOS');
         setClienteFilter('all');
         setVendedorFilter('all');
+        setProductoFilter('all');
         setFechaDesde('');
         setFechaHasta('');
     };
@@ -241,6 +273,11 @@ const MuestrasPage: React.FC = () => {
             if (estadoFilter !== 'TODOS' && m.estado !== estadoFilter) return false;
             if (clienteFilter !== 'all' && m.cliente?.id !== Number(clienteFilter)) return false;
             if (vendedorFilter !== 'all' && m.vendedor?.id !== Number(vendedorFilter)) return false;
+            if (productoFilter !== 'all') {
+                const pId = Number(productoFilter);
+                const hasProd = m.detalles?.some(d => d.producto?.id === pId || (d as any).productoId === pId);
+                if (!hasProd) return false;
+            }
 
             if (fechaDesde) {
                 const fMuestra = m.fecha ? m.fecha.split('T')[0] : '';
@@ -266,7 +303,7 @@ const MuestrasPage: React.FC = () => {
             }
             return true;
         });
-    }, [muestrasList, selectedSucursal, selectedCiudad, estadoFilter, clienteFilter, vendedorFilter, fechaDesde, fechaHasta, searchTerm]);
+    }, [muestrasList, selectedSucursal, selectedCiudad, estadoFilter, clienteFilter, vendedorFilter, productoFilter, fechaDesde, fechaHasta, searchTerm]);
 
     const totalPages = Math.ceil(filteredMuestras.length / itemsPerPage) || 1;
     const paginatedMuestras = useMemo(() => {
@@ -274,7 +311,7 @@ const MuestrasPage: React.FC = () => {
         return filteredMuestras.slice(start, start + itemsPerPage);
     }, [filteredMuestras, currentPage]);
 
-    React.useEffect(() => setCurrentPage(1), [searchTerm, estadoFilter, clienteFilter, vendedorFilter, fechaDesde, fechaHasta]);
+    React.useEffect(() => setCurrentPage(1), [searchTerm, estadoFilter, clienteFilter, vendedorFilter, productoFilter, fechaDesde, fechaHasta]);
 
     // Mutations
     const createMutation = useMutation({
@@ -569,6 +606,11 @@ const MuestrasPage: React.FC = () => {
             texts.push(`Vendedor: ${vendName}`);
         }
 
+        if (productoFilter !== 'all') {
+            const prod = availableMuestraProducts.find(p => p.id === Number(productoFilter));
+            if (prod) texts.push(`Producto: ${prod.nombre}`);
+        }
+
         if (fechaDesde && fechaHasta) {
             texts.push(`Rango: ${fechaDesde.split('-').reverse().join('/')} al ${fechaHasta.split('-').reverse().join('/')}`);
         } else if (fechaDesde) {
@@ -808,6 +850,25 @@ const MuestrasPage: React.FC = () => {
                         {personal?.map(p => (
                             <option key={p.id} value={p.id} className="bg-background text-foreground">
                                 {p.nombres} {p.apellidos}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Filtro por Producto (Solo productos en muestras) */}
+                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
+                    <Package className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <select
+                        value={productoFilter}
+                        onChange={(e) => setProductoFilter(e.target.value)}
+                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[200px] truncate"
+                    >
+                        <option value="all" className="bg-background text-foreground">
+                            {availableMuestraProducts.length === 0 ? 'Sin productos en muestras' : `Todos los Productos (${availableMuestraProducts.length})`}
+                        </option>
+                        {availableMuestraProducts.map(p => (
+                            <option key={p.id} value={p.id} className="bg-background text-foreground">
+                                {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
                             </option>
                         ))}
                     </select>

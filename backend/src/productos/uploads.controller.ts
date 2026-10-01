@@ -10,7 +10,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
+import * as fs from 'fs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 
@@ -35,7 +36,13 @@ export class UploadsController {
     @UseInterceptors(
         FileInterceptor('file', {
             storage: diskStorage({
-                destination: './uploads',
+                destination: (req, file, callback) => {
+                    const uploadPath = join(process.cwd(), 'uploads');
+                    if (!fs.existsSync(uploadPath)) {
+                        fs.mkdirSync(uploadPath, { recursive: true });
+                    }
+                    callback(null, uploadPath);
+                },
                 filename: (req, file, callback) => {
                     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
                     const ext = extname(file.originalname);

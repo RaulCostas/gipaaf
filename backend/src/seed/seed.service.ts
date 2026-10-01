@@ -73,7 +73,7 @@ const SYSTEM_PERMISSIONS = [
 
   // Reportes
   { nombre: 'Ver Estadísticas (Estratégico)', recurso: 'REPORTES', accion: 'ESTADISTICAS', descripcion: 'Acceso a pestaña de estadísticas y métricas generales' },
-  { nombre: 'Ver Reporte de Productos', recurso: 'REPORTES', accion: 'PRODUCTOS', descripcion: 'Acceso a pestaña de reporte y existencias de productos' },
+  { nombre: 'Ver Kardex de Producto', recurso: 'REPORTES', accion: 'PRODUCTOS', descripcion: 'Acceso a pestaña de kardex de producto y existencias' },
   { nombre: 'Ver Kardex de Clientes', recurso: 'REPORTES', accion: 'KARDEX_CLIENTE', descripcion: 'Acceso a pestaña de historial y kardex por cliente' },
   { nombre: 'Ver Reporte de Ventas', recurso: 'REPORTES', accion: 'VENTAS', descripcion: 'Acceso a pestaña de reporte analítico de ventas' },
   { nombre: 'Ver Reporte de Cobranzas', recurso: 'REPORTES', accion: 'COBRANZAS', descripcion: 'Acceso a pestaña de reporte analítico de cobranzas' },

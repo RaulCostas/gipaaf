@@ -24,6 +24,7 @@ export class AuthController {
             id: usuario.id,
             email: usuario.email,
             username: usuario.username,
+            foto: usuario.foto,
             persona: usuario.persona,
             roles: usuario.roles,
             sucursal: usuario.sucursal,
@@ -36,5 +37,10 @@ export class AuthController {
     @Post('cambiar-password')
     async cambiarPassword(@Request() req, @Body() body: { currentPassword: string; newPassword: string }) {
         return this.authService.changePassword(req.user.id, body.currentPassword, body.newPassword);
+    }
+
+    @Post('forgot-password')
+    async forgotPassword(@Body() body: { email: string }) {
+        return this.authService.forgotPassword(body.email);
     }
 }
