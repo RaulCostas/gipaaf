@@ -179,10 +179,10 @@ const MermasPage: React.FC = () => {
         return 0;
     };
 
-    // Filter only MERMA movements
+    // Filter only MERMA and MERMA_DESCARTE movements
     const mermasData = useMemo(() => {
         if (!movimientos) return [];
-        return movimientos.filter(m => m.tipo === 'MERMA');
+        return movimientos.filter(m => m.tipo === 'MERMA' || m.tipo === 'MERMA_DESCARTE');
     }, [movimientos]);
 
     const filteredMermas = useMemo(() => {
@@ -568,6 +568,7 @@ const MermasPage: React.FC = () => {
                         className="bg-transparent border-none outline-none font-medium cursor-pointer"
                     >
                         <option value="all" className="bg-background text-foreground">Todos los Motivos</option>
+                        <option value="Devolución" className="bg-background text-foreground">Devolución de Cliente (Descarte)</option>
                         <option value="Vencimiento" className="bg-background text-foreground">Vencimiento / Caducidad</option>
                         <option value="Deterioro" className="bg-background text-foreground">Deterioro / Daño físico</option>
                         <option value="Rotura" className="bg-background text-foreground">Rotura / Avería</option>
@@ -695,11 +696,18 @@ const MermasPage: React.FC = () => {
                                         <td className="p-4 text-right text-sm font-bold text-destructive font-mono">
                                             {formatCurrency(total)}
                                         </td>
-                                        <td className="p-4 max-w-[200px]">
-                                            <div className="flex flex-col">
-                                                <span className="text-xs font-semibold text-foreground truncate" title={m.motivo}>
-                                                    {m.motivo || 'Merma'}
-                                                </span>
+                                        <td className="p-4 max-w-[220px]">
+                                            <div className="flex flex-col gap-0.5">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    {m.tipo === 'MERMA_DESCARTE' && (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-300 dark:border-purple-800 shrink-0">
+                                                            Devolución
+                                                        </span>
+                                                    )}
+                                                    <span className="text-xs font-semibold text-foreground truncate" title={m.motivo}>
+                                                        {m.motivo || 'Merma'}
+                                                    </span>
+                                                </div>
                                                 {m.observaciones && (
                                                     <span className="text-[11px] text-muted-foreground truncate" title={m.observaciones}>
                                                         {m.observaciones}
@@ -1046,13 +1054,20 @@ const MermasPage: React.FC = () => {
                             </p>
                             <div className="text-xs space-y-1 text-muted-foreground pt-1 border-t border-red-500/20">
                                 <div><strong>Producto:</strong> {deletingMerma.inventario?.producto?.nombre}</div>
-                                <div><strong>Cantidad a restaurar:</strong> <span className="font-bold text-green-600 dark:text-green-400">+{formatQuantity(Math.abs(deletingMerma.cantidad))} {deletingMerma.inventario?.producto?.unidadMedida || 'u.'}</span></div>
+                                <div><strong>Cantidad:</strong> <span className="font-bold text-destructive">-{formatQuantity(Math.abs(deletingMerma.cantidad))} {deletingMerma.inventario?.producto?.unidadMedida || 'u.'}</span></div>
                                 <div><strong>Sucursal:</strong> {(deletingMerma.inventario?.sucursal as any)?.nombre}</div>
+                                {deletingMerma.tipo === 'MERMA_DESCARTE' && (
+                                    <div className="text-purple-600 dark:text-purple-400 font-semibold pt-1">
+                                        Origen: Devolución de Cliente ({deletingMerma.numeroDocumento || 'Descarte'})
+                                    </div>
+                                )}
                             </div>
                         </div>
 
                         <p className="text-xs text-muted-foreground">
-                            Al confirmar, el registro de merma será eliminado y la cantidad descontada volverá a sumarse automáticamente al stock disponible del inventario.
+                            {deletingMerma.tipo === 'MERMA_DESCARTE'
+                                ? 'Al confirmar, este registro de merma por devolución será eliminado del historial.'
+                                : 'Al confirmar, el registro de merma será eliminado y la cantidad descontada volverá a sumarse automáticamente al stock disponible del inventario.'}
                         </p>
 
                         <div className="flex justify-end space-x-3 pt-4 border-t">
@@ -1069,7 +1084,7 @@ const MermasPage: React.FC = () => {
                                 disabled={deleteMermaMutation.isPending}
                                 className="flex items-center gap-2 px-5 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm cursor-pointer disabled:opacity-50"
                             >
-                                <Trash2 className="w-4 h-4" /> {deleteMermaMutation.isPending ? 'Eliminando...' : 'Eliminar y Revertir Stock'}
+                                <Trash2 className="w-4 h-4" /> {deleteMermaMutation.isPending ? 'Eliminando...' : (deletingMerma.tipo === 'MERMA_DESCARTE' ? 'Eliminar Registro' : 'Eliminar y Revertir Stock')}
                             </button>
                         </div>
                     </div>

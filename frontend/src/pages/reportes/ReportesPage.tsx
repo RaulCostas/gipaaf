@@ -22,11 +22,12 @@ import { movimientoService } from '../../api/movimientoService';
 import { returnService } from '../../api/returnService';
 import { muestraService } from '../../api/muestraService';
 import { useFilters } from '../../context/FilterContext';
+import { useAuth } from '../../context/AuthContext';
 import { 
     Search, Printer, FileText, FileSpreadsheet,
     Wallet, ShoppingCart, ShoppingBag, PieChart as PieChartIcon, ChevronLeft, ChevronRight,
     Users, CreditCard, DollarSign, Calendar, X, Eye, User, Building2, Tag, Receipt, Package, HandCoins,
-    TrendingUp, BarChart3, Activity, Award, Percent, Boxes, ImageIcon, Layers, Store
+    TrendingUp, BarChart3, Activity, Award, Percent, Boxes, ImageIcon, Layers, Store, ShieldAlert
 } from 'lucide-react';
 import {
     ResponsiveContainer,
@@ -52,9 +53,41 @@ import { format, subDays, startOfMonth, startOfYear } from 'date-fns';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
+export type ReportTabType = 'estadisticas' | 'productos' | 'kardex-cliente' | 'ventas' | 'cobranzas' | 'compras' | 'pagos-proveedores';
+
+interface ReportTabConfig {
+    id: ReportTabType;
+    label: string;
+    action: string;
+    icon: React.ComponentType<{ className?: string }>;
+}
+
+const REPORT_TABS: ReportTabConfig[] = [
+    { id: 'estadisticas', label: 'Estadísticas (Estratégico)', action: 'ESTADISTICAS', icon: BarChart3 },
+    { id: 'productos', label: 'Reporte de Productos', action: 'PRODUCTOS', icon: Boxes },
+    { id: 'kardex-cliente', label: 'Kardex de Cliente', action: 'KARDEX_CLIENTE', icon: Users },
+    { id: 'ventas', label: 'Reporte de Ventas', action: 'VENTAS', icon: ShoppingCart },
+    { id: 'cobranzas', label: 'Reporte de Cobranzas', action: 'COBRANZAS', icon: Wallet },
+    { id: 'compras', label: 'Reporte de Compras', action: 'COMPRAS', icon: ShoppingBag },
+    { id: 'pagos-proveedores', label: 'Reporte de Pagos a Proveedores', action: 'PAGOS_PROVEEDORES', icon: HandCoins },
+];
+
 const ReportesPage: React.FC = () => {
+    const { isAdmin, hasAction } = useAuth();
     const { selectedSucursal, selectedCiudad } = useFilters();
-    const [activeTab, setActiveTab] = useState<'estadisticas' | 'productos' | 'kardex-cliente' | 'ventas' | 'cobranzas' | 'compras' | 'pagos-proveedores'>('estadisticas');
+
+    const availableTabs = useMemo(() => {
+        return REPORT_TABS.filter(tab => isAdmin || hasAction('REPORTES', tab.action));
+    }, [isAdmin, hasAction]);
+
+    const [activeTab, setActiveTab] = useState<ReportTabType>('estadisticas');
+
+    // Automatically ensure activeTab is valid among authorized tabs
+    React.useEffect(() => {
+        if (availableTabs.length > 0 && !availableTabs.some(t => t.id === activeTab)) {
+            setActiveTab(availableTabs[0].id);
+        }
+    }, [availableTabs, activeTab]);
 
     // ==========================================
     // ESTADOS: ESTADÍSTICAS ESTRATÉGICAS
@@ -2116,82 +2149,59 @@ const ReportesPage: React.FC = () => {
                     </h1>
                     <p className="text-muted-foreground italic">Analiza el rendimiento del negocio para la toma de decisiones estratégicas.</p>
                 </div>
-                <div className="flex items-center flex-wrap gap-3">
-                    <div className="flex items-center gap-2">
-                        <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors shadow-sm cursor-pointer" title="Imprimir">
-                            <Printer className="w-4 h-4 text-muted-foreground" /> <span className="hidden sm:inline">Imprimir</span>
-                        </button>
-                        {activeTab !== 'estadisticas' && (
-                            <>
-                                <button onClick={handleExportPDF} className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors shadow-sm cursor-pointer" title="Exportar a PDF">
-                                    <FileText className="w-4 h-4 text-red-500" /> <span className="hidden sm:inline">PDF</span>
-                                </button>
-                                <button onClick={handleExportExcel} className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors shadow-sm cursor-pointer" title="Exportar a Excel">
-                                    <FileSpreadsheet className="w-4 h-4 text-green-600" /> <span className="hidden sm:inline">Excel</span>
-                                </button>
-                            </>
-                        )}
+                {availableTabs.length > 0 && (
+                    <div className="flex items-center flex-wrap gap-3">
+                        <div className="flex items-center gap-2">
+                            <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors shadow-sm cursor-pointer" title="Imprimir">
+                                <Printer className="w-4 h-4 text-muted-foreground" /> <span className="hidden sm:inline">Imprimir</span>
+                            </button>
+                            {activeTab !== 'estadisticas' && (
+                                <>
+                                    <button onClick={handleExportPDF} className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors shadow-sm cursor-pointer" title="Exportar a PDF">
+                                        <FileText className="w-4 h-4 text-red-500" /> <span className="hidden sm:inline">PDF</span>
+                                    </button>
+                                    <button onClick={handleExportExcel} className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors shadow-sm cursor-pointer" title="Exportar a Excel">
+                                        <FileSpreadsheet className="w-4 h-4 text-green-600" /> <span className="hidden sm:inline">Excel</span>
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
+                )}
+            </div>
+
+            {availableTabs.length === 0 ? (
+                <div className="p-12 text-center bg-card border rounded-2xl shadow-sm space-y-3">
+                    <ShieldAlert className="w-12 h-12 text-destructive/80 mx-auto" />
+                    <h2 className="text-xl font-bold text-foreground">Acceso Restringido</h2>
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        No tiene permisos asignados para visualizar ninguna de las pestañas del módulo de Reportes. Comuníquese con un administrador para solicitar acceso.
+                    </p>
                 </div>
-            </div>
+            ) : (
+                <>
+                    {/* Pestañas (Tabs) autorizadas */}
+                    <div className="flex border-b overflow-x-auto custom-scrollbar">
+                        {availableTabs.map(tab => {
+                            const TabIcon = tab.icon;
+                            const isActive = activeTab === tab.id;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${isActive ? 'border-primary text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}`}
+                                >
+                                    <TabIcon className="w-4 h-4" />
+                                    {tab.label}
+                                </button>
+                            );
+                        })}
+                    </div>
 
-            {/* Pestañas (Tabs) en el orden solicitado: Estadísticas, Productos, Ventas, Cobranzas, Compras, Pagos Proveedores */}
-            <div className="flex border-b overflow-x-auto custom-scrollbar">
-                <button
-                    onClick={() => setActiveTab('estadisticas')}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${activeTab === 'estadisticas' ? 'border-primary text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}`}
-                >
-                    <BarChart3 className="w-4 h-4" />
-                    Estadísticas (Estratégico)
-                </button>
-                <button
-                    onClick={() => setActiveTab('productos')}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${activeTab === 'productos' ? 'border-primary text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}`}
-                >
-                    <Boxes className="w-4 h-4" />
-                    Reporte de Productos
-                </button>
-                <button
-                    onClick={() => setActiveTab('kardex-cliente')}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${activeTab === 'kardex-cliente' ? 'border-primary text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}`}
-                >
-                    <Users className="w-4 h-4" />
-                    Kardex de Cliente
-                </button>
-                <button
-                    onClick={() => setActiveTab('ventas')}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${activeTab === 'ventas' ? 'border-primary text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}`}
-                >
-                    <ShoppingCart className="w-4 h-4" />
-                    Reporte de Ventas
-                </button>
-                <button
-                    onClick={() => setActiveTab('cobranzas')}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${activeTab === 'cobranzas' ? 'border-primary text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}`}
-                >
-                    <Wallet className="w-4 h-4" />
-                    Reporte de Cobranzas
-                </button>
-                <button
-                    onClick={() => setActiveTab('compras')}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${activeTab === 'compras' ? 'border-primary text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}`}
-                >
-                    <ShoppingBag className="w-4 h-4" />
-                    Reporte de Compras
-                </button>
-                <button
-                    onClick={() => setActiveTab('pagos-proveedores')}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${activeTab === 'pagos-proveedores' ? 'border-primary text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}`}
-                >
-                    <HandCoins className="w-4 h-4" />
-                    Reporte de Pagos a Proveedores
-                </button>
-            </div>
-
-            {/* ========================================== */}
-            {/* TAB: ESTADÍSTICAS ESTRATÉGICAS */}
-            {/* ========================================== */}
-            {activeTab === 'estadisticas' && (
+                    {/* ========================================== */}
+                    {/* TAB: ESTADÍSTICAS ESTRATÉGICAS */}
+                    {/* ========================================== */}
+                    {activeTab === 'estadisticas' && (
                 <div className="space-y-6">
                     {/* Barra de Filtros de Período */}
                     <div className="bg-card p-4 border rounded-xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -4595,6 +4605,8 @@ const ReportesPage: React.FC = () => {
                     </div>
                 )}
             </Modal>
+                </>
+            )}
         </div>
     );
 };

@@ -80,7 +80,13 @@ const permissions = [
   { nombre: 'Gestionar Rutas de Venta', recurso: 'RUTAS', accion: 'GESTIONAR', descripcion: 'Crear y asignar rutas de venta' },
 
   // Analítica & Utilidades
-  { nombre: 'Ver Reportes y Estadísticas', recurso: 'REPORTES', accion: 'VER', descripcion: 'Acceso a dashboards y reportes gerenciales' },
+  { nombre: 'Ver Estadísticas (Estratégico)', recurso: 'REPORTES', accion: 'ESTADISTICAS', descripcion: 'Acceso a pestaña de estadísticas y métricas generales' },
+  { nombre: 'Ver Reporte de Productos', recurso: 'REPORTES', accion: 'PRODUCTOS', descripcion: 'Acceso a pestaña de reporte y existencias de productos' },
+  { nombre: 'Ver Kardex de Clientes', recurso: 'REPORTES', accion: 'KARDEX_CLIENTE', descripcion: 'Acceso a pestaña de historial y kardex por cliente' },
+  { nombre: 'Ver Reporte de Ventas', recurso: 'REPORTES', accion: 'VENTAS', descripcion: 'Acceso a pestaña de reporte analítico de ventas' },
+  { nombre: 'Ver Reporte de Cobranzas', recurso: 'REPORTES', accion: 'COBRANZAS', descripcion: 'Acceso a pestaña de reporte analítico de cobranzas' },
+  { nombre: 'Ver Reporte de Compras', recurso: 'REPORTES', accion: 'COMPRAS', descripcion: 'Acceso a pestaña de reporte analítico de compras' },
+  { nombre: 'Ver Reporte de Pagos a Proveedores', recurso: 'REPORTES', accion: 'PAGOS_PROVEEDORES', descripcion: 'Acceso a pestaña de reporte analítico de pagos a proveedores' },
   { nombre: 'Ver Módulo de Utilidades', recurso: 'UTILIDADES', accion: 'VER', descripcion: 'Consultar análisis de utilidades, ingresos y egresos' },
   { nombre: 'Exportar Utilidades', recurso: 'UTILIDADES', accion: 'EXPORTAR', descripcion: 'Exportar e imprimir reportes de utilidades en PDF y Excel' },
 

@@ -121,18 +121,43 @@ export class MovimientosInventarioService implements OnModuleInit {
                             creadoEn: nota.fecha ? new Date(nota.fecha + 'T12:00:00') : (nota.creadoEn || new Date()),
                         }));
                     } else if (nota.tipo === TipoNota.DEVOLUCION) {
-                        const motivo = `Devolución [${nota.numero}]`;
-                        await this.repo.save(this.repo.create({
-                            inventario: inv,
-                            tipo: 'DEVOLUCION',
-                            cantidad: Number(det.cantidad),
-                            motivo: motivo.trim(),
-                            numeroDocumento: nota.numero,
-                            observaciones: obs,
-                            costoUnitario: Number(inv.precioCompra) || Number(det.producto?.precioCompra) || 0,
-                            usuario: nota.usuario || undefined,
-                            creadoEn: nota.fecha ? new Date(nota.fecha + 'T12:00:00') : (nota.creadoEn || new Date()),
-                        }));
+                        const isSalidaReposicion = det.tipoMovimiento === 'SALIDA_REPOSICION';
+                        if (isSalidaReposicion) {
+                            await this.repo.save(this.repo.create({
+                                inventario: inv,
+                                tipo: 'SALIDA_REPOSICION',
+                                cantidad: -Number(det.cantidad),
+                                motivo: `Reposición / Cambio por Devolución [${nota.numero}]`.trim(),
+                                numeroDocumento: nota.numero,
+                                observaciones: obs,
+                                costoUnitario: Number(inv?.precioCompra) || Number(det.producto?.precioCompra) || 0,
+                                usuario: nota.usuario || undefined,
+                                creadoEn: nota.fecha ? new Date(nota.fecha + 'T12:00:00') : (nota.creadoEn || new Date()),
+                            }));
+                        } else {
+                            const destino = det.destinoProducto || 'REINGRESO_STOCK';
+                            let movTipo = 'DEVOLUCION';
+                            let motivo = `Devolución de Cliente [${nota.numero}] - Reingreso a Stock`;
+                            if (destino === 'DESCARTE_MERMA') {
+                                movTipo = 'MERMA_DESCARTE';
+                                motivo = `Devolución [${nota.numero}] - Descarte/Merma (Defecto: ${det.motivoDefecto || 'Dañado'})`;
+                            } else if (destino === 'RECLAMO_PROVEEDOR') {
+                                movTipo = 'RECLAMO_PROVEEDOR';
+                                motivo = `Devolución [${nota.numero}] - Custodia para Reclamo a Proveedor (Defecto: ${det.motivoDefecto || 'Dañado'})`;
+                            }
+
+                            await this.repo.save(this.repo.create({
+                                inventario: inv,
+                                tipo: movTipo,
+                                cantidad: Number(det.cantidad),
+                                motivo: motivo.trim(),
+                                numeroDocumento: nota.numero,
+                                observaciones: obs,
+                                costoUnitario: Number(det.precioUnitario) || Number(inv?.precioCompra) || Number(det.producto?.precioCompra) || 0,
+                                usuario: nota.usuario || undefined,
+                                creadoEn: nota.fecha ? new Date(nota.fecha + 'T12:00:00') : (nota.creadoEn || new Date()),
+                            }));
+                        }
                     }
                 }
             }
@@ -208,7 +233,11 @@ export class MovimientosInventarioService implements OnModuleInit {
             .leftJoinAndSelect('usuario.persona', 'persona');
 
         if (tipo) {
-            qb.andWhere('mov.tipo = :tipo', { tipo });
+            if (tipo === 'MERMA') {
+                qb.andWhere('(mov.tipo = :tipo OR mov.tipo = :tipoDescarte)', { tipo: 'MERMA', tipoDescarte: 'MERMA_DESCARTE' });
+            } else {
+                qb.andWhere('mov.tipo = :tipo', { tipo });
+            }
         }
         if (sucursalId) {
             qb.andWhere('inventario.sucursalId = :sucursalId', { sucursalId });

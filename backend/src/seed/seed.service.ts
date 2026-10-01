@@ -72,7 +72,13 @@ const SYSTEM_PERMISSIONS = [
   { nombre: 'Gestionar Rutas de Venta', recurso: 'RUTAS', accion: 'GESTIONAR', descripcion: 'Crear y asignar rutas de venta' },
 
   // Reportes
-  { nombre: 'Ver Reportes y Estadísticas', recurso: 'REPORTES', accion: 'VER', descripcion: 'Acceso a dashboards y reportes gerenciales' },
+  { nombre: 'Ver Estadísticas (Estratégico)', recurso: 'REPORTES', accion: 'ESTADISTICAS', descripcion: 'Acceso a pestaña de estadísticas y métricas generales' },
+  { nombre: 'Ver Reporte de Productos', recurso: 'REPORTES', accion: 'PRODUCTOS', descripcion: 'Acceso a pestaña de reporte y existencias de productos' },
+  { nombre: 'Ver Kardex de Clientes', recurso: 'REPORTES', accion: 'KARDEX_CLIENTE', descripcion: 'Acceso a pestaña de historial y kardex por cliente' },
+  { nombre: 'Ver Reporte de Ventas', recurso: 'REPORTES', accion: 'VENTAS', descripcion: 'Acceso a pestaña de reporte analítico de ventas' },
+  { nombre: 'Ver Reporte de Cobranzas', recurso: 'REPORTES', accion: 'COBRANZAS', descripcion: 'Acceso a pestaña de reporte analítico de cobranzas' },
+  { nombre: 'Ver Reporte de Compras', recurso: 'REPORTES', accion: 'COMPRAS', descripcion: 'Acceso a pestaña de reporte analítico de compras' },
+  { nombre: 'Ver Reporte de Pagos a Proveedores', recurso: 'REPORTES', accion: 'PAGOS_PROVEEDORES', descripcion: 'Acceso a pestaña de reporte analítico de pagos a proveedores' },
 
   // Utilidades
   { nombre: 'Ver Módulo de Utilidades', recurso: 'UTILIDADES', accion: 'VER', descripcion: 'Consultar análisis de utilidades, ingresos y egresos' },
@@ -156,6 +162,13 @@ export class SeedService implements OnApplicationBootstrap {
                 const roles = await this.rolRepo.find({ relations: ['permisos'] });
                 for (const rol of roles) {
                     if (rol.permisos.some(p => p.id === dbPerm.id)) {
+                        if (dbPerm.recurso === 'REPORTES') {
+                            const newReportPerms = await this.permisoRepo.find({ where: { recurso: 'REPORTES' } });
+                            const existingIds = new Set(rol.permisos.map(p => p.id));
+                            newReportPerms.forEach(np => {
+                                if (!existingIds.has(np.id)) rol.permisos.push(np);
+                            });
+                        }
                         rol.permisos = rol.permisos.filter(p => p.id !== dbPerm.id);
                         await this.rolRepo.save(rol);
                     }
@@ -164,10 +177,18 @@ export class SeedService implements OnApplicationBootstrap {
             }
         }
 
+        // 3. Ensure ADMIN role always has all permissions
+        const allPermissions = await this.permisoRepo.find();
+        let adminRole = await this.rolRepo.findOne({ where: { nombre: 'ADMIN' }, relations: ['permisos'] });
+        if (adminRole) {
+            adminRole.permisos = allPermissions;
+            await this.rolRepo.save(adminRole);
+        }
+
         const count = await this.usuarioRepo.count();
         if (count > 0) return;
 
-        // 2. Create Sucursal
+        // 4. Create Sucursal
         let sucursal = await this.sucursalRepo.findOne({ where: { nombre: 'Sucursal Central' } });
         if (!sucursal) {
             sucursal = this.sucursalRepo.create({
@@ -178,9 +199,7 @@ export class SeedService implements OnApplicationBootstrap {
             sucursal = await this.sucursalRepo.save(sucursal);
         }
 
-        // 3. Create Admin Role with all permissions
-        const allPermissions = await this.permisoRepo.find();
-        let adminRole = await this.rolRepo.findOne({ where: { nombre: 'ADMIN' } });
+        // 5. Create Admin Role if not exists
         if (!adminRole) {
             adminRole = this.rolRepo.create({
                 nombre: 'ADMIN',
@@ -188,9 +207,6 @@ export class SeedService implements OnApplicationBootstrap {
                 permisos: allPermissions,
             });
             adminRole = await this.rolRepo.save(adminRole);
-        } else {
-            adminRole.permisos = allPermissions;
-            await this.rolRepo.save(adminRole);
         }
 
         // 4. Create Persona
