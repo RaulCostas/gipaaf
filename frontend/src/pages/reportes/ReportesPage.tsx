@@ -46,6 +46,7 @@ import {
 } from 'recharts';
 import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
@@ -320,6 +321,22 @@ const ReportesPage: React.FC = () => {
         }
         return [];
     }, [clientesList]);
+
+    const clientReportOptions: SearchableOption[] = useMemo(() => {
+        return clientesUnicos.map(c => ({
+            value: String(c.id),
+            label: `${c.codigo ? `[${c.codigo}] ` : ''}${getClientDisplayName(c)}${(c.sucursal as any)?.ciudad?.nombre ? ` (${(c.sucursal as any)?.ciudad?.nombre})` : ''}`,
+            code: c.codigo ? String(c.codigo) : undefined,
+            sublabel: c.nombreTienda && c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : (c.persona?.ci ? `CI: ${c.persona.ci}` : undefined)
+        }));
+    }, [clientesUnicos]);
+
+    const clientFilterOptions: SearchableOption[] = useMemo(() => {
+        return [
+            { value: '', label: 'Todos los Clientes' },
+            ...clientReportOptions
+        ];
+    }, [clientReportOptions]);
 
     // Proveedores ordenados para el selector
     const proveedoresUnicos = useMemo(() => {
@@ -2992,21 +3009,13 @@ const ReportesPage: React.FC = () => {
                                         </span>
                                     )}
                                 </label>
-                                <select
+                                <SearchableSelect
                                     value={kardexClienteId}
-                                    onChange={(e) => setKardexClienteId(e.target.value)}
-                                    className="w-full p-2.5 pl-3 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
-                                >
-                                    <option value="">-- Selecciona un Cliente para generar el Kardex --</option>
-                                    {clientesList?.map(c => {
-                                        const label = `${c.codigo ? `[${c.codigo}] ` : ''}${getClientDisplayName(c)}${(c.sucursal as any)?.ciudad?.nombre ? ` (${(c.sucursal as any)?.ciudad?.nombre})` : ''}`;
-                                        return (
-                                            <option key={c.id} value={c.id}>
-                                                {label}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
+                                    onChange={(val) => setKardexClienteId(String(val || ''))}
+                                    options={clientReportOptions}
+                                    placeholder="-- Selecciona un Cliente para generar el Kardex --"
+                                    searchPlaceholder="Buscar cliente por nombre, tienda o CI..."
+                                />
                             </div>
 
                             {/* Rango de Fechas */}
@@ -3311,16 +3320,13 @@ const ReportesPage: React.FC = () => {
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                                     <Users className="w-3.5 h-3.5 text-primary" /> Cliente
                                 </label>
-                                <select 
+                                <SearchableSelect 
                                     value={filtroVentaCliente} 
-                                    onChange={(e) => setFiltroVentaCliente(e.target.value)} 
-                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                                >
-                                    <option value="">Todos los Clientes</option>
-                                    {clientesUnicos.map(c => (
-                                        <option key={c.id} value={c.id}>{getClientDisplayName(c)}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => { setFiltroVentaCliente(String(val || '')); setVentaCurrentPage(1); }} 
+                                    options={clientFilterOptions}
+                                    placeholder="Todos los Clientes"
+                                    searchPlaceholder="Buscar cliente..."
+                                />
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
@@ -3604,16 +3610,13 @@ const ReportesPage: React.FC = () => {
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                                     <Users className="w-3.5 h-3.5 text-primary" /> Cliente
                                 </label>
-                                <select 
+                                <SearchableSelect 
                                     value={filtroCobranzaCliente} 
-                                    onChange={(e) => setFiltroCobranzaCliente(e.target.value)} 
-                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                                >
-                                    <option value="">Todos los Clientes</option>
-                                    {clientesUnicos.map(c => (
-                                        <option key={c.id} value={c.id}>{getClientDisplayName(c)}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => { setFiltroCobranzaCliente(String(val || '')); setCobranzaCurrentPage(1); }} 
+                                    options={clientFilterOptions}
+                                    placeholder="Todos los Clientes"
+                                    searchPlaceholder="Buscar cliente..."
+                                />
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">

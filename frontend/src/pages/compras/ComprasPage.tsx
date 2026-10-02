@@ -9,6 +9,7 @@ import { sucursalService } from '../../api/sucursalService';
 import { getCiudades } from '../../api/ciudadService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { CostoImportacionModal } from '../../components/compras/CostoImportacionModal';
 import { X, Search, Plus, Trash2, CheckCircle, CheckCircle2, Check, Package, Calculator, Calendar, ChevronRight, Eye, Edit, Ban, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Users, Lock, Info, MessageSquare, Send, Loader2, ExternalLink, Globe, MessageCircle, ShoppingCart } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -95,6 +96,7 @@ const ComprasPage: React.FC = () => {
     const [selectedSupplier, setSelectedSupplier] = useState('all');
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
+    const [selectedProductId, setSelectedProductId] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
 
     // WhatsApp State & Mutations
@@ -180,6 +182,19 @@ const ComprasPage: React.FC = () => {
         queryFn: () => productService.getAll(),
     });
 
+    const productOptions: SearchableOption[] = useMemo(() => {
+        if (!products) return [];
+        return products.filter(p => p.activo).map(p => ({
+            value: String(p.id),
+            label: p.nombre,
+            code: p.codigo,
+            sublabel: [
+                p.linea?.nombre ? `Línea: ${p.linea.nombre}` : '',
+                p.marca?.nombre ? `Marca: ${p.marca.nombre}` : ''
+            ].filter(Boolean).join(' • ') || undefined
+        }));
+    }, [products]);
+
     const { data: sucursales } = useQuery({
         queryKey: ['sucursales'],
         queryFn: sucursalService.getAll,
@@ -239,6 +254,7 @@ const ComprasPage: React.FC = () => {
             descuentoPromocionPorcentaje: 0,
             detalles: []
         });
+        setSelectedProductId('');
         setError(null);
         setIsCreating(false);
         setIsViewing(false);
@@ -1001,28 +1017,25 @@ const ComprasPage: React.FC = () => {
                         <div className="p-4 space-y-4">
                             {!isViewing && (
                                 <div className="flex gap-2 items-center">
-                                    <select 
-                                        id="compraProductSelect"
-                                        className="flex-1 min-w-0 p-2.5 border rounded-lg bg-background text-sm text-foreground outline-none hover:border-primary/50 transition-all text-ellipsis overflow-hidden"
-                                        defaultValue=""
-                                    >
-                                        <option value="" disabled>Seleccione un producto para agregar...</option>
-                                        {products?.filter(p => p.activo).map(p => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.codigo} - {p.nombre}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div className="flex-1 min-w-0">
+                                        <SearchableSelect
+                                            value={selectedProductId}
+                                            onChange={(val) => setSelectedProductId(String(val || ''))}
+                                            options={productOptions}
+                                            placeholder="Seleccione un producto para agregar..."
+                                            searchPlaceholder="Buscar producto por código, nombre, línea, marca..."
+                                        />
+                                    </div>
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            const select = document.getElementById('compraProductSelect') as HTMLSelectElement;
-                                            if (select && select.value) {
-                                                addProductToDetail(select.value);
-                                                select.value = '';
+                                            if (selectedProductId) {
+                                                addProductToDetail(selectedProductId);
+                                                setSelectedProductId('');
                                             }
                                         }}
-                                        className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer"
+                                        disabled={!selectedProductId}
+                                        className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <ShoppingCart className="w-4 h-4 shrink-0" />
                                         <span>Añadir</span>

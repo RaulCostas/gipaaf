@@ -13,6 +13,7 @@ import {
     MessageCircle, Send, Loader2, ExternalLink
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -179,6 +180,23 @@ const TraspasosPage: React.FC = () => {
         }
         return getStockInOrigen(Number(selectedProdId), Number(formData.sucursalOrigenId));
     }, [selectedProdId, selectedNumeroLote, availableLotesInOrigen, formData.sucursalOrigenId, inventarios]);
+
+    const productOptions: SearchableOption[] = useMemo(() => {
+        if (!productos) return [];
+        return productos.map(p => {
+            const stock = getStockInOrigen(p.id, Number(formData.sucursalOrigenId));
+            const isOutOfStock = stock <= 0;
+            return {
+                value: p.id,
+                label: p.nombre,
+                code: p.codigo || undefined,
+                sublabel: isOutOfStock 
+                    ? '⚠️ Sin stock en la sucursal de origen' 
+                    : `Stock: ${stock} ${p.unidadMedida || 'un.'}`,
+                disabled: isOutOfStock
+            };
+        });
+    }, [productos, formData.sucursalOrigenId, inventarios]);
 
     // Handle adding item to the transfer
     const handleAddItem = () => {
@@ -1343,99 +1361,96 @@ const TraspasosPage: React.FC = () => {
                                     Seleccione primero una sucursal de origen para consultar el stock disponible y agregar productos.
                                 </p>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                                    <div className="sm:col-span-4 space-y-1">
-                                        <label className="text-[11px] font-semibold text-muted-foreground">Producto</label>
-                                        <select
-                                            value={selectedProdId}
-                                            onChange={(e) => {
-                                                setSelectedProdId(e.target.value);
-                                                setSelectedNumeroLote('');
-                                            }}
-                                            className="w-full p-2 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20"
-                                        >
-                                            <option value="">Seleccione un producto...</option>
-                                            {productos?.map(p => {
-                                                const stock = getStockInOrigen(p.id, Number(formData.sucursalOrigenId));
-                                                return (
-                                                    <option key={p.id} value={p.id} disabled={stock <= 0}>
-                                                        {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre} (Stock: {stock} {p.unidadMedida || 'un.'})
-                                                    </option>
-                                                );
-                                            })}
-                                        </select>
-                                    </div>
-
-                                    <div className="sm:col-span-3 space-y-1">
-                                        <label className="text-[11px] font-semibold text-muted-foreground">Lote de Origen</label>
-                                        <select
-                                            value={selectedNumeroLote}
-                                            onChange={(e) => setSelectedNumeroLote(e.target.value)}
-                                            disabled={!selectedProdId || availableLotesInOrigen.length === 0}
-                                            className="w-full p-2 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
-                                        >
-                                            <option value="">Automático (FEFO / PEPS)</option>
-                                            {availableLotesInOrigen.map(l => {
-                                                const venc = l.fechaVencimiento ? ` | Venc: ${String(l.fechaVencimiento).substring(0, 10).split('-').reverse().join('/')}` : '';
-                                                return (
-                                                    <option key={l.id} value={l.numeroLote}>
-                                                        Lote: {l.numeroLote || 'S/N'} ({l.cantidadActual} u.){venc}
-                                                    </option>
-                                                );
-                                            })}
-                                        </select>
-                                    </div>
-
-                                    <div className="sm:col-span-2 space-y-1">
-                                        <div className="flex items-center justify-between">
-                                            <label className="text-[11px] font-semibold text-muted-foreground">Cantidad</label>
-                                            {selectedProdId && (
-                                                <span className="text-[10px] text-primary font-bold">Max: {selectedProductStockInOrigen}</span>
-                                            )}
+                                <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/60">
+                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                                        <div className="sm:col-span-8 space-y-1">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">Producto</label>
+                                            <SearchableSelect
+                                                value={selectedProdId}
+                                                onChange={(val) => {
+                                                    setSelectedProdId(val);
+                                                    setSelectedNumeroLote('');
+                                                }}
+                                                options={productOptions}
+                                                placeholder="Buscar producto por nombre o código..."
+                                                searchPlaceholder="Escriba código o nombre de producto..."
+                                            />
                                         </div>
-                                        <input
-                                            type="number"
-                                            step="1"
-                                            min={selectedProdId ? 1 : undefined}
-                                            max={selectedProdId && selectedProductStockInOrigen > 0 ? selectedProductStockInOrigen : undefined}
-                                            value={itemCantidad}
-                                            onChange={(e) => setItemCantidad(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    handleAddItem();
-                                                }
-                                            }}
-                                            className="w-full p-2 border rounded-lg bg-background text-xs font-bold outline-none focus:ring-2 focus:ring-primary/20"
-                                        />
+
+                                        <div className="sm:col-span-4 space-y-1">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">Lote de Origen</label>
+                                            <select
+                                                value={selectedNumeroLote}
+                                                onChange={(e) => setSelectedNumeroLote(e.target.value)}
+                                                disabled={!selectedProdId || availableLotesInOrigen.length === 0}
+                                                className="w-full min-h-[40px] p-2 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+                                            >
+                                                <option value="">Automático (FEFO / PEPS)</option>
+                                                {availableLotesInOrigen.map(l => {
+                                                    const venc = l.fechaVencimiento ? ` | Venc: ${String(l.fechaVencimiento).substring(0, 10).split('-').reverse().join('/')}` : '';
+                                                    return (
+                                                        <option key={l.id} value={l.numeroLote}>
+                                                            Lote: {l.numeroLote || 'S/N'} ({l.cantidadActual} u.){venc}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
+                                        </div>
                                     </div>
 
-                                    <div className="sm:col-span-2 space-y-1">
-                                        <label className="text-[11px] font-semibold text-muted-foreground">Observación</label>
-                                        <input
-                                            type="text"
-                                            placeholder="Detalle..."
-                                            value={itemObservacion}
-                                            onChange={(e) => setItemObservacion(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    handleAddItem();
-                                                }
-                                            }}
-                                            className="w-full p-2 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20"
-                                        />
-                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                                        <div className="sm:col-span-3 space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[11px] font-semibold text-muted-foreground">Cantidad</label>
+                                                {selectedProdId && (
+                                                    <span className="text-[10px] text-primary font-bold">Max: {selectedProductStockInOrigen}</span>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                min={selectedProdId ? 1 : undefined}
+                                                max={selectedProdId && selectedProductStockInOrigen > 0 ? selectedProductStockInOrigen : undefined}
+                                                value={itemCantidad}
+                                                onChange={(e) => setItemCantidad(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleAddItem();
+                                                    }
+                                                }}
+                                                className="w-full min-h-[38px] p-2 border rounded-lg bg-background text-xs font-bold outline-none focus:ring-2 focus:ring-primary/20"
+                                            />
+                                        </div>
 
-                                    <div className="sm:col-span-1">
-                                        <button
-                                            type="button"
-                                            onClick={handleAddItem}
-                                            className="w-full py-2 px-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-1 shadow-sm"
-                                            title="Agregar a la lista"
-                                        >
-                                            <Plus className="w-4 h-4" />
-                                        </button>
+                                        <div className="sm:col-span-7 space-y-1">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">Observación (Opcional)</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Detalle o nota..."
+                                                value={itemObservacion}
+                                                onChange={(e) => setItemObservacion(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleAddItem();
+                                                    }
+                                                }}
+                                                className="w-full min-h-[38px] p-2 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20"
+                                            />
+                                        </div>
+
+                                        <div className="sm:col-span-2">
+                                            <button
+                                                type="button"
+                                                onClick={handleAddItem}
+                                                className="w-full min-h-[38px] py-2 px-3 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                                                title="Agregar a la lista"
+                                            >
+                                                <Plus className="w-4 h-4 shrink-0" />
+                                                <span>Agregar</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}

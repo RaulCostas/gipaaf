@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { toast } from 'sonner';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { format } from 'date-fns';
@@ -217,6 +218,24 @@ const CobranzasPage: React.FC = () => {
             return na.localeCompare(nb);
         });
     }, [pagosList, selectedSucursal, selectedCiudad]);
+
+    const clientesConDeudaOptions: SearchableOption[] = useMemo(() => {
+        return clientesConDeuda.map(c => ({
+            value: String(c.id),
+            label: getClientDisplayName(c),
+            code: c.codigo ? String(c.codigo) : undefined,
+            sublabel: c.nombreTienda && c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : (c.persona?.ci ? `CI: ${c.persona.ci}` : undefined)
+        }));
+    }, [clientesConDeuda]);
+
+    const clientesUnicosOptions: SearchableOption[] = useMemo(() => {
+        return clientesUnicos.map(c => ({
+            value: String(c.id),
+            label: getClientDisplayName(c),
+            code: c.codigo ? String(c.codigo) : undefined,
+            sublabel: c.nombreTienda && c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : (c.persona?.ci ? `CI: ${c.persona.ci}` : undefined)
+        }));
+    }, [clientesUnicos]);
 
     // Pending sales for currently selected client
     const deudasDelCliente = useMemo(() => {
@@ -780,20 +799,17 @@ const CobranzasPage: React.FC = () => {
                 </div>
 
                 {/* Filtro Cliente */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                    <Users className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <select
+                <div className="w-56 sm:w-64">
+                    <SearchableSelect
                         value={filtroCliente}
-                        onChange={(e) => { setFiltroCliente(e.target.value); setCurrentPage(1); }}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[180px] truncate"
-                    >
-                        <option value="" className="bg-background text-foreground">Todos los Clientes</option>
-                        {clientesUnicos.map(c => (
-                            <option key={c.id} value={c.id} className="bg-background text-foreground">
-                                {getClientDisplayName(c)}
-                            </option>
-                        ))}
-                    </select>
+                        onChange={(val) => { setFiltroCliente(String(val || '')); setCurrentPage(1); }}
+                        options={[
+                            { value: '', label: 'Todos los Clientes' },
+                            ...clientesUnicosOptions
+                        ]}
+                        placeholder="Todos los Clientes"
+                        searchPlaceholder="Buscar cliente..."
+                    />
                 </div>
 
                 {/* Filtro Vendedor */}
@@ -1155,27 +1171,21 @@ const CobranzasPage: React.FC = () => {
                             {loadingDeudas && !editingId ? (
                                 <div className="p-2.5 text-xs text-muted-foreground animate-pulse border rounded-lg">Cargando clientes con deuda...</div>
                             ) : (
-                                <select
+                                <SearchableSelect
                                     value={formData.clienteId}
-                                    onChange={(e) => {
+                                    onChange={(val) => {
                                         setFormData({
                                             ...formData,
-                                            clienteId: e.target.value,
+                                            clienteId: String(val || ''),
                                             notaId: ''
                                         });
                                         setError(null);
                                     }}
                                     disabled={!!editingId}
-                                    className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm disabled:opacity-60"
-                                    required
-                                >
-                                    <option value="">Seleccione un cliente...</option>
-                                    {clientesConDeuda?.map(c => (
-                                        <option key={c.id} value={c.id}>
-                                            {getClientDisplayName(c)}
-                                        </option>
-                                    ))}
-                                </select>
+                                    options={clientesConDeudaOptions}
+                                    placeholder="Seleccione un cliente..."
+                                    searchPlaceholder="Buscar cliente con saldo pendiente..."
+                                />
                             )}
                             {!editingId && clientesConDeuda && clientesConDeuda.length === 0 && !loadingDeudas && (
                                 <p className="text-xs text-amber-600 font-medium">No se encontraron clientes con saldo pendiente de pago.</p>

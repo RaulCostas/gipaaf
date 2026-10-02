@@ -14,6 +14,7 @@ import { getCiudades } from '../../api/ciudadService';
 
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, User, Package, Calendar, X, Eye, Edit, AlertTriangle, FileText, Receipt, Building2, Info, CreditCard, Clock, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
@@ -40,6 +41,7 @@ const ventasPage: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     const [error, setError] = useState<string | null>(null);
+    const [selectedProdIdToAdd, setSelectedProdIdToAdd] = useState<string>('');
 
     // Form State
     const [newVenta, setNewVenta] = useState<any>({
@@ -80,22 +82,36 @@ const ventasPage: React.FC = () => {
         const activeSucursal = newVenta.sucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
         const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
 
+        let list = clients;
         if (activeSucursal) {
-            return clients.filter(c => 
+            list = clients.filter(c => 
                 c.sucursal?.id === Number(activeSucursal) || 
                 c.ruta?.sucursal?.id === Number(activeSucursal) ||
                 (newVenta.clienteId && c.id.toString() === newVenta.clienteId)
             );
-        }
-        if (activeCiudad) {
-            return clients.filter(c => 
-                c.sucursal?.ciudad?.id === Number(activeCiudad) ||
+        } else if (activeCiudad) {
+            list = clients.filter(c => 
+                c.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) ||
                 (newVenta.clienteId && c.id.toString() === newVenta.clienteId)
             );
         }
-        return clients;
+        return [...list].sort((a, b) => getClientDisplayName(a).localeCompare(getClientDisplayName(b)));
     }, [clients, newVenta.sucursalId, selectedSucursal, userSucursal?.id, selectedCiudad, userCiudad?.id, newVenta.clienteId]);
+
+    const clientOptions: SearchableOption[] = useMemo(() => {
+        return availableClients.map(c => {
+            const displayName = getClientDisplayName(c);
+            const storeName = getClientStoreName(c);
+            const nit = (c as any).nitCi ? `NIT/CI: ${(c as any).nitCi}` : undefined;
+            const sub = [storeName && storeName !== displayName ? storeName : '', nit].filter(Boolean).join(' | ');
+            return {
+                value: c.id,
+                label: displayName,
+                sublabel: sub || undefined,
+            };
+        });
+    }, [availableClients]);
 
     
     const { data: sucursales } = useQuery({ queryKey: ['sucursales'], queryFn: sucursalService.getAll });
@@ -135,6 +151,23 @@ const ventasPage: React.FC = () => {
         }
         return stock;
     };
+
+    const productOptions: SearchableOption[] = useMemo(() => {
+        if (!products) return [];
+        return products.filter(p => p.activo).map(p => {
+            const stock = getProductStock(p.id);
+            const isOutOfStock = stock <= 0;
+            return {
+                value: p.id,
+                label: p.nombre,
+                code: p.codigo || undefined,
+                sublabel: isOutOfStock 
+                    ? '⚠️ Sin stock en la sucursal' 
+                    : `Stock: ${stock} ${p.unidadMedida || 'un.'} | Precio: Bs. ${p.precioVenta}`,
+                disabled: isOutOfStock
+            };
+        });
+    }, [products, inventarios, newVenta.sucursalId, editingId, newVenta.estado, ventas]);
 
     const getProductLotes = (prodId: number) => {
         if (!inventarios) return [];
@@ -228,6 +261,7 @@ const ventasPage: React.FC = () => {
     const resetForm = () => {
         setEditingId(null);
         setIsViewing(false);
+        setSelectedProdIdToAdd('');
         const firstSucInCiudad = selectedCiudad ? sucursales?.find((s: any) => s.ciudad?.id === Number(selectedCiudad))?.id?.toString() : '';
         const defaultSucId = selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : (firstSucInCiudad || '')));
         const defaultSucNombre = sucursales?.find((s: any) => s.id.toString() === defaultSucId)?.nombre || userSucursal?.nombre || userPersonal?.sucursal?.nombre || '';
@@ -1133,22 +1167,18 @@ const ventasPage: React.FC = () => {
                             />
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                             <label className="text-sm font-medium flex items-center gap-2 italic text-muted-foreground">
-                                <User className="w-3 h-3 text-primary" /> Cliente
+                                <User className="w-3.5 h-3.5 text-primary" /> Cliente
                             </label>
-                            <select disabled={isViewing} 
+                            <SearchableSelect
+                                disabled={isViewing}
                                 value={newVenta.clienteId}
-                                onChange={(e) => setNewVenta({ ...newVenta, clienteId: e.target.value })}
-                                className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50"
-                            >
-                                <option value="">Cliente Final (Sin registrar)</option>
-                                {availableClients?.map(c => (
-                                    <option key={c.id} value={c.id}>
-                                        {getClientDisplayName(c)}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(val) => setNewVenta({ ...newVenta, clienteId: val })}
+                                options={clientOptions}
+                                placeholder="Cliente Final (Sin registrar)"
+                                searchPlaceholder="Buscar cliente por nombre o NIT..."
+                            />
                         </div>
 
                         <div className="space-y-1.5">
@@ -1324,36 +1354,27 @@ const ventasPage: React.FC = () => {
                         </div>
                         <div className="p-4 space-y-4">
                             <div className="flex gap-2 items-center">
-                                <select disabled={isViewing} 
-                                    id="productSelect"
-                                    className="flex-1 min-w-0 p-2.5 border rounded-lg bg-background text-sm text-foreground outline-none disabled:opacity-50 disabled:cursor-not-allowed hover:border-primary/50 transition-all text-ellipsis overflow-hidden"
-                                    defaultValue=""
-                                >
-                                    <option value="" disabled>Seleccione un producto para agregar...</option>
-                                    {products?.filter(p => p.activo).map(p => {
-                                        const stock = getProductStock(p.id);
-                                        const isOutOfStock = stock <= 0;
-                                        return (
-                                            <option 
-                                                key={p.id} 
-                                                value={p.id}
-                                                style={{ color: isOutOfStock ? '#ef4444' : undefined, fontWeight: isOutOfStock ? 'bold' : 'normal' }}
-                                                className={isOutOfStock ? "text-red-500 font-semibold" : ""}
-                                            >
-                                                {p.codigo} - {p.nombre} (Bs. {p.precioVenta}) | {isOutOfStock ? '⚠️ SIN STOCK (0)' : `Stock: ${stock}`}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
+                                <div className="flex-1 min-w-0">
+                                    <SearchableSelect
+                                        disabled={isViewing}
+                                        value={selectedProdIdToAdd}
+                                        onChange={(val) => setSelectedProdIdToAdd(val)}
+                                        options={productOptions}
+                                        placeholder="Buscar o seleccionar producto para agregar..."
+                                        searchPlaceholder="Escriba código o nombre de producto..."
+                                    />
+                                </div>
                                 {!isViewing && (
                                 <button
                                     type="button"
+                                    disabled={!selectedProdIdToAdd}
                                     onClick={() => {
-                                        const select = document.getElementById('productSelect') as HTMLSelectElement;
-                                        addProductToDetail(select.value);
-                                        select.value = "";
+                                        if (selectedProdIdToAdd) {
+                                            addProductToDetail(selectedProdIdToAdd);
+                                            setSelectedProdIdToAdd('');
+                                        }
                                     }}
-                                    className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer"
+                                    className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer disabled:opacity-50"
                                 >
                                     <ShoppingCart className="w-4 h-4 shrink-0" />
                                     <span>Añadir</span>

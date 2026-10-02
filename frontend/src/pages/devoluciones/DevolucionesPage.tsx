@@ -10,6 +10,7 @@ import { getCiudades } from '../../api/ciudadService';
 import { EstadoNota } from '../../api/purchaseService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { 
     X, Search, Plus, Trash2, CheckCircle, Package, 
     Calculator, Calendar, RotateCcw, User, Building2, 
@@ -146,29 +147,51 @@ const DevolucionesPage: React.FC = () => {
         const activeSucursal = newReturn.sucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
         const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
 
+        let list = clients;
         if (activeSucursal) {
-            return clients.filter(c => 
+            list = clients.filter(c => 
                 c.sucursal?.id === Number(activeSucursal) || 
                 c.ruta?.sucursal?.id === Number(activeSucursal) ||
                 (newReturn.clienteId && c.id.toString() === newReturn.clienteId) ||
                 (selectedClientFilter !== 'all' && c.id.toString() === selectedClientFilter)
             );
-        }
-        if (activeCiudad) {
-            return clients.filter(c => 
+        } else if (activeCiudad) {
+            list = clients.filter(c => 
                 c.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 (newReturn.clienteId && c.id.toString() === newReturn.clienteId) ||
                 (selectedClientFilter !== 'all' && c.id.toString() === selectedClientFilter)
             );
         }
-        return clients;
+        return [...list].sort((a, b) => getClientDisplayName(a).localeCompare(getClientDisplayName(b)));
     }, [clients, newReturn.sucursalId, selectedSucursal, userSucursal?.id, selectedCiudad, userCiudad?.id, newReturn.clienteId, selectedClientFilter]);
+
+    const clientOptions: SearchableOption[] = useMemo(() => {
+        return availableClients.map(c => ({
+            value: String(c.id),
+            label: getClientDisplayName(c),
+            code: c.codigo ? String(c.codigo) : undefined,
+            sublabel: c.nombreTienda && c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : (c.persona?.ci ? `CI: ${c.persona.ci}` : undefined)
+        }));
+    }, [availableClients]);
 
     const { data: products } = useQuery({
         queryKey: ['products'],
         queryFn: () => productService.getAll(),
     });
+
+    const productOptions: SearchableOption[] = useMemo(() => {
+        if (!products) return [];
+        return products.filter(p => p.activo).map(p => ({
+            value: String(p.id),
+            label: p.nombre,
+            code: p.codigo,
+            sublabel: [
+                p.linea?.nombre ? `Línea: ${p.linea.nombre}` : '',
+                p.marca?.nombre ? `Marca: ${p.marca.nombre}` : ''
+            ].filter(Boolean).join(' • ') || undefined
+        }));
+    }, [products]);
 
     // Filtra solo los productos que existen en las devoluciones registradas (devueltos o repuestos)
     const availableReturnProducts = useMemo(() => {
@@ -198,6 +221,14 @@ const DevolucionesPage: React.FC = () => {
 
         return Array.from(productMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
     }, [returns, selectedSucursal, selectedCiudad]);
+
+    const returnProductFilterOptions: SearchableOption[] = useMemo(() => {
+        return availableReturnProducts.map(p => ({
+            value: String(p.id),
+            label: p.nombre,
+            code: p.codigo || undefined
+        }));
+    }, [availableReturnProducts]);
 
     const { data: sucursales } = useQuery({
         queryKey: ['sucursales'],
@@ -906,39 +937,31 @@ const DevolucionesPage: React.FC = () => {
                 </div>
 
                 {/* Filtro por Cliente */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                    <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <select
-                        value={selectedClientFilter}
-                        onChange={(e) => setSelectedClientFilter(e.target.value)}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[180px] truncate"
-                    >
-                        <option value="all" className="bg-background text-foreground">Todos los Clientes</option>
-                        {availableClients?.map(c => (
-                            <option key={c.id} value={c.id} className="bg-background text-foreground">
-                                {getClientDisplayName(c)}
-                            </option>
-                        ))}
-                    </select>
+                <div className="w-56 sm:w-64">
+                    <SearchableSelect
+                        value={selectedClientFilter === 'all' ? '' : selectedClientFilter}
+                        onChange={(val) => setSelectedClientFilter(val ? String(val) : 'all')}
+                        options={[
+                            { value: '', label: 'Todos los Clientes' },
+                            ...clientOptions
+                        ]}
+                        placeholder="Todos los Clientes"
+                        searchPlaceholder="Buscar cliente..."
+                    />
                 </div>
 
                 {/* Filtro por Producto (Solo productos en devoluciones / reposiciones) */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                    <Package className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <select
-                        value={selectedProductFilter}
-                        onChange={(e) => setSelectedProductFilter(e.target.value)}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[200px] truncate"
-                    >
-                        <option value="all" className="bg-background text-foreground">
-                            {availableReturnProducts.length === 0 ? 'Sin productos devueltos' : `Todos los Productos (${availableReturnProducts.length})`}
-                        </option>
-                        {availableReturnProducts.map(p => (
-                            <option key={p.id} value={p.id} className="bg-background text-foreground">
-                                {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
-                            </option>
-                        ))}
-                    </select>
+                <div className="w-60 sm:w-72">
+                    <SearchableSelect
+                        value={selectedProductFilter === 'all' ? '' : selectedProductFilter}
+                        onChange={(val) => setSelectedProductFilter(val ? String(val) : 'all')}
+                        options={[
+                            { value: '', label: availableReturnProducts.length === 0 ? 'Sin productos devueltos' : `Todos los Productos (${availableReturnProducts.length})` },
+                            ...returnProductFilterOptions
+                        ]}
+                        placeholder="Todos los Productos"
+                        searchPlaceholder="Buscar producto devuelto..."
+                    />
                 </div>
 
                 {/* Filtro Fecha Desde */}
@@ -1196,19 +1219,17 @@ const DevolucionesPage: React.FC = () => {
                             <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                                 <User className="w-3.5 h-3.5 text-primary" /> Cliente
                             </label>
-                            <select
+                            <SearchableSelect
                                 disabled={isViewing}
                                 value={newReturn.clienteId}
-                                onChange={(e) => setNewReturn({ ...newReturn, clienteId: e.target.value })}
-                                className="w-full p-2.5 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-75"
-                            >
-                                <option value="">Cliente Final (Sin registrar)</option>
-                                {availableClients?.map(c => (
-                                    <option key={c.id} value={c.id}>
-                                        {getClientDisplayName(c)}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(val) => setNewReturn({ ...newReturn, clienteId: String(val || '') })}
+                                options={[
+                                    { value: '', label: 'Cliente Final (Sin registrar)' },
+                                    ...clientOptions
+                                ]}
+                                placeholder="Cliente Final (Sin registrar)"
+                                searchPlaceholder="Buscar cliente por nombre o tienda..."
+                            />
                         </div>
                     </div>
 
@@ -1231,24 +1252,21 @@ const DevolucionesPage: React.FC = () => {
 
                         {/* Selector de Producto Devuelto */}
                         {!isViewing && (
-                            <div className="flex gap-2 pt-1">
-                                <select
-                                    value={selectedDevueltoToAdd}
-                                    onChange={(e) => setSelectedDevueltoToAdd(e.target.value)}
-                                    className="flex-1 p-2.5 border rounded-lg bg-background text-xs font-medium outline-none focus:ring-2 focus:ring-primary/20"
-                                >
-                                    <option value="">Selecciona el producto defectuoso que entrega el cliente...</option>
-                                    {products?.filter(p => p.activo).map(p => (
-                                        <option key={p.id} value={p.id}>
-                                            {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
-                                        </option>
-                                    ))}
-                                </select>
+                            <div className="flex gap-2 pt-1 items-center">
+                                <div className="flex-1 min-w-0">
+                                    <SearchableSelect
+                                        value={selectedDevueltoToAdd}
+                                        onChange={(val) => setSelectedDevueltoToAdd(String(val || ''))}
+                                        options={productOptions}
+                                        placeholder="Selecciona el producto defectuoso que entrega el cliente..."
+                                        searchPlaceholder="Buscar producto por código, nombre, marca..."
+                                    />
+                                </div>
                                 <button
                                     type="button"
                                     onClick={handleAddDevuelto}
                                     disabled={!selectedDevueltoToAdd}
-                                    className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                    className="shrink-0 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                                 >
                                     <Plus className="w-4 h-4" /> Agregar
                                 </button>
@@ -1378,24 +1396,21 @@ const DevolucionesPage: React.FC = () => {
 
                         {/* Selector de Producto de Reposición */}
                         {!isViewing && (
-                            <div className="flex gap-2 pt-1">
-                                <select
-                                    value={selectedRepuestoToAdd}
-                                    onChange={(e) => setSelectedRepuestoToAdd(e.target.value)}
-                                    className="flex-1 p-2.5 border rounded-lg bg-background text-xs font-medium outline-none focus:ring-2 focus:ring-primary/20"
-                                >
-                                    <option value="">Selecciona el producto nuevo a entregar al cliente...</option>
-                                    {products?.filter(p => p.activo).map(p => (
-                                        <option key={p.id} value={p.id}>
-                                            {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
-                                        </option>
-                                    ))}
-                                </select>
+                            <div className="flex gap-2 pt-1 items-center">
+                                <div className="flex-1 min-w-0">
+                                    <SearchableSelect
+                                        value={selectedRepuestoToAdd}
+                                        onChange={(val) => setSelectedRepuestoToAdd(String(val || ''))}
+                                        options={productOptions}
+                                        placeholder="Selecciona el producto nuevo a entregar al cliente..."
+                                        searchPlaceholder="Buscar producto por código, nombre, marca..."
+                                    />
+                                </div>
                                 <button
                                     type="button"
                                     onClick={handleAddRepuesto}
                                     disabled={!selectedRepuestoToAdd}
-                                    className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                    className="shrink-0 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                                 >
                                     <Plus className="w-4 h-4" /> Agregar
                                 </button>

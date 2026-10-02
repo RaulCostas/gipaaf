@@ -22,17 +22,25 @@ export class UsuariosService implements OnModuleInit {
             await this.repo.query(`
                 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto VARCHAR(255) NULL;
             `);
+            await this.repo.query(`
+                UPDATE usuarios
+                SET activo = false, "eliminadoEn" = NULL
+                WHERE "eliminadoEn" IS NOT NULL;
+            `);
         } catch (e) {
             console.error('Error auto-migrating foto column in usuarios:', e);
         }
     }
 
     findAll() {
-        return this.repo.find();
+        return this.repo.find({
+            withDeleted: true,
+            order: { id: 'ASC' }
+        });
     }
 
     async findOne(id: number) {
-        const u = await this.repo.findOne({ where: { id } });
+        const u = await this.repo.findOne({ where: { id }, withDeleted: true });
         if (!u) throw new NotFoundException(`Usuario ${id} no encontrado`);
         return u;
     }
@@ -182,6 +190,7 @@ export class UsuariosService implements OnModuleInit {
 
     async remove(id: number) {
         const u = await this.findOne(id);
-        return this.repo.softRemove(u);
+        u.activo = false;
+        return this.repo.save(u);
     }
 }

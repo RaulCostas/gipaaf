@@ -1,11 +1,13 @@
-export const formatCurrency = (amount: number | string | undefined | null, currency: 'BOB' | 'USD' = 'BOB'): string => {
+export const formatCurrencyAmount = (amount: number | string | undefined | null): string => {
     const num = Number(amount) || 0;
-    // Uses de-DE standard to guarantee period for thousands (even for 4-digit numbers) and comma for decimals
-    const formattedNumber = new Intl.NumberFormat('de-DE', {
+    return new Intl.NumberFormat('de-DE', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(num);
-    
+};
+
+export const formatCurrency = (amount: number | string | undefined | null, currency: 'BOB' | 'USD' = 'BOB'): string => {
+    const formattedNumber = formatCurrencyAmount(amount);
     return `${currency === 'USD' ? '$us' : 'Bs.'} ${formattedNumber}`;
 };
 

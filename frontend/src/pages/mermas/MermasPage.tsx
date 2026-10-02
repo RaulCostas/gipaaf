@@ -9,6 +9,7 @@ import { grupoService } from '../../api/grupoService';
 import { getCiudades } from '../../api/ciudadService';
 import { sucursalService } from '../../api/sucursalService';
 import Modal from '../../components/ui/Modal';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { 
     AlertOctagon, Search, Filter, Printer, FileText, FileSpreadsheet, 
     X, ChevronLeft, ChevronRight, Check, Tag, Layers, Calendar, 
@@ -448,6 +449,21 @@ const MermasPage: React.FC = () => {
         });
     }, [inventoryList, selectedCiudad, selectedSucursal]);
 
+    const inventoryOptions: SearchableOption[] = useMemo(() => {
+        if (!availableInventories) return [];
+        return availableInventories.map(inv => {
+            const stock = Number(inv.stockActual) || 0;
+            const sucName = (inv.sucursal as any)?.nombre || 'Sucursal';
+            return {
+                value: inv.id,
+                label: inv.producto?.nombre || 'Sin nombre',
+                code: inv.producto?.codigo || undefined,
+                sublabel: `Stock: ${stock} ${inv.producto?.unidadMedida || 'un.'} | ${sucName}`,
+                disabled: stock <= 0
+            };
+        });
+    }, [availableInventories]);
+
     const selectedInvItem = useMemo(() => {
         if (!selectedInventoryId || !inventoryList) return null;
         return inventoryList.find(i => i.id === Number(selectedInventoryId)) || null;
@@ -460,53 +476,59 @@ const MermasPage: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-destructive flex items-center gap-2">
-                        <AlertOctagon className="w-8 h-8 text-destructive" />
+                    <h1 className="text-2xl font-bold tracking-tight text-primary flex items-center gap-2">
+                        <AlertOctagon className="w-8 h-8 text-primary/80" />
                         Inventario de Mermas
                     </h1>
                     <p className="text-muted-foreground italic">Historial y control detallado de mermas, deterioro y pérdidas de inventario.</p>
                 </div>
                 
-                <div className="flex items-center gap-2 flex-wrap">
-                    {canRegistrarMerma && (
+                <div className="flex items-center flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
                         <button
-                            onClick={() => {
-                                setSelectedInventoryId('');
-                                setCantidadMermaStr('');
-                                setObservacionesMerma('');
-                                setIsCreateOpen(true);
-                            }}
-                            className="px-3 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-                            title="Registrar nueva merma"
+                            onClick={handlePrint}
+                            className="px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+                            title="Imprimir reporte"
                         >
-                            <Plus className="w-4 h-4" />
-                            <span>Nueva Merma</span>
+                            <Printer className="w-4 h-4 text-muted-foreground" />
+                            <span className="hidden sm:inline">Imprimir</span>
                         </button>
+                        <button
+                            onClick={handleExportPDF}
+                            className="px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+                            title="Exportar a PDF"
+                        >
+                            <FileText className="w-4 h-4 text-red-500" />
+                            <span className="hidden sm:inline">PDF</span>
+                        </button>
+                        <button
+                            onClick={handleExportExcel}
+                            className="px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+                            title="Exportar a Excel"
+                        >
+                            <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                            <span className="hidden sm:inline">Excel</span>
+                        </button>
+                    </div>
+
+                    {canRegistrarMerma && (
+                        <>
+                            <div className="hidden sm:block h-8 w-px bg-border mx-1"></div>
+                            <button
+                                onClick={() => {
+                                    setSelectedInventoryId('');
+                                    setCantidadMermaStr('');
+                                    setObservacionesMerma('');
+                                    setIsCreateOpen(true);
+                                }}
+                                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                                title="Registrar nueva merma"
+                            >
+                                <Plus className="w-4 h-4" />
+                                <span>Nueva Merma</span>
+                            </button>
+                        </>
                     )}
-                    <button
-                        onClick={handlePrint}
-                        className="px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
-                        title="Imprimir reporte"
-                    >
-                        <Printer className="w-4 h-4 text-muted-foreground" />
-                        <span className="hidden sm:inline">Imprimir</span>
-                    </button>
-                    <button
-                        onClick={handleExportPDF}
-                        className="px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
-                        title="Exportar a PDF"
-                    >
-                        <FileText className="w-4 h-4 text-red-500" />
-                        <span className="hidden sm:inline">PDF</span>
-                    </button>
-                    <button
-                        onClick={handleExportExcel}
-                        className="px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
-                        title="Exportar a Excel"
-                    >
-                        <FileSpreadsheet className="w-4 h-4 text-green-600" />
-                        <span className="hidden sm:inline">Excel</span>
-                    </button>
                 </div>
             </div>
 
@@ -922,27 +944,22 @@ const MermasPage: React.FC = () => {
                 isOpen={isCreateOpen}
                 onClose={() => setIsCreateOpen(false)}
                 title={
-                    <span className="flex items-center gap-2 text-destructive font-bold">
-                        <AlertOctagon className="w-6 h-6 text-destructive" />
+                    <span className="flex items-center gap-2 text-primary font-bold">
+                        <AlertOctagon className="w-6 h-6 text-primary/80" />
                         Registrar Nueva Merma de Inventario
                     </span>
                 }
             >
                 <div className="space-y-5">
-                    <div>
-                        <label className="text-sm font-medium block mb-1">Seleccionar Producto en Inventario</label>
-                        <select
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium block">Seleccionar Producto en Inventario</label>
+                        <SearchableSelect
                             value={selectedInventoryId}
-                            onChange={(e) => setSelectedInventoryId(e.target.value ? Number(e.target.value) : '')}
-                            className="w-full p-2.5 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-destructive/20 focus:border-destructive cursor-pointer"
-                        >
-                            <option value="">-- Seleccione un producto con stock --</option>
-                            {availableInventories.map(inv => (
-                                <option key={inv.id} value={inv.id}>
-                                    {inv.producto?.nombre} (Cód: {inv.producto?.codigo || '-'}) - Stock: {inv.stockActual} {inv.producto?.unidadMedida} [{(inv.sucursal as any)?.nombre}]
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(val) => setSelectedInventoryId(val ? Number(val) : '')}
+                            options={inventoryOptions}
+                            placeholder="Buscar producto por nombre o código..."
+                            searchPlaceholder="Escriba código o nombre de producto..."
+                        />
                     </div>
 
                     {selectedInvItem && (
@@ -967,7 +984,7 @@ const MermasPage: React.FC = () => {
                             step="any"
                             value={cantidadMermaStr}
                             onChange={(e) => setCantidadMermaStr(e.target.value)}
-                            className="w-full p-3 border rounded-xl bg-background text-lg font-bold focus:border-destructive focus:ring-2 focus:ring-destructive/20 outline-none transition-all text-center"
+                            className="w-full p-3 border rounded-xl bg-background text-lg font-bold focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-center"
                             placeholder="Ej: 3"
                             disabled={!selectedInvItem}
                         />
@@ -983,7 +1000,7 @@ const MermasPage: React.FC = () => {
                         <select
                             value={motivoMerma}
                             onChange={(e) => setMotivoMerma(e.target.value)}
-                            className="w-full p-2.5 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-destructive/20 focus:border-destructive"
+                            className="w-full p-2.5 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
                         >
                             <option value="Vencimiento / Caducidad">Vencimiento / Caducidad</option>
                             <option value="Deterioro / Daño físico">Deterioro / Daño físico</option>
@@ -999,7 +1016,7 @@ const MermasPage: React.FC = () => {
                         <textarea
                             value={observacionesMerma}
                             onChange={(e) => setObservacionesMerma(e.target.value)}
-                            className="w-full p-3 border rounded-lg bg-background text-sm focus:border-destructive focus:ring-2 focus:ring-destructive/20 outline-none transition-all resize-none min-h-[75px]"
+                            className="w-full p-3 border rounded-lg bg-background text-sm focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none min-h-[75px]"
                             placeholder="Explique el detalle de la merma o lote afectado..."
                         />
                     </div>
@@ -1025,7 +1042,7 @@ const MermasPage: React.FC = () => {
                                 }
                             }}
                             disabled={!selectedInventoryId || !cantidadToCreate || (selectedInvItem ? cantidadToCreate > Number(selectedInvItem.stockActual) : true) || createMermaMutation.isPending}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm cursor-pointer disabled:opacity-50"
                         >
                             <Check className="w-4 h-4" /> {createMermaMutation.isPending ? 'Registrando...' : 'Registrar Merma'}
                         </button>

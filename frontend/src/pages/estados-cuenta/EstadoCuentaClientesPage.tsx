@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { exportToPDF, exportToExcel, printData, printGroupedData, exportGroupedToPDF, exportGroupedToExcel, type GroupedExportSection } from '../../utils/exportUtils';
@@ -312,6 +313,21 @@ const EstadoCuentaClientesPage: React.FC = () => {
             return na.localeCompare(nb);
         });
     }, [clientsList, selectedSucursal, selectedCiudad, isRestrictedVendor, userPersonal, salesList, selectedClienteId]);
+
+    const availableClientsOptions: SearchableOption[] = useMemo(() => {
+        return availableClients.map(c => {
+            const nombre = getClientDisplayName(c);
+            const extra = c.plazoCreditoDias ? `Límite: ${c.plazoCreditoDias}d` : undefined;
+            const sub = c.nombreTienda && c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : (c.persona?.ci ? `CI: ${c.persona.ci}` : undefined);
+            const sublabel = [sub, extra].filter(Boolean).join(' • ') || undefined;
+            return {
+                value: String(c.id),
+                label: nombre,
+                code: c.codigo ? String(c.codigo) : undefined,
+                sublabel
+            };
+        });
+    }, [availableClients]);
 
     // Filter sales by global filters, client, date range, status, invoice type, and search term
     const filteredVentas = useMemo(() => {
@@ -826,21 +842,16 @@ const EstadoCuentaClientesPage: React.FC = () => {
                         <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                             <Users className="w-3.5 h-3.5 text-primary" /> Filtrar por Cliente
                         </label>
-                        <select
+                        <SearchableSelect
                             value={selectedClienteId}
-                            onChange={(e) => setSelectedClienteId(e.target.value)}
-                            className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all hover:border-primary/50"
-                        >
-                            <option value="">Todos los Clientes</option>
-                            {availableClients.map(c => {
-                                const nombre = getClientDisplayName(c);
-                                return (
-                                    <option key={c.id} value={c.id}>
-                                        {nombre} {c.plazoCreditoDias ? `(Límite: ${c.plazoCreditoDias}d)` : ''}
-                                    </option>
-                                );
-                            })}
-                        </select>
+                            onChange={(val) => setSelectedClienteId(String(val || ''))}
+                            options={[
+                                { value: '', label: 'Todos los Clientes' },
+                                ...availableClientsOptions
+                            ]}
+                            placeholder="Todos los Clientes"
+                            searchPlaceholder="Buscar cliente..."
+                        />
                     </div>
 
                     {/* Selector de Vendedor */}
@@ -1876,11 +1887,11 @@ const EstadoCuentaClientesPage: React.FC = () => {
                         {/* Selector / Datos del Cliente */}
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-foreground">Cliente Destinatario</label>
-                            <select
+                            <SearchableSelect
                                 value={whatsappClienteModalData.clienteId}
-                                onChange={(e) => {
-                                    const cId = e.target.value;
-                                    const targetCli = clientsList?.find(c => String(c.id) === String(cId));
+                                onChange={(val) => {
+                                    const cId = String(val || '');
+                                    const targetCli = clientsList?.find(c => String(c.id) === cId);
                                     const phone = targetCli?.persona?.telefono || '';
                                     const sucId = targetCli?.sucursal?.id 
                                         ? String(targetCli.sucursal.id) 
@@ -1892,15 +1903,10 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                         sucursalId: sucId
                                     }));
                                 }}
-                                className="w-full p-2 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                                <option value="">-- Seleccione Cliente --</option>
-                                {availableClients.map(c => (
-                                    <option key={c.id} value={c.id}>
-                                        {getClientDisplayName(c)}
-                                    </option>
-                                ))}
-                            </select>
+                                options={availableClientsOptions}
+                                placeholder="Seleccione un cliente..."
+                                searchPlaceholder="Buscar cliente..."
+                            />
                         </div>
 
                         {/* Input de Teléfono */}

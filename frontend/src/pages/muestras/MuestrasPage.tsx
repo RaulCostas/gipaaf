@@ -11,6 +11,7 @@ import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
@@ -163,29 +164,51 @@ const MuestrasPage: React.FC = () => {
         const activeSucursal = formSucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
         const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
 
+        let list = clientes;
         if (activeSucursal) {
-            return clientes.filter(c => 
+            list = clientes.filter(c => 
                 c.sucursal?.id === Number(activeSucursal) || 
                 c.ruta?.sucursal?.id === Number(activeSucursal) ||
                 (formClienteId && c.id.toString() === formClienteId) ||
                 (clienteFilter !== 'all' && c.id.toString() === clienteFilter)
             );
-        }
-        if (activeCiudad) {
-            return clientes.filter(c => 
+        } else if (activeCiudad) {
+            list = clientes.filter(c => 
                 c.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 (formClienteId && c.id.toString() === formClienteId) ||
                 (clienteFilter !== 'all' && c.id.toString() === clienteFilter)
             );
         }
-        return clientes;
+        return [...list].sort((a, b) => getClientDisplayName(a).localeCompare(getClientDisplayName(b)));
     }, [clientes, formSucursalId, selectedSucursal, userSucursal?.id, selectedCiudad, userCiudad?.id, formClienteId, clienteFilter]);
+
+    const clientOptions: SearchableOption[] = useMemo(() => {
+        return availableClients.map(c => ({
+            value: String(c.id),
+            label: getClientDisplayName(c),
+            code: c.codigo ? String(c.codigo) : undefined,
+            sublabel: c.nombreTienda && c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : (c.persona?.ci ? `CI: ${c.persona.ci}` : undefined)
+        }));
+    }, [availableClients]);
 
     const { data: productos } = useQuery({
         queryKey: ['productsList'],
         queryFn: () => productService.getAll(),
     });
+
+    const productOptions: SearchableOption[] = useMemo(() => {
+        if (!productos) return [];
+        return productos.filter(p => p.activo).map(p => ({
+            value: String(p.id),
+            label: p.nombre,
+            code: p.codigo,
+            sublabel: [
+                p.linea?.nombre ? `Línea: ${p.linea.nombre}` : '',
+                p.marca?.nombre ? `Marca: ${p.marca.nombre}` : ''
+            ].filter(Boolean).join(' • ') || undefined
+        }));
+    }, [productos]);
 
     const { data: sucursales } = useQuery({
         queryKey: ['sucursalesList'],
@@ -242,6 +265,14 @@ const MuestrasPage: React.FC = () => {
 
         return Array.from(productMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
     }, [muestrasList, selectedSucursal, selectedCiudad]);
+
+    const muestraProductFilterOptions: SearchableOption[] = useMemo(() => {
+        return availableMuestraProducts.map(p => ({
+            value: String(p.id),
+            label: p.nombre,
+            code: p.codigo || undefined
+        }));
+    }, [availableMuestraProducts]);
 
     // Check active filters
     const hasActiveFilters = Boolean(
@@ -822,20 +853,17 @@ const MuestrasPage: React.FC = () => {
                 </div>
 
                 {/* Filtro por Cliente */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                    <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <select
-                        value={clienteFilter}
-                        onChange={(e) => setClienteFilter(e.target.value)}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[180px]"
-                    >
-                        <option value="all" className="bg-background text-foreground">Todos los Clientes</option>
-                        {availableClients?.map(c => (
-                            <option key={c.id} value={c.id} className="bg-background text-foreground">
-                                {getClientDisplayName(c)}
-                            </option>
-                        ))}
-                    </select>
+                <div className="w-56 sm:w-64">
+                    <SearchableSelect
+                        value={clienteFilter === 'all' ? '' : clienteFilter}
+                        onChange={(val) => setClienteFilter(val ? String(val) : 'all')}
+                        options={[
+                            { value: '', label: 'Todos los Clientes' },
+                            ...clientOptions
+                        ]}
+                        placeholder="Todos los Clientes"
+                        searchPlaceholder="Buscar cliente..."
+                    />
                 </div>
 
                 {/* Filtro por Vendedor */}
@@ -856,22 +884,17 @@ const MuestrasPage: React.FC = () => {
                 </div>
 
                 {/* Filtro por Producto (Solo productos en muestras) */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                    <Package className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <select
-                        value={productoFilter}
-                        onChange={(e) => setProductoFilter(e.target.value)}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[200px] truncate"
-                    >
-                        <option value="all" className="bg-background text-foreground">
-                            {availableMuestraProducts.length === 0 ? 'Sin productos en muestras' : `Todos los Productos (${availableMuestraProducts.length})`}
-                        </option>
-                        {availableMuestraProducts.map(p => (
-                            <option key={p.id} value={p.id} className="bg-background text-foreground">
-                                {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
-                            </option>
-                        ))}
-                    </select>
+                <div className="w-60 sm:w-72">
+                    <SearchableSelect
+                        value={productoFilter === 'all' ? '' : productoFilter}
+                        onChange={(val) => setProductoFilter(val ? String(val) : 'all')}
+                        options={[
+                            { value: '', label: availableMuestraProducts.length === 0 ? 'Sin productos en muestras' : `Todos los Productos (${availableMuestraProducts.length})` },
+                            ...muestraProductFilterOptions
+                        ]}
+                        placeholder="Todos los Productos"
+                        searchPlaceholder="Buscar producto en muestra..."
+                    />
                 </div>
 
                 {/* Filtro Fecha Desde */}
@@ -1154,22 +1177,13 @@ const MuestrasPage: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-foreground">Cliente <span className="text-destructive">*</span></label>
-                                <div className="relative group">
-                                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors pointer-events-none" />
-                                    <select
-                                        required
-                                        value={formClienteId}
-                                        onChange={(e) => setFormClienteId(e.target.value)}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm appearance-none"
-                                    >
-                                        <option value="">Selecciona Cliente...</option>
-                                        {availableClients?.map(c => (
-                                            <option key={c.id} value={c.id}>
-                                                {getClientDisplayName(c)}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
+                                <SearchableSelect
+                                    value={formClienteId}
+                                    onChange={(val) => setFormClienteId(String(val || ''))}
+                                    options={clientOptions}
+                                    placeholder="Selecciona Cliente..."
+                                    searchPlaceholder="Buscar cliente por nombre o tienda..."
+                                />
                             </div>
 
                             <div className="space-y-1.5">
@@ -1222,18 +1236,13 @@ const MuestrasPage: React.FC = () => {
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
                                 <div className="md:col-span-2 space-y-1">
                                     <label className="text-xs font-medium text-muted-foreground">Producto</label>
-                                    <select
+                                    <SearchableSelect
                                         value={selectedProdId}
-                                        onChange={(e) => setSelectedProdId(e.target.value)}
-                                        className="w-full px-3 py-2 border rounded-lg bg-background text-sm focus:ring-2 focus:ring-primary/20 outline-none hover:border-primary/50"
-                                    >
-                                        <option value="">Selecciona Producto...</option>
-                                        {productos?.map(p => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.codigo} - {p.nombre}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={(val) => setSelectedProdId(String(val || ''))}
+                                        options={productOptions}
+                                        placeholder="Selecciona Producto..."
+                                        searchPlaceholder="Buscar producto por código, nombre, marca..."
+                                    />
                                 </div>
 
                                 <div className="space-y-1">

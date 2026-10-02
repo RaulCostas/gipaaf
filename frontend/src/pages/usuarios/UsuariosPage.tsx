@@ -12,7 +12,7 @@ import {
     Users, UserPlus, Pencil, Trash2, Search, CheckCircle2, 
     Shield, Building2, Mail, Phone, BadgeCheck, AtSign, 
     Key, User, CreditCard, MapPin, X, Briefcase, UserCheck,
-    Camera, Image as ImageIcon, Upload, Loader2
+    Camera, Image as ImageIcon, Upload, Loader2, Filter, Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -28,6 +28,8 @@ const UsuariosPage: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null);
     const [search, setSearch] = useState('');
+    const [filterEstado, setFilterEstado] = useState<'all' | 'activo' | 'inactivo'>('all');
+    const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
     const [formNombres, setFormNombres] = useState('');
     const [formApellidos, setFormApellidos] = useState('');
@@ -103,14 +105,25 @@ const UsuariosPage: React.FC = () => {
         },
     });
 
-    const deleteMutation = useMutation({
-        mutationFn: userService.delete,
+    const deactivateMutation = useMutation({
+        mutationFn: (id: number) => userService.update(id, { activo: false }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] });
-            toast.success('Usuario eliminado');
+            toast.success('Usuario desactivado exitosamente');
         },
         onError: () => {
-            toast.error('Error al eliminar usuario');
+            toast.error('Error al desactivar el usuario');
+        },
+    });
+
+    const activateMutation = useMutation({
+        mutationFn: (id: number) => userService.update(id, { activo: true }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            toast.success('Usuario activado exitosamente');
+        },
+        onError: () => {
+            toast.error('Error al activar el usuario');
         },
     });
 
@@ -225,21 +238,28 @@ const UsuariosPage: React.FC = () => {
     };
 
     const handleDelete = (id: number) => {
-        if (window.confirm('¿Está seguro de eliminar este usuario?')) {
-            deleteMutation.mutate(id);
+        setDeleteConfirmId(id);
+    };
+
+    const confirmDelete = () => {
+        if (deleteConfirmId) {
+            deactivateMutation.mutate(deleteConfirmId);
+            setDeleteConfirmId(null);
         }
     };
 
     if (loadingUsers) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando usuarios...</div>;
 
-    const filteredUsers = users?.filter(u => {
+    const filteredUsers = (users || []).filter(u => {
         const s = search.toLowerCase();
         const usernameMatch = (u.username || '').toLowerCase().includes(s);
         const nombresMatch = (u.persona?.nombres || '').toLowerCase().includes(s);
         const apellidosMatch = (u.persona?.apellidos || '').toLowerCase().includes(s);
         const emailMatch = (u.email || '').toLowerCase().includes(s);
         const personalMatch = u.personal && `${u.personal.nombres} ${u.personal.apellidos}`.toLowerCase().includes(s);
-        return usernameMatch || nombresMatch || apellidosMatch || emailMatch || personalMatch;
+        const matchesSearch = usernameMatch || nombresMatch || apellidosMatch || emailMatch || personalMatch;
+        const matchesEstado = filterEstado === 'all' ? true : filterEstado === 'activo' ? u.activo !== false : u.activo === false;
+        return matchesSearch && matchesEstado;
     });
 
     return (
@@ -261,15 +281,34 @@ const UsuariosPage: React.FC = () => {
                 </button>
             </div>
 
-            <div className="bg-card p-4 rounded-xl border shadow-sm flex items-center gap-3">
-                <Search className="w-5 h-5 text-muted-foreground" />
-                <input 
-                    type="text" 
-                    placeholder="Buscar por usuario, nombre, email o personal vinculado..." 
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="bg-transparent border-none outline-none w-full text-sm placeholder:text-muted-foreground/70"
-                />
+            <div className="flex flex-col sm:flex-row gap-3">
+                <div className="bg-card p-3 rounded-xl border shadow-sm flex items-center gap-3 flex-1">
+                    <Search className="w-5 h-5 text-muted-foreground ml-1" />
+                    <input 
+                        type="text" 
+                        placeholder="Buscar por usuario, nombre, email o personal vinculado..." 
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="bg-transparent border-none outline-none w-full text-sm placeholder:text-muted-foreground/70"
+                    />
+                    {search && (
+                        <button onClick={() => setSearch('')} className="p-1 hover:bg-accent rounded-md text-muted-foreground">
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
+                <div className="flex items-center gap-2 bg-card border rounded-xl px-3 py-2 shadow-sm text-sm shrink-0">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <select 
+                        className="bg-transparent border-none outline-none font-medium cursor-pointer" 
+                        value={filterEstado} 
+                        onChange={(e) => setFilterEstado(e.target.value as any)}
+                    >
+                        <option value="all" className="bg-background text-foreground">Todos los Estados</option>
+                        <option value="activo" className="bg-background text-foreground">Solo Activos</option>
+                        <option value="inactivo" className="bg-background text-foreground">Solo Inactivos</option>
+                    </select>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -281,9 +320,13 @@ const UsuariosPage: React.FC = () => {
                     const hasAdminRole = u.roles?.some(r => r.nombre.toUpperCase() === 'ADMIN');
 
                     return (
-                        <div key={u.id} className="bg-card border rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group">
-                            {!u.activo && (
-                                <div className="absolute top-4 right-4 text-[10px] font-bold text-destructive bg-destructive/10 px-2 py-0.5 rounded-full uppercase">
+                        <div key={u.id} className={`bg-card border rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group ${!u.activo ? 'opacity-80 border-dashed border-red-500/30 bg-red-500/[0.02]' : ''}`}>
+                            {u.activo ? (
+                                <div className="absolute top-4 right-4 text-[10px] font-bold text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    Activo
+                                </div>
+                            ) : (
+                                <div className="absolute top-4 right-4 text-[10px] font-bold text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
                                     Inactivo
                                 </div>
                             )}
@@ -301,7 +344,7 @@ const UsuariosPage: React.FC = () => {
                                             <span>{initials}</span>
                                         )}
                                     </div>
-                                    <div className="flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0 pr-14">
                                         <h3 className="font-bold text-base truncate flex items-center gap-1.5 leading-none mb-1 text-foreground" title={fullName}>
                                             {fullName}
                                             {hasAdminRole && <BadgeCheck className="w-4 h-4 text-indigo-500 shrink-0" />}
@@ -345,21 +388,31 @@ const UsuariosPage: React.FC = () => {
                                     )}
                                 </div>
 
-                                <div className="flex justify-end gap-1 pt-1">
+                                <div className="flex justify-end gap-2 pt-1">
                                     <button 
                                         onClick={() => handleOpenEdit(u)} 
-                                        className="p-2 hover:bg-accent rounded-lg text-muted-foreground hover:text-primary transition-colors"
-                                        title="Editar Usuario"
+                                        className="p-2 text-primary bg-primary/10 hover:bg-primary/20 hover:scale-110 active:scale-95 rounded-lg transition-all"
+                                        title="Editar"
                                     >
                                         <Pencil className="w-4 h-4" />
                                     </button>
-                                    <button 
-                                        onClick={() => handleDelete(u.id)} 
-                                        className="p-2 hover:bg-destructive/10 rounded-lg text-muted-foreground hover:text-destructive transition-colors"
-                                        title="Eliminar Usuario"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
+                                    {u.activo ? (
+                                        <button 
+                                            onClick={() => handleDelete(u.id)} 
+                                            className="p-2 text-red-600 dark:text-red-100 bg-red-100 dark:bg-red-600 hover:bg-red-200 dark:hover:bg-red-700 hover:scale-110 active:scale-95 rounded-lg transition-all"
+                                            title="Desactivar"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={() => activateMutation.mutate(u.id)} 
+                                            className="p-2 text-green-600 dark:text-green-500 bg-green-500/10 hover:bg-green-500/20 hover:scale-110 active:scale-95 rounded-lg transition-all"
+                                            title="Activar"
+                                        >
+                                            <Check className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -664,6 +717,42 @@ const UsuariosPage: React.FC = () => {
                         </button>
                     </div>
                 </form>
+            </Modal>
+
+            {/* Modal de confirmación para desactivar usuario */}
+            <Modal
+                isOpen={deleteConfirmId !== null}
+                onClose={() => setDeleteConfirmId(null)}
+                title="Desactivar Usuario"
+            >
+                <div className="space-y-6">
+                    <div className="flex items-start gap-4 p-4 bg-destructive/10 text-destructive rounded-xl border border-destructive/20">
+                        <Trash2 className="w-6 h-6 shrink-0 mt-0.5" />
+                        <div>
+                            <h4 className="font-semibold text-sm">Esta cuenta pasará a estado Inactivo</h4>
+                            <p className="text-xs mt-1 opacity-90 text-destructive/80">
+                                El usuario no podrá iniciar sesión en el sistema, pero se conservará su historial y podrá ser reactivado en cualquier momento.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex justify-end space-x-3 pt-4 border-t border-border/50">
+                        <button
+                            type="button"
+                            onClick={() => setDeleteConfirmId(null)}
+                            className="flex items-center gap-2 px-5 py-2.5 border rounded-lg text-sm font-semibold hover:bg-accent hover:scale-[1.02] active:scale-95 transition-all shadow-sm"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={confirmDelete}
+                            className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm"
+                        >
+                            Sí, Desactivar
+                        </button>
+                    </div>
+                </div>
             </Modal>
         </div>
     );

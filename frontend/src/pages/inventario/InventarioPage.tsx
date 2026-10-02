@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
-import { formatQuantity, formatCurrency } from '../../utils/currencyUtils';
+import { formatQuantity, formatCurrency, formatCurrencyAmount } from '../../utils/currencyUtils';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -99,7 +99,7 @@ const InventarioPage: React.FC = () => {
         { header: 'Sucursal', dataKey: 'sucursal' },
         { header: 'Stock Actual', dataKey: 'stock' },
         { header: 'Stock Mínimo', dataKey: 'stockMinimo' },
-        { header: 'Precio Venta', dataKey: 'precioVenta' },
+        { header: 'Precio Venta (Bs.)', dataKey: 'precioVenta' },
         { header: 'Lote(s) / Vencimiento', dataKey: 'lotesInfo' },
         { header: 'Estado', dataKey: 'estado' }
     ];
@@ -188,9 +188,9 @@ const InventarioPage: React.FC = () => {
                 marca: getMarcaNombre(inv.producto),
                 codigo: inv.producto?.codigo || '-',
                 sucursal: `${(inv.sucursal as any)?.nombre || '-'} (${(inv.sucursal as any)?.ciudad?.nombre || '-'})`,
-                stock: `${formatQuantity(inv.stockActual)} ${inv.producto?.unidadMedida || ''}`,
+                stock: formatQuantity(inv.stockActual),
                 stockMinimo: formatQuantity(inv.stockMinimo || 0),
-                precioVenta: formatCurrency(inv.producto?.precioVenta || 0),
+                precioVenta: formatCurrencyAmount(inv.producto?.precioVenta || 0),
                 lotesInfo,
                 estado: Number(inv.stockActual) <= Number(inv.stockMinimo) ? 'Stock Bajo' : 'Normal'
             };
@@ -391,7 +391,7 @@ const InventarioPage: React.FC = () => {
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Lotes / Vencimiento</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Stock Actual</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Stock Mínimo</th>
-                                <th className="p-4 text-sm font-semibold text-muted-foreground text-right">Precio Venta</th>
+                                <th className="p-4 text-sm font-semibold text-muted-foreground text-right">Precio Venta (Bs.)</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Estado</th>
                                 {(canAjustar || canModificarLimites || canMerma) && (
                                     <th className="p-4 text-sm font-semibold text-muted-foreground text-right w-44">Acciones</th>
@@ -493,7 +493,7 @@ const InventarioPage: React.FC = () => {
                                             {formatQuantity(inv.stockMinimo || 0)}
                                         </td>
                                         <td className="p-4 text-right text-sm font-bold text-primary">
-                                            {formatCurrency(inv.producto?.precioVenta || 0)}
+                                            {formatCurrencyAmount(inv.producto?.precioVenta || 0)}
                                         </td>
                                         <td className="p-4 text-center">
                                             {isLowStock ? (
