@@ -28,6 +28,40 @@ export const getBase64ImageFromURL = (url: string): Promise<string> => {
     });
 };
 
+export const printJsPdf = (doc: jsPDF) => {
+  doc.autoPrint();
+  const blobUrl = String(doc.output('bloburl'));
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.top = '0';
+  iframe.style.left = '0';
+  iframe.style.width = '1px';
+  iframe.style.height = '1px';
+  iframe.style.border = '0';
+  iframe.style.opacity = '0';
+  iframe.style.pointerEvents = 'none';
+  iframe.src = blobUrl;
+  document.body.appendChild(iframe);
+
+  iframe.onload = () => {
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error('Error triggering print on iframe:', err);
+      }
+    }, 200);
+  };
+
+  setTimeout(() => {
+    if (document.body.contains(iframe)) {
+      document.body.removeChild(iframe);
+    }
+    URL.revokeObjectURL(blobUrl);
+  }, 120000);
+};
+
 export const exportToPDF = async (
   title: string, 
   columns: ExportColumn[], 

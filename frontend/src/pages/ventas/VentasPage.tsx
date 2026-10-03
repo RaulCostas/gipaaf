@@ -19,7 +19,7 @@ import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, U
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
+import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData, printJsPdf } from '../../utils/exportUtils';
 import { numeroALetras } from '../../utils/currencyUtils';
 import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import { useFilters } from '../../context/FilterContext';
@@ -381,19 +381,21 @@ const ventasPage: React.FC = () => {
         }
 
         doc.setFontSize(14);
-        doc.setTextColor(50, 50, 50);
+        doc.setTextColor(30, 30, 30);
+        doc.setFont("helvetica", "bold");
         doc.text("Nota de Venta Nro " + (newVenta.numero || newVenta.id || 'S/N'), 196, 18, { align: 'right' });
 
-        doc.setTextColor(80, 80, 80);
-        doc.setFontSize(10);
-        let currentY = 38;
+        doc.setTextColor(60, 60, 60);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9.5);
+        let currentY = 32;
         
         const fechaFormatted = newVenta.fecha ? newVenta.fecha.split('T')[0].split('-').reverse().join('/') : '';
         doc.text(`Fecha: ${fechaFormatted}`, 14, currentY);
         if (newVenta.sucursal) {
             doc.text(`Sucursal: ${newVenta.sucursal}`, 80, currentY);
         }
-        currentY += 6;
+        currentY += 5;
         
         let clienteNombre = 'Cliente Final';
         if (newVenta.clienteId) {
@@ -406,33 +408,34 @@ const ventasPage: React.FC = () => {
             const v = vendedores?.find(v => v.id.toString() === newVenta.vendedorId.toString());
             if (v) doc.text(`Vendedor: ${v.nombres} ${v.apellidos}`, 80, currentY);
         }
-        currentY += 6;
+        currentY += 5;
 
-        if (newVenta.conFactura) {
-            doc.setFont("helvetica", "bold");
-            doc.text(`Documento: CF:${newVenta.numeroFactura || 'S/N'}`, 14, currentY);
-            doc.setFont("helvetica", "normal");
-        } else {
-            doc.text(`Documento: XF`, 14, currentY);
+        const docTipo = newVenta.conFactura ? `Con Factura${newVenta.numeroFactura ? ` (FAC: ${newVenta.numeroFactura})` : ''}` : 'Sin Factura (Nota Venta)';
+        doc.text(`Documento: ${docTipo}`, 14, currentY);
+
+        let pagoTexto = 'Al Contado';
+        if (newVenta.tipoPago === 'CREDITO') {
+            const diasCred = Number(newVenta.diasCredito) || 0;
+            const baseDateStr = newVenta.fecha || format(new Date(), 'yyyy-MM-dd');
+            const d = new Date(baseDateStr + 'T00:00:00');
+            d.setDate(d.getDate() + diasCred);
+            const vencStr = format(d, 'dd/MM/yyyy');
+            pagoTexto = `A Crédito (${diasCred} días - Vence: ${vencStr})`;
         }
+        doc.text(`Condición: ${pagoTexto}`, 80, currentY);
 
         const hasItemDiscount = newVenta.detalles.some((det: any) => Number(det.descuentoPorcentaje) > 0);
 
         const tableColumn = hasItemDiscount
-            ? ["Código", "Producto", "Lote / Venc.", "Cant.", "P.Unit", "Desc. %", "Subtotal"]
-            : ["Código", "Producto", "Lote / Venc.", "Cant.", "P.Unit", "Subtotal"];
+            ? ["Código", "Producto", "Cant.", "P.Unit", "Desc. %", "Subtotal"]
+            : ["Código", "Producto", "Cant.", "P.Unit", "Subtotal"];
 
         const tableRows = newVenta.detalles.map((det: any) => {
-            const loteInfo = det.movimientosLote && det.movimientosLote.length > 0
-                ? det.movimientosLote.map((m: any) => `${m.lote?.numeroLote || 'S/N'}${m.lote?.fechaVencimiento ? ' (' + String(m.lote.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') + ')' : ''}`).join(', ')
-                : (det.numeroLote ? `${det.numeroLote}${det.fechaVencimiento ? ' (' + String(det.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') + ')' : ''}` : '-');
-
             const descPct = Number(det.descuentoPorcentaje) || 0;
 
             const row = [
                 det.producto?.codigo || '-',
                 det.producto?.nombre || '-',
-                loteInfo,
                 det.cantidad.toString(),
                 formatCurrency(det.precioUnitario)
             ];
@@ -446,65 +449,83 @@ const ventasPage: React.FC = () => {
         });
 
         autoTable(doc, {
-            startY: currentY + 10,
+            startY: currentY + 4,
             head: [tableColumn],
             body: tableRows,
+            theme: 'grid',
             styles: {
                 font: 'helvetica',
-                fontSize: 10,
-                cellPadding: 5,
+                fontSize: 8.5,
+                cellPadding: 2.5,
+                valign: 'middle',
+                textColor: [30, 30, 30],
+                lineColor: [200, 200, 200],
+                lineWidth: 0.1,
             },
             headStyles: {
-                fillColor: [41, 128, 185],
-                textColor: 255,
+                fillColor: [240, 240, 240],
+                textColor: [0, 0, 0],
                 fontStyle: 'bold',
+                lineColor: [180, 180, 180],
+                lineWidth: 0.1,
+                cellPadding: 2.5,
             },
             alternateRowStyles: {
-                fillColor: [245, 247, 250]
+                fillColor: [252, 252, 252]
             },
+            columnStyles: hasItemDiscount ? {
+                2: { halign: 'center' },
+                3: { halign: 'right' },
+                4: { halign: 'center' },
+                5: { halign: 'right' }
+            } : {
+                2: { halign: 'center' },
+                3: { halign: 'right' },
+                4: { halign: 'right' }
+            }
         });
 
-        const finalY = (doc as any).lastAutoTable.finalY || currentY + 10;
+        const finalY = (doc as any).lastAutoTable.finalY || currentY + 8;
         const totals = calculateTotals();
-        let currentTotalY = finalY + 10;
+        let currentTotalY = finalY + 8;
         
-        doc.setFontSize(10);
-        doc.setTextColor(50, 50, 50);
+        doc.setFontSize(9.5);
+        doc.setTextColor(40, 40, 40);
         doc.setFont("helvetica", "normal");
         
         doc.text(`Subtotal: ${formatCurrency(totals.subtotal)}`, 196, currentTotalY, { align: 'right' });
-        currentTotalY += 6;
+        currentTotalY += 5;
         if (totals.desc1 > 0) {
             doc.text(`Descuento (${newVenta.descuentoPorcentaje}%): -${formatCurrency(totals.desc1)}`, 196, currentTotalY, { align: 'right' });
-            currentTotalY += 6;
+            currentTotalY += 5;
         }
         if (totals.descFijo > 0) {
             doc.text(`Descuento Fijo (3%): -${formatCurrency(totals.descFijo)}`, 196, currentTotalY, { align: 'right' });
-            currentTotalY += 6;
+            currentTotalY += 5;
         }
         if (totals.desc2 > 0) {
             doc.text(`Promoción (${newVenta.descuentoPromocionPorcentaje}%): -${formatCurrency(totals.desc2)}`, 196, currentTotalY, { align: 'right' });
-            currentTotalY += 6;
+            currentTotalY += 5;
         }
 
-        doc.setFontSize(12);
+        doc.setFontSize(11);
         doc.setFont("helvetica", "bold");
         doc.text(`Total: ${formatCurrency(totals.total)}`, 196, currentTotalY, { align: 'right' });
         
-        doc.setFontSize(10);
+        doc.setFontSize(9.5);
         doc.setFont("helvetica", "normal");
-        doc.text(`Son: ${numeroALetras(totals.total)}`, 14, finalY + 10);
+        doc.text(`Son: ${numeroALetras(totals.total)}`, 14, finalY + 8);
         
         if (newVenta.observaciones) {
-            doc.setFontSize(10);
+            doc.setFontSize(9);
             doc.setTextColor(80, 80, 80);
             doc.setFont("helvetica", "normal");
-            doc.text('Notas:', 14, finalY + 20);
+            doc.text('Notas:', 14, finalY + 16);
             doc.setFont("helvetica", "italic");
-            doc.text(newVenta.observaciones, 14, finalY + 25);
+            doc.text(newVenta.observaciones, 14, finalY + 21);
         }
 
-        window.open(doc.output('bloburl'), '_blank');
+        printJsPdf(doc);
     };
 
     const addProductToDetail = (prodId: string) => {
@@ -1347,13 +1368,13 @@ const ventasPage: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="border rounded-xl shadow-sm bg-card overflow-hidden">
-                        <div className="p-4 bg-muted/30 border-b flex items-center gap-3">
+                    <div className="border rounded-xl shadow-sm bg-card">
+                        <div className="p-4 bg-muted/30 border-b flex items-center gap-3 rounded-t-xl">
                             <Package className="w-4 h-4 text-primary" />
                             <h3 className="font-semibold text-sm">Detalle de Productos</h3>
                         </div>
                         <div className="p-4 space-y-4">
-                            <div className="flex gap-2 items-center">
+                            <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
                                 <div className="flex-1 min-w-0">
                                     <SearchableSelect
                                         disabled={isViewing}
@@ -1374,10 +1395,10 @@ const ventasPage: React.FC = () => {
                                             setSelectedProdIdToAdd('');
                                         }
                                     }}
-                                    className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                    className="w-full sm:w-auto px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                                 >
                                     <ShoppingCart className="w-4 h-4 shrink-0" />
-                                    <span>Añadir</span>
+                                    <span>Añadir Producto</span>
                                 </button>
                                 )}
                             </div>

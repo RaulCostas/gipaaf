@@ -153,21 +153,24 @@ const ProductosPage: React.FC = () => {
             setCurrentProduct({});
             toast.success('Producto creado con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al crear el producto');
+        onError: (err: any) => {
+            const msg = err.response?.data?.message || 'Ocurrió un error al crear el producto';
+            toast.error(typeof msg === 'string' ? msg : Array.isArray(msg) ? msg.join(', ') : 'Ocurrió un error al crear el producto');
         }
     });
 
     const updateMutation = useMutation({
-        mutationFn: (data: Producto) => productService.update(data.id, data),
+        mutationFn: ({ id, data }: { id: number; data: Partial<Producto> }) => productService.update(id, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
             queryClient.invalidateQueries({ queryKey: ['inventory'] });
             setIsEditing(false);
             setCurrentProduct({});
+            toast.success('Producto actualizado con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al actualizar el producto');
+        onError: (err: any) => {
+            const msg = err.response?.data?.message || 'Ocurrió un error al actualizar el producto';
+            toast.error(typeof msg === 'string' ? msg : Array.isArray(msg) ? msg.join(', ') : 'Ocurrió un error al actualizar el producto');
         }
     });
 
@@ -178,8 +181,9 @@ const ProductosPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['inventory'] });
             toast.success('Producto desactivado con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al desactivar el producto');
+        onError: (err: any) => {
+            const msg = err.response?.data?.message || 'Ocurrió un error al desactivar el producto';
+            toast.error(typeof msg === 'string' ? msg : 'Ocurrió un error al desactivar el producto');
         }
     });
 
@@ -190,26 +194,37 @@ const ProductosPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['inventory'] });
             toast.success('Producto activado con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al activar el producto');
+        onError: (err: any) => {
+            const msg = err.response?.data?.message || 'Ocurrió un error al activar el producto';
+            toast.error(typeof msg === 'string' ? msg : 'Ocurrió un error al activar el producto');
         }
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        const { marca, categoria, linea, grupo, ...safeData } = currentProduct as any;
-        safeData.imagen = currentProduct.imagen || null;
-        safeData.precioCompra = currentProduct.precioCompra !== undefined && currentProduct.precioCompra !== null && !isNaN(Number(currentProduct.precioCompra))
-            ? Number(currentProduct.precioCompra)
-            : 0;
+        const payload: Partial<Producto> = {
+            codigo: currentProduct.codigo?.trim(),
+            nombre: currentProduct.nombre?.trim(),
+            descripcion: currentProduct.descripcion?.trim() || undefined,
+            precioCompra: currentProduct.precioCompra !== undefined && currentProduct.precioCompra !== null && !isNaN(Number(currentProduct.precioCompra))
+                ? Number(currentProduct.precioCompra)
+                : 0,
+            precioVenta: currentProduct.precioVenta !== undefined && currentProduct.precioVenta !== null && !isNaN(Number(currentProduct.precioVenta))
+                ? Number(currentProduct.precioVenta)
+                : 0,
+            unidadMedida: currentProduct.unidadMedida?.trim() || 'UNIDAD',
+            imagen: currentProduct.imagen || undefined,
+            activo: currentProduct.activo !== false,
+            marcaId: currentProduct.marcaId ? Number(currentProduct.marcaId) : undefined,
+            lineaId: (currentProduct.lineaId || currentProduct.categoriaId) ? Number(currentProduct.lineaId || currentProduct.categoriaId) : undefined,
+            grupoId: currentProduct.grupoId ? Number(currentProduct.grupoId) : undefined,
+        };
 
         if (currentProduct.id) {
-            updateMutation.mutate(safeData as Producto, {
-                onSuccess: () => toast.success('Producto actualizado con éxito')
-            });
+            updateMutation.mutate({ id: currentProduct.id, data: payload });
         } else {
-            createMutation.mutate(safeData);
+            createMutation.mutate(payload);
         }
     };
 
@@ -425,7 +440,10 @@ const ProductosPage: React.FC = () => {
                                 <label className="text-sm font-semibold text-foreground">Marca</label>
                                 <select
                                     value={currentProduct.marcaId || ''}
-                                    onChange={(e) => setCurrentProduct({ ...currentProduct, marcaId: parseInt(e.target.value), lineaId: undefined, categoriaId: undefined, grupoId: undefined })}
+                                    onChange={(e) => {
+                                        const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                                        setCurrentProduct({ ...currentProduct, marcaId: isNaN(val as any) ? undefined : val });
+                                    }}
                                     className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer transition-all text-sm"
                                 >
                                     <option value="">Seleccionar...</option>
@@ -440,8 +458,8 @@ const ProductosPage: React.FC = () => {
                                 <select
                                     value={currentProduct.lineaId || currentProduct.categoriaId || ''}
                                     onChange={(e) => {
-                                        const val = parseInt(e.target.value);
-                                        setCurrentProduct({ ...currentProduct, lineaId: isNaN(val) ? undefined : val, categoriaId: isNaN(val) ? undefined : val, grupoId: undefined });
+                                        const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                                        setCurrentProduct({ ...currentProduct, lineaId: isNaN(val as any) ? undefined : val, categoriaId: isNaN(val as any) ? undefined : val });
                                     }}
                                     className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer transition-all text-sm"
                                 >
@@ -456,7 +474,10 @@ const ProductosPage: React.FC = () => {
                                 <label className="text-sm font-semibold text-foreground">Grupo</label>
                                 <select
                                     value={currentProduct.grupoId || ''}
-                                    onChange={(e) => setCurrentProduct({ ...currentProduct, grupoId: parseInt(e.target.value) })}
+                                    onChange={(e) => {
+                                        const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                                        setCurrentProduct({ ...currentProduct, grupoId: isNaN(val as any) ? undefined : val });
+                                    }}
                                     className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer transition-all text-sm"
                                 >
                                     <option value="">Seleccionar...</option>
@@ -744,11 +765,19 @@ const ProductosPage: React.FC = () => {
                                             <button
                                                 onClick={() => { 
                                                     setCurrentProduct({
-                                                        ...prod,
-                                                        marcaId: prod.marca?.id,
-                                                        lineaId: prod.linea?.id || prod.categoriaId,
-                                                        categoriaId: prod.linea?.id || prod.categoriaId,
-                                                        grupoId: prod.grupo?.id
+                                                        id: prod.id,
+                                                        codigo: prod.codigo,
+                                                        nombre: prod.nombre,
+                                                        descripcion: prod.descripcion || '',
+                                                        precioCompra: prod.precioCompra,
+                                                        fechaUltimaCompra: prod.fechaUltimaCompra,
+                                                        precioVenta: prod.precioVenta,
+                                                        unidadMedida: prod.unidadMedida,
+                                                        activo: prod.activo,
+                                                        imagen: prod.imagen,
+                                                        marcaId: prod.marca?.id || prod.marcaId,
+                                                        lineaId: prod.linea?.id || prod.lineaId || prod.categoriaId,
+                                                        grupoId: prod.grupo?.id || prod.grupoId
                                                     }); 
                                                     setIsEditing(true); 
                                                 }}

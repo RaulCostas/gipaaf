@@ -132,24 +132,24 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5">
                     {selectedOption ? (
                         <>
-                            <div className="flex items-center gap-1.5 min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0 flex-wrap sm:flex-nowrap">
                                 {selectedOption.code && (
                                     <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-muted text-muted-foreground rounded border shrink-0">
                                         {selectedOption.code}
                                     </span>
                                 )}
-                                <span className="font-semibold text-foreground truncate">
+                                <span className="font-semibold text-foreground text-xs leading-tight line-clamp-2 sm:line-clamp-1">
                                     {selectedOption.label}
                                 </span>
                             </div>
                             {selectedOption.sublabel && (
-                                <span className="text-[10px] text-muted-foreground truncate mt-0.5">
+                                <span className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
                                     {selectedOption.sublabel}
                                 </span>
                             )}
                         </>
                     ) : (
-                        <span className="text-muted-foreground">{placeholder}</span>
+                        <span className="text-muted-foreground text-xs">{placeholder}</span>
                     )}
                 </div>
 
@@ -170,7 +170,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
             {/* Dropdown Menu */}
             {isOpen && (
-                <div className="absolute z-50 left-0 right-0 mt-1 bg-card border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-80 animate-in fade-in-50 zoom-in-95">
+                <div className="absolute z-50 left-0 right-0 mt-1 bg-card border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-80 animate-in fade-in-50 zoom-in-95 min-w-full">
                     {/* Search Input */}
                     <div className="p-2 border-b bg-muted/30 relative flex items-center gap-2">
                         <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-4 pointer-events-none" />
@@ -180,7 +180,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             placeholder={searchPlaceholder}
-                            className="w-full pl-7 pr-7 py-2 text-xs bg-background border rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
+                            className="w-full pl-8 pr-8 py-2 text-xs bg-background border rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
                         />
                         {searchTerm && (
                             <button
@@ -194,7 +194,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                     </div>
 
                     {/* Options List */}
-                    <div className="overflow-y-auto divide-y divide-border/40 max-h-64 p-1">
+                    <div className="overflow-y-auto divide-y divide-border/40 max-h-64 p-1 overscroll-contain">
                         {filteredOptions.length === 0 ? (
                             <div className="p-4 text-center text-xs text-muted-foreground">
                                 No se encontraron productos
@@ -217,16 +217,16 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                                         }`}
                                     >
                                         <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                                            <div className="flex items-center gap-1.5 min-w-0">
+                                            <div className="flex items-center gap-1.5 min-w-0 flex-wrap sm:flex-nowrap">
                                                 {opt.code && (
                                                     <span className="px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-muted text-muted-foreground rounded shrink-0">
                                                         {opt.code}
                                                     </span>
                                                 )}
-                                                <span className="truncate font-medium text-foreground">{opt.label}</span>
+                                                <span className="font-medium text-foreground text-xs leading-snug break-words line-clamp-2">{opt.label}</span>
                                             </div>
                                             {opt.sublabel && (
-                                                <span className={`text-[11px] truncate ${opt.disabled ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                                                <span className={`text-[11px] leading-tight ${opt.disabled ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
                                                     {opt.sublabel}
                                                 </span>
                                             )}

@@ -14,13 +14,13 @@ import { EstadoNota } from '../../api/purchaseService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
-import { Search, Plus, Trash2, CheckCircle, Calculator, User, Package, Calendar, X, ShoppingCart, Eye, Edit, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store } from 'lucide-react';
+import { Search, Plus, Trash2, CheckCircle, Calculator, User, Package, Calendar, X, ShoppingCart, Eye, Edit, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, Receipt, CreditCard, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useFilters } from '../../context/FilterContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
+import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData, printJsPdf } from '../../utils/exportUtils';
 import { numeroALetras } from '../../utils/currencyUtils';
 import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import { useAuth } from '../../context/AuthContext';
@@ -48,6 +48,10 @@ const ProformasPage: React.FC = () => {
         sucursalId: selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : '')),
         vendedorId: isRestrictedVendor && userPersonal?.id ? String(userPersonal.id) : '',
         fecha: format(new Date(), 'yyyy-MM-dd'),
+        conFactura: false,
+        numeroFactura: '',
+        tipoPago: 'CONTADO',
+        diasCredito: 0,
         observaciones: '',
         descuentoPorcentaje: 0,
         descuentoPromocionPorcentaje: 0,
@@ -166,21 +170,14 @@ const ProformasPage: React.FC = () => {
         onError: (err: any) => setError(err.response?.data?.message || 'Error al actualizar proforma'),
     });
 
-    const confirmMutation = useMutation({
-        mutationFn: proformaService.confirmar,
-        onSuccess: () => {
-            toast.success('Proforma confirmada exitosamente');
-            queryClient.invalidateQueries({ queryKey: ['proformas'] });
-        },
-        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al confirmar proforma'),
-    });
-
     const convertMutation = useMutation({
         mutationFn: proformaService.convertirAVenta,
         onSuccess: () => {
-            toast.success('Proforma convertida a Venta exitosamente');
+            toast.success('Proforma convertida a Venta confirmada exitosamente');
             queryClient.invalidateQueries({ queryKey: ['proformas'] });
-            queryClient.invalidateQueries({ queryKey: ['sales'] });
+            queryClient.invalidateQueries({ queryKey: ['ventas'] });
+            queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+            queryClient.invalidateQueries({ queryKey: ['products'] });
         },
         onError: (err: any) => toast.error(err.response?.data?.message || 'Error al convertir a venta'),
     });
@@ -254,6 +251,10 @@ const ProformasPage: React.FC = () => {
             vendedorId: isRestrictedVendor && userPersonal?.id ? String(userPersonal.id) : '',
             sucursal: defaultSucNombre,
             fecha: format(new Date(), 'yyyy-MM-dd'),
+            conFactura: false,
+            numeroFactura: '',
+            tipoPago: 'CONTADO',
+            diasCredito: 0,
             observaciones: '',
             descuentoPorcentaje: 0,
             descuentoPromocionPorcentaje: 0,
@@ -272,6 +273,10 @@ const ProformasPage: React.FC = () => {
             vendedorId: proforma.vendedor?.id?.toString() || '',
             sucursal: proforma.sucursal?.nombre || '',
             fecha: proforma.fecha ? proforma.fecha.split('T')[0] : format(new Date(), 'yyyy-MM-dd'),
+            conFactura: Boolean(proforma.conFactura),
+            numeroFactura: proforma.numeroFactura || '',
+            tipoPago: proforma.tipoPago || 'CONTADO',
+            diasCredito: Number(proforma.diasCredito || 0),
             observaciones: proforma.observaciones || '',
             descuentoPorcentaje: Number(proforma.descuentoPorcentaje || 0),
             descuentoPromocionPorcentaje: Number(proforma.descuentoPromocionPorcentaje || 0),
@@ -299,6 +304,10 @@ const ProformasPage: React.FC = () => {
             vendedorId: proforma.vendedor?.id?.toString() || '',
             sucursal: proforma.sucursal?.nombre || '',
             fecha: proforma.fecha ? proforma.fecha.split('T')[0] : format(new Date(), 'yyyy-MM-dd'),
+            conFactura: Boolean(proforma.conFactura),
+            numeroFactura: proforma.numeroFactura || '',
+            tipoPago: proforma.tipoPago || 'CONTADO',
+            diasCredito: Number(proforma.diasCredito || 0),
             observaciones: proforma.observaciones || '',
             descuentoPorcentaje: Number(proforma.descuentoPorcentaje || 0),
             descuentoPromocionPorcentaje: Number(proforma.descuentoPromocionPorcentaje || 0),
@@ -321,18 +330,20 @@ const ProformasPage: React.FC = () => {
         
         try {
             const logoBase64 = await getBase64ImageFromURL('/logo.jpeg');
-            doc.addImage(logoBase64, 'JPEG', 14, 10, 45, 15); // Adjust size for better fit
+            doc.addImage(logoBase64, 'JPEG', 14, 10, 45, 15);
         } catch (e) {
             console.warn('Could not load logo for PDF', e);
         }
 
         doc.setFontSize(14);
-        doc.setTextColor(50, 50, 50);
+        doc.setTextColor(30, 30, 30);
+        doc.setFont("helvetica", "bold");
         doc.text(`PROFORMA - ${newProforma.numero || 'S/N'}`, 196, 18, { align: 'right' });
 
-        doc.setTextColor(80, 80, 80);
-        doc.setFontSize(10);
-        let currentY = 38;
+        doc.setTextColor(60, 60, 60);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9.5);
+        let currentY = 32;
         
         const fechaFormatted = newProforma.fecha ? newProforma.fecha.split('T')[0].split('-').reverse().join('/') : '';
         doc.text(`Fecha: ${fechaFormatted}`, 14, currentY);
@@ -353,7 +364,7 @@ const ProformasPage: React.FC = () => {
         if (sucursalTexto) {
             doc.text(`Sucursal: ${sucursalTexto}`, 80, currentY);
         }
-        currentY += 6;
+        currentY += 5;
         
         let clienteNombre = 'Cliente Final';
         if (newProforma.clienteId) {
@@ -366,6 +377,21 @@ const ProformasPage: React.FC = () => {
             const v = vendedores?.find(v => v.id.toString() === newProforma.vendedorId);
             if (v) doc.text(`Vendedor: ${v.nombres} ${v.apellidos}`, 80, currentY);
         }
+        currentY += 5;
+
+        const docTipo = newProforma.conFactura ? `Con Factura${newProforma.numeroFactura ? ` (FAC: ${newProforma.numeroFactura})` : ''}` : 'Sin Factura (Nota Venta)';
+        doc.text(`Documento: ${docTipo}`, 14, currentY);
+
+        let pagoTexto = 'Al Contado';
+        if (newProforma.tipoPago === 'CREDITO') {
+            const diasCred = Number(newProforma.diasCredito) || 0;
+            const baseDateStr = newProforma.fecha || format(new Date(), 'yyyy-MM-dd');
+            const d = new Date(baseDateStr + 'T00:00:00');
+            d.setDate(d.getDate() + diasCred);
+            const vencStr = format(d, 'dd/MM/yyyy');
+            pagoTexto = `A Crédito (${diasCred} días - Vence: ${vencStr})`;
+        }
+        doc.text(`Condición: ${pagoTexto}`, 80, currentY);
 
         const hasItemDiscount = newProforma.detalles.some((det: any) => Number(det.descuentoPorcentaje) > 0);
 
@@ -391,61 +417,79 @@ const ProformasPage: React.FC = () => {
         });
 
         autoTable(doc, {
-            startY: currentY + 10,
+            startY: currentY + 4,
             head: [tableColumn],
             body: tableRows,
+            theme: 'grid',
             styles: {
                 font: 'helvetica',
-                fontSize: 10,
-                cellPadding: 5,
+                fontSize: 8.5,
+                cellPadding: 2.5,
+                valign: 'middle',
+                textColor: [30, 30, 30],
+                lineColor: [200, 200, 200],
+                lineWidth: 0.1,
             },
             headStyles: {
-                fillColor: [41, 128, 185], // Modern blue
-                textColor: 255,
+                fillColor: [240, 240, 240],
+                textColor: [0, 0, 0],
                 fontStyle: 'bold',
+                lineColor: [180, 180, 180],
+                lineWidth: 0.1,
+                cellPadding: 2.5,
             },
             alternateRowStyles: {
-                fillColor: [245, 247, 250]
+                fillColor: [252, 252, 252]
             },
+            columnStyles: hasItemDiscount ? {
+                2: { halign: 'center' },
+                3: { halign: 'right' },
+                4: { halign: 'center' },
+                5: { halign: 'right' }
+            } : {
+                2: { halign: 'center' },
+                3: { halign: 'right' },
+                4: { halign: 'right' }
+            }
         });
 
-        const finalY = (doc as any).lastAutoTable.finalY || currentY + 10;
+        const finalY = (doc as any).lastAutoTable.finalY || currentY + 8;
         const totals = calculateTotals();
-        let currentTotalY = finalY + 10;
+        let currentTotalY = finalY + 8;
         
-        doc.setFontSize(10);
-        doc.setTextColor(50, 50, 50);
+        doc.setFontSize(9.5);
+        doc.setTextColor(40, 40, 40);
         doc.setFont("helvetica", "normal");
         
         doc.text(`Subtotal: ${formatCurrency(totals.subtotal)}`, 196, currentTotalY, { align: 'right' });
-        currentTotalY += 6;
+        currentTotalY += 5;
         if (totals.desc1 > 0) {
             doc.text(`Descuento (${newProforma.descuentoPorcentaje}%): -${formatCurrency(totals.desc1)}`, 196, currentTotalY, { align: 'right' });
-            currentTotalY += 6;
+            currentTotalY += 5;
         }
         if (totals.desc2 > 0) {
             doc.text(`Promoción (${newProforma.descuentoPromocionPorcentaje}%): -${formatCurrency(totals.desc2)}`, 196, currentTotalY, { align: 'right' });
-            currentTotalY += 6;
+            currentTotalY += 5;
         }
 
-        doc.setFontSize(12);
+        doc.setFontSize(11);
         doc.setFont("helvetica", "bold");
         doc.text(`Total: ${formatCurrency(totals.total)}`, 196, currentTotalY, { align: 'right' });
         
-        doc.setFontSize(10);
+        doc.setFontSize(9.5);
         doc.setFont("helvetica", "normal");
-        doc.text(`Son: ${numeroALetras(totals.total)}`, 14, finalY + 10);
+        doc.text(`Son: ${numeroALetras(totals.total)}`, 14, finalY + 8);
         
         if (newProforma.observaciones) {
-            doc.setFontSize(10);
+            doc.setFontSize(9);
             doc.setTextColor(80, 80, 80);
             doc.setFont("helvetica", "normal");
-            doc.text('Notas:', 14, finalY + 20);
+            doc.text('Notas:', 14, finalY + 16);
             doc.setFont("helvetica", "italic");
-            doc.text(newProforma.observaciones, 14, finalY + 25);
+            doc.text(newProforma.observaciones, 14, finalY + 21);
         }
 
-        window.open(doc.output('bloburl'), '_blank');
+        printJsPdf(doc);
     };
 
     const addProductToDetail = (prodId: string) => {
@@ -511,10 +555,15 @@ const ProformasPage: React.FC = () => {
         }
 
         const payload = {
+            tipo: 'PROFORMA',
             cliente: newProforma.clienteId ? { id: Number(newProforma.clienteId) } : null,
             vendedor: newProforma.vendedorId ? { id: Number(newProforma.vendedorId) } : null,
             sucursal: newProforma.sucursalId ? { id: Number(newProforma.sucursalId) } : null,
             fecha: newProforma.fecha,
+            conFactura: Boolean(newProforma.conFactura),
+            numeroFactura: newProforma.conFactura ? (newProforma.numeroFactura || '') : '',
+            tipoPago: newProforma.tipoPago || 'CONTADO',
+            diasCredito: newProforma.tipoPago === 'CREDITO' ? Number(newProforma.diasCredito || 0) : 0,
             observaciones: newProforma.observaciones,
             detalles: newProforma.detalles.map((d: any) => ({
                 producto: { id: d.productoId },
@@ -567,6 +616,7 @@ const ProformasPage: React.FC = () => {
             const term = search.toLowerCase();
             filtered = filtered.filter(p => 
                 p.numero.toLowerCase().includes(term) ||
+                (p.numeroFactura && p.numeroFactura.toLowerCase().includes(term)) ||
                 p.cliente?.nombreTienda?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.nombres?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.apellidos?.toLowerCase().includes(term) ||
@@ -582,6 +632,8 @@ const ProformasPage: React.FC = () => {
         let cols = [
             { header: 'N° Proforma', dataKey: 'numero' },
             { header: 'Fecha', dataKey: 'fechaFormatted' },
+            { header: 'Documento', dataKey: 'documentoFormatted' },
+            { header: 'Condición', dataKey: 'pagoFormatted' },
             { header: 'Cliente', dataKey: 'clienteNombre' },
             { header: 'Vendedor', dataKey: 'vendedorNombre' },
             { header: 'Sucursal', dataKey: 'sucursalNombre' },
@@ -622,10 +674,15 @@ const ProformasPage: React.FC = () => {
 
             const ciudadNombre = (s.sucursal?.ciudad as any)?.nombre;
             const sucursalTexto = s.sucursal ? `${s.sucursal.nombre}${ciudadNombre ? ` (${ciudadNombre})` : ''}`.trim() : '-';
+            const docTexto = s.conFactura ? `Factura ${s.numeroFactura || 'S/N'}` : 'Sin Factura';
+            const pagoTexto = s.tipoPago === 'CREDITO' ? `Crédito (${s.diasCredito || 0} días)` : 'Contado';
+
             return {
                 id: s.id,
                 numero: s.numero || '-',
                 fechaFormatted: s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '-',
+                documentoFormatted: docTexto,
+                pagoFormatted: pagoTexto,
                 clienteNombre: getClientDisplayName(s.cliente),
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : 'Sin asignar',
                 sucursalNombre: sucursalTexto,
@@ -860,8 +917,24 @@ const ProformasPage: React.FC = () => {
                             return (
                                 <tr key={s.id} className="hover:bg-accent/50 transition-colors group">
                                     <td className="p-4">
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-bold">{s.numero}</span>
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="text-sm font-bold">{s.numero}</span>
+                                                {s.conFactura ? (
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200" title={`Factura Nro: ${s.numeroFactura || 'S/N'}`}>
+                                                        FAC: {s.numeroFactura || 'S/N'}
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                                                        Sin Factura
+                                                    </span>
+                                                )}
+                                                {s.tipoPago === 'CREDITO' && (
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200" title={`Crédito ${s.diasCredito || 0} días`}>
+                                                        CRÉDITO ({s.diasCredito || 0}d)
+                                                    </span>
+                                                )}
+                                            </div>
                                             <span className="text-xs text-muted-foreground">{s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '---'}</span>
                                         </div>
                                     </td>
@@ -959,31 +1032,12 @@ const ProformasPage: React.FC = () => {
                                                 <Edit className="w-3" /> Editar
                                             </button>
                                         )}
-                                        {s.estado === EstadoNota.PENDIENTE && (
-                                            <button
-                                                onClick={() => confirmMutation.mutate(s.id)}
-                                                disabled={confirmMutation.isPending}
-                                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-1.5 shadow-sm"
-                                                title="Confirmar Proforma (Aprobar presupuesto)"
-                                            >
-                                                <CheckCircle className="w-3" /> Confirmar
-                                            </button>
-                                        )}
-                                        {s.estado === EstadoNota.PENDIENTE && (
-                                            <button
-                                                disabled
-                                                className="px-3 py-1.5 bg-muted text-muted-foreground/60 border rounded-lg text-xs font-bold cursor-not-allowed opacity-60 flex items-center gap-1.5"
-                                                title="Debe confirmar la proforma antes de poder pasar a venta"
-                                            >
-                                                <Calculator className="w-3" /> A Venta
-                                            </button>
-                                        )}
-                                        {s.estado === EstadoNota.CONFIRMADA && (
+                                        {s.estado !== EstadoNota.ANULADA && s.estado !== EstadoNota.CONVERTIDA && (
                                             <button
                                                 onClick={() => convertMutation.mutate(s.id)}
                                                 disabled={convertMutation.isPending}
-                                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all flex items-center gap-1.5 shadow-sm"
-                                                title="Convertir a Venta"
+                                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                                                title="Convertir a Venta Confirmada"
                                             >
                                                 <Calculator className="w-3" /> A Venta
                                             </button>
@@ -1108,14 +1162,127 @@ const ProformasPage: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="border rounded-xl shadow-sm bg-card overflow-hidden">
-                        <div className="p-4 bg-muted/30 border-b flex items-center gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-muted/20 border rounded-xl">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium flex items-center gap-2 italic text-muted-foreground">
+                                <FileText className="w-3.5 h-3.5 text-primary" /> Tipo de Documento
+                            </label>
+                            <select 
+                                disabled={isViewing}
+                                value={newProforma.conFactura ? 'true' : 'false'}
+                                onChange={(e) => {
+                                    const isWith = e.target.value === 'true';
+                                    setNewProforma({
+                                        ...newProforma,
+                                        conFactura: isWith,
+                                        numeroFactura: isWith ? newProforma.numeroFactura : ''
+                                    });
+                                }}
+                                className="w-full p-2.5 border rounded-lg bg-background text-sm text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 font-medium"
+                            >
+                                <option value="false">📄 Sin Factura (Nota Venta)</option>
+                                <option value="true">🧾 Con Factura</option>
+                            </select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium flex items-center gap-2 italic text-muted-foreground">
+                                <Receipt className="w-3.5 h-3.5 text-primary" /> Número de Factura {newProforma.conFactura && <span className="text-destructive font-bold">*</span>}
+                            </label>
+                            <div className="relative">
+                                <Receipt className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                                <input 
+                                    disabled={isViewing || !newProforma.conFactura}
+                                    type="text"
+                                    placeholder={newProforma.conFactura ? "Ej: 10452" : "No aplica"}
+                                    value={newProforma.numeroFactura || ''}
+                                    onChange={(e) => setNewProforma({ ...newProforma, numeroFactura: e.target.value })}
+                                    required={newProforma.conFactura}
+                                    className={`w-full pl-9 pr-3 py-2.5 border rounded-lg bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/20 outline-none transition-all ${
+                                        !newProforma.conFactura ? 'opacity-50 bg-muted/40 cursor-not-allowed' : 'hover:border-primary/50'
+                                    }`}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium flex items-center gap-2 italic text-muted-foreground">
+                                <CreditCard className="w-3.5 h-3.5 text-primary" /> Condición de Pago
+                            </label>
+                            <select 
+                                disabled={isViewing}
+                                value={newProforma.tipoPago || 'CONTADO'}
+                                onChange={(e) => {
+                                    const tp = e.target.value;
+                                    const selectedCli = clients?.find(c => c.id.toString() === newProforma.clienteId);
+                                    const defaultDias = tp === 'CREDITO' ? (selectedCli?.plazoCreditoDias || 30) : 0;
+                                    setNewProforma({
+                                        ...newProforma,
+                                        tipoPago: tp,
+                                        diasCredito: defaultDias
+                                    });
+                                }}
+                                className="w-full p-2.5 border rounded-lg bg-background text-sm text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 font-medium"
+                            >
+                                <option value="CONTADO">Al Contado</option>
+                                <option value="CREDITO">A Crédito</option>
+                            </select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium flex items-center gap-2 italic text-muted-foreground">
+                                <Clock className="w-3.5 h-3.5 text-primary" /> Plazo Crédito (Días)
+                            </label>
+                            <div className="flex items-center gap-2.5">
+                                <input 
+                                    disabled={isViewing || newProforma.tipoPago !== 'CREDITO'}
+                                    type="number"
+                                    min="1"
+                                    placeholder={newProforma.tipoPago === 'CREDITO' ? "30" : "0"}
+                                    value={newProforma.tipoPago === 'CREDITO' ? (newProforma.diasCredito || '') : 0}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setNewProforma({ ...newProforma, diasCredito: val });
+                                    }}
+                                    className={`w-24 p-2.5 text-center font-bold border rounded-lg bg-background text-sm text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all shrink-0 ${
+                                        newProforma.tipoPago !== 'CREDITO' ? 'opacity-50 bg-muted/40 cursor-not-allowed' : 'hover:border-primary/50'
+                                    }`}
+                                />
+                                {newProforma.tipoPago === 'CREDITO' ? (() => {
+                                    const selectedCli = clients?.find(c => c.id.toString() === newProforma.clienteId);
+                                    const max = Number(selectedCli?.plazoCreditoDias) || 0;
+                                    const currentDias = Number(newProforma.diasCredito) || 0;
+                                    
+                                    const baseDateStr = newProforma.fecha || format(new Date(), 'yyyy-MM-dd');
+                                    const d = new Date(baseDateStr + 'T00:00:00');
+                                    d.setDate(d.getDate() + currentDias);
+                                    const formattedVenc = format(d, 'dd/MM/yyyy');
+
+                                    return (
+                                        <div className="flex flex-col text-[11px] leading-tight">
+                                            {max > 0 && (
+                                                <span className={currentDias > max ? "text-amber-600 dark:text-amber-400 font-medium" : "text-primary font-semibold"}>
+                                                    {currentDias > max ? `Plazo cliente: ${max} d (extendido)` : `Plazo cliente: ${max} d`}
+                                                </span>
+                                            )}
+                                            <span className="text-muted-foreground">Vence: <strong className="text-foreground">{formattedVenc}</strong></span>
+                                        </div>
+                                    );
+                                })() : (
+                                    <span className="text-xs text-muted-foreground italic">0 días</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border rounded-xl shadow-sm bg-card">
+                        <div className="p-4 bg-muted/30 border-b flex items-center gap-3 rounded-t-xl">
                             <Package className="w-4 h-4 text-primary" />
                             <h3 className="font-semibold text-sm">Detalle de Productos</h3>
                         </div>
                         <div className="p-4 space-y-4">
                             {!isViewing && (
-                                <div className="flex gap-2 items-center">
+                                <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
                                     <div className="flex-1 min-w-0">
                                         <SearchableSelect
                                             value={selectedProdIdToAdd}
@@ -1134,15 +1301,16 @@ const ProformasPage: React.FC = () => {
                                                 setSelectedProdIdToAdd('');
                                             }
                                         }}
-                                        className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                        className="w-full sm:w-auto px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                                     >
                                         <ShoppingCart className="w-4 h-4 shrink-0" />
-                                        <span>Añadir</span>
+                                        <span>Añadir Producto</span>
                                     </button>
                                 </div>
                             )}
 
-                            <table className="w-full text-left border-collapse mt-4">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse mt-2 min-w-[550px]">
                                 <thead>
                                     <tr className="bg-muted/50 border-y">
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>
@@ -1245,6 +1413,7 @@ const ProformasPage: React.FC = () => {
                                     })}
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     </div>
 

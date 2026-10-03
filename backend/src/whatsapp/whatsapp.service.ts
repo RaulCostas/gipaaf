@@ -1261,18 +1261,28 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 doc.text(`PROFORMA - ${proforma.numero || 'S/N'}`, 295, 34, { width: 264, align: 'right' });
 
                 if (isFirstPage) {
-                    // Metadatos (Fecha, Sucursal, Cliente, Vendedor)
+                    // Metadatos (Fecha, Sucursal, Cliente, Vendedor, Documento, Condición)
                     doc.font('Helvetica').fontSize(9.5).fillColor('#505050');
                     
-                    // Fila 1 (Y = 82)
-                    doc.text(`Fecha: ${dateStr}`, 36, 82, { width: 250 });
-                    doc.text(`Sucursal: ${sucursalNombre}`, 250, 82, { width: 309 });
+                    // Fila 1 (Y = 78)
+                    doc.text(`Fecha: ${dateStr}`, 36, 78, { width: 250 });
+                    doc.text(`Sucursal: ${sucursalNombre}`, 250, 78, { width: 309 });
 
-                    // Fila 2 (Y = 98)
-                    doc.text(`Cliente: ${clientName}`, 36, 98, { width: 250, ellipsis: true });
+                    // Fila 2 (Y = 92)
+                    doc.text(`Cliente: ${clientName}`, 36, 92, { width: 250, ellipsis: true });
                     if (vendedorName && vendedorName !== 'Sin asignar') {
-                        doc.text(`Vendedor: ${vendedorName}`, 250, 98, { width: 309, ellipsis: true });
+                        doc.text(`Vendedor: ${vendedorName}`, 250, 92, { width: 309, ellipsis: true });
                     }
+
+                    // Fila 3 (Y = 106)
+                    const docTipo = proforma.conFactura ? `Con Factura${proforma.numeroFactura ? ` (FAC: ${proforma.numeroFactura})` : ''}` : 'Sin Factura (Nota Venta)';
+                    doc.text(`Documento: ${docTipo}`, 36, 106, { width: 250, ellipsis: true });
+                    let pagoTexto = 'Al Contado';
+                    if (proforma.tipoPago === 'CREDITO') {
+                        const dias = Number(proforma.diasCredito) || 0;
+                        pagoTexto = `A Crédito (${dias} días)`;
+                    }
+                    doc.text(`Condición: ${pagoTexto}`, 250, 106, { width: 309, ellipsis: true });
                 }
             };
 

@@ -14,7 +14,7 @@ import { CostoImportacionModal } from '../../components/compras/CostoImportacion
 import { X, Search, Plus, Trash2, CheckCircle, CheckCircle2, Check, Package, Calculator, Calendar, ChevronRight, Eye, Edit, Ban, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Users, Lock, Info, MessageSquare, Send, Loader2, ExternalLink, Globe, MessageCircle, ShoppingCart } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
+import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData, printJsPdf } from '../../utils/exportUtils';
 import { format } from 'date-fns';
 import { formatDate } from '../../utils/dateUtils';
 import { useFilters } from '../../context/FilterContext';
@@ -311,12 +311,14 @@ const ComprasPage: React.FC = () => {
         }
 
         doc.setFontSize(14);
-        doc.setTextColor(50, 50, 50);
+        doc.setTextColor(30, 30, 30);
+        doc.setFont('helvetica', 'bold');
         doc.text(`Nota de Compra Nro ${newNota.id || 'S/N'}`, 196, 18, { align: 'right' });
 
-        doc.setTextColor(80, 80, 80);
-        doc.setFontSize(10);
-        let currentY = 38;
+        doc.setTextColor(60, 60, 60);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9.5);
+        let currentY = 32;
         
         const fechaFormatted = newNota.fecha ? newNota.fecha.split('T')[0].split('-').reverse().join('/') : '';
         doc.text(`Fecha: ${fechaFormatted}`, 14, currentY);
@@ -324,17 +326,15 @@ const ComprasPage: React.FC = () => {
         const sucursalName = sucursales?.find(s => s.id === Number(newNota.sucursalId))?.nombre || '';
         if (sucursalName) doc.text(`Sucursal: ${sucursalName}`, 80, currentY);
         
-        currentY += 6;
+        currentY += 5;
         const proveedorName = suppliers?.find(s => s.id === Number(newNota.proveedorId))?.empresa || '';
         doc.text(`Proveedor: ${proveedorName}`, 14, currentY);
         doc.text(`Moneda: ${newNota.moneda === 'USD' ? 'Dólares (USD)' : 'Bolivianos (BOB)'}`, 80, currentY);
         
         if (newNota.moneda === 'USD') {
-            currentY += 6;
+            currentY += 5;
             doc.text(`Tipo de Cambio: ${newNota.tipoCambio}`, 14, currentY);
         }
-
-        currentY += 12;
 
         const tableData = newNota.detalles.map((d: any) => {
             const prod = products?.find(p => p.id === d.productoId);
@@ -349,12 +349,30 @@ const ComprasPage: React.FC = () => {
         });
 
         autoTable(doc, {
-            startY: currentY,
+            startY: currentY + 4,
             head: [['Producto', 'Lote', 'Venc.', 'Cant.', 'P. Unit', 'Subtotal']],
             body: tableData,
             theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-            styles: { fontSize: 8 },
+            headStyles: {
+                fillColor: [240, 240, 240],
+                textColor: [0, 0, 0],
+                fontStyle: 'bold',
+                lineColor: [180, 180, 180],
+                lineWidth: 0.1,
+                cellPadding: 2.5,
+            },
+            alternateRowStyles: {
+                fillColor: [252, 252, 252]
+            },
+            styles: {
+                font: 'helvetica',
+                fontSize: 8.5,
+                cellPadding: 2.5,
+                valign: 'middle',
+                textColor: [30, 30, 30],
+                lineColor: [200, 200, 200],
+                lineWidth: 0.1
+            },
             columnStyles: {
                 3: { halign: 'center' },
                 4: { halign: 'right' },
@@ -362,12 +380,13 @@ const ComprasPage: React.FC = () => {
             }
         });
 
-        const finalY = (doc as any).lastAutoTable.finalY + 10;
-        doc.setFontSize(12);
+        const finalY = (doc as any).lastAutoTable.finalY + 8;
+        doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 30, 30);
         doc.text(`Total: ${formatCurrency(calculateTotals().total, newNota.moneda)}`, 196, finalY, { align: 'right' });
 
-        window.open(doc.output('bloburl'), '_blank');
+        printJsPdf(doc);
     };
 
     const openEditModal = (nota: any) => {
@@ -1009,14 +1028,14 @@ const ComprasPage: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="border rounded-xl shadow-sm bg-card overflow-hidden">
-                        <div className="p-4 bg-muted/30 border-b flex items-center gap-3">
+                    <div className="border rounded-xl shadow-sm bg-card">
+                        <div className="p-4 bg-muted/30 border-b flex items-center gap-3 rounded-t-xl">
                             <Package className="w-4 h-4 text-primary" />
                             <h3 className="font-semibold text-sm">Productos en esta Nota</h3>
                         </div>
                         <div className="p-4 space-y-4">
                             {!isViewing && (
-                                <div className="flex gap-2 items-center">
+                                <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
                                     <div className="flex-1 min-w-0">
                                         <SearchableSelect
                                             value={selectedProductId}
@@ -1035,10 +1054,10 @@ const ComprasPage: React.FC = () => {
                                             }
                                         }}
                                         disabled={!selectedProductId}
-                                        className="shrink-0 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="w-full sm:w-auto px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 shadow-sm transition-all whitespace-nowrap flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <ShoppingCart className="w-4 h-4 shrink-0" />
-                                        <span>Añadir</span>
+                                        <span>Añadir Producto</span>
                                     </button>
                                 </div>
                             )}

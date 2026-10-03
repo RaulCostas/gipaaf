@@ -52,12 +52,50 @@ export class ProductosService implements OnModuleInit {
     }
 
     async create(data: Partial<Producto>) {
-        return this.repo.save(this.repo.create(data));
+        const createData: any = {
+            codigo: data.codigo,
+            nombre: data.nombre,
+            descripcion: data.descripcion,
+            precioCompra: data.precioCompra !== undefined && data.precioCompra !== null ? Number(data.precioCompra) : 0,
+            precioVenta: data.precioVenta !== undefined && data.precioVenta !== null ? Number(data.precioVenta) : 0,
+            unidadMedida: data.unidadMedida || 'UNIDAD',
+            imagen: data.imagen || null,
+            activo: data.activo !== undefined ? Boolean(data.activo) : true,
+            lineaId: (data.lineaId || (data as any).categoriaId) ? Number(data.lineaId || (data as any).categoriaId) : null,
+            marcaId: data.marcaId ? Number(data.marcaId) : null,
+            grupoId: data.grupoId ? Number(data.grupoId) : null,
+        };
+        return this.repo.save(this.repo.create(createData));
     }
 
     async update(id: number, data: Partial<Producto>) {
         await this.findOne(id);
-        await this.repo.update(id, data);
+
+        const updateData: any = {};
+        if (data.codigo !== undefined) updateData.codigo = data.codigo;
+        if (data.nombre !== undefined) updateData.nombre = data.nombre;
+        if (data.descripcion !== undefined) updateData.descripcion = data.descripcion;
+        if (data.precioCompra !== undefined && data.precioCompra !== null) updateData.precioCompra = Number(data.precioCompra) || 0;
+        if (data.precioVenta !== undefined && data.precioVenta !== null) updateData.precioVenta = Number(data.precioVenta) || 0;
+        if (data.unidadMedida !== undefined) updateData.unidadMedida = data.unidadMedida;
+        if (data.imagen !== undefined) updateData.imagen = data.imagen;
+        if (data.activo !== undefined) updateData.activo = Boolean(data.activo);
+
+        if (data.lineaId !== undefined || (data as any).categoriaId !== undefined) {
+            const lId = data.lineaId || (data as any).categoriaId;
+            updateData.lineaId = lId ? Number(lId) : null;
+        }
+        if (data.marcaId !== undefined) {
+            updateData.marcaId = data.marcaId ? Number(data.marcaId) : null;
+        }
+        if (data.grupoId !== undefined) {
+            updateData.grupoId = data.grupoId ? Number(data.grupoId) : null;
+        }
+        if (data.fechaUltimaCompra !== undefined) {
+            updateData.fechaUltimaCompra = data.fechaUltimaCompra;
+        }
+
+        await this.repo.update(id, updateData);
         return this.findOne(id);
     }
 

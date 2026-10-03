@@ -1083,20 +1083,49 @@ export class NotasService {
         return this.dataSource.transaction(async (manager) => {
             const proforma = await manager.findOne(Nota, { 
                 where: { id },
-                relations: ['detalles', 'detalles.producto', 'sucursal', 'cliente', 'vendedor', 'usuario']
+                relations: ['detalles', 'detalles.producto', 'sucursal', 'cliente', 'cliente.persona', 'vendedor', 'usuario']
             });
             if (!proforma) throw new NotFoundException(`Nota ${id} no encontrada`);
             if (proforma.tipo !== TipoNota.PROFORMA) throw new BadRequestException('Solo se pueden convertir proformas');
-            if (proforma.estado !== EstadoNota.CONFIRMADA) throw new BadRequestException('Solo se pueden convertir a venta las proformas que hayan sido confirmadas previamente');
+            if (proforma.estado === EstadoNota.CONVERTIDA || proforma.estado === EstadoNota.ANULADA) {
+                throw new BadRequestException('Esta proforma ya fue convertida o está anulada');
+            }
             
+            // Determinar la sucursal de la proforma
+            let targetSucursal: Sucursal | null = proforma.sucursal || null;
+            if (!targetSucursal) {
+                targetSucursal = await manager.findOne(Sucursal, { where: { activo: true } });
+            }
+
+            // Validar stock antes de crear la venta
+            for (const det of proforma.detalles || []) {
+                let inv: Inventario | null = null;
+                if (targetSucursal && det.producto?.id) {
+                    inv = await manager.findOne(Inventario, { 
+                        where: { 
+                            producto: { id: det.producto.id }, 
+                            sucursal: { id: targetSucursal.id } 
+                        } 
+                    });
+                } else if (det.producto?.id) {
+                    inv = await manager.findOne(Inventario, { where: { producto: { id: det.producto.id } } });
+                }
+
+                if (!inv || Number(inv.stockActual) < Number(det.cantidad)) {
+                    throw new BadRequestException(
+                        `Stock insuficiente para "${det.producto?.nombre || 'el producto'}" en la sucursal seleccionada. Stock disponible: ${inv ? inv.stockActual : 0}, requerido: ${det.cantidad}`
+                    );
+                }
+            }
+
             // Generar nuevo número de venta correlativo y seguro
             const numeroVenta = await this.generarSiguienteNumero(manager, TipoNota.VENTA);
             
-            // Crear nueva Nota de tipo VENTA con la fecha actual
+            // Crear nueva Nota de tipo VENTA con la fecha actual y estado CONFIRMADA
             const nuevaVenta = manager.create(Nota, {
                 numero: numeroVenta,
                 tipo: TipoNota.VENTA,
-                estado: EstadoNota.PENDIENTE,
+                estado: EstadoNota.CONFIRMADA,
                 fecha: new Date(),
                 cliente: proforma.cliente || undefined,
                 sucursal: proforma.sucursal || undefined,
@@ -1105,11 +1134,15 @@ export class NotasService {
                 moneda: proforma.moneda || Moneda.BOB,
                 tipoCambio: proforma.tipoCambio || 1,
                 conFactura: proforma.conFactura || false,
+                numeroFactura: proforma.numeroFactura || undefined,
                 tipoPago: proforma.tipoPago || 'CONTADO',
                 diasCredito: proforma.diasCredito || 0,
                 fechaVencimiento: proforma.fechaVencimiento || undefined,
                 subtotal: proforma.subtotal,
                 descuento: proforma.descuento,
+                descuentoFijo: proforma.descuentoFijo || 0,
+                descuentoFijoPorcentaje: proforma.descuentoFijoPorcentaje || 0,
+                aplicaDescuentoFijo: proforma.aplicaDescuentoFijo || false,
                 descuentoPorcentaje: proforma.descuentoPorcentaje,
                 descuentoPromocion: proforma.descuentoPromocion,
                 descuentoPromocionPorcentaje: proforma.descuentoPromocionPorcentaje,
@@ -1132,6 +1165,102 @@ export class NotasService {
             });
 
             const savedVenta = await manager.save(nuevaVenta);
+
+            // Descontar inventario y lotes para cada detalle de la venta confirmada
+            for (const det of savedVenta.detalles || []) {
+                let inv: Inventario | null = null;
+                if (targetSucursal && det.producto?.id) {
+                    inv = await manager.findOne(Inventario, { 
+                        where: { 
+                            producto: { id: det.producto.id }, 
+                            sucursal: { id: targetSucursal.id } 
+                        } 
+                    });
+                } else if (det.producto?.id) {
+                    inv = await manager.findOne(Inventario, { where: { producto: { id: det.producto.id } } });
+                }
+
+                if (inv && Number(inv.stockActual) < Number(det.cantidad)) {
+                    throw new BadRequestException(`Stock insuficiente para ${det.producto?.nombre} en la sucursal seleccionada`);
+                }
+
+                const lotesWhere: any = { producto: { id: det.producto.id } };
+                if (targetSucursal) {
+                    lotesWhere.sucursal = { id: targetSucursal.id };
+                }
+
+                const lotes = await manager.find(Lote, {
+                    where: lotesWhere,
+                    order: { 
+                        fechaVencimiento: { direction: 'ASC', nulls: 'NULLS LAST' } as any,
+                        fechaIngreso: 'ASC' 
+                    }
+                });
+                
+                let cantidadPorDescontar = Number(det.cantidad);
+                for (const lote of lotes) {
+                    if (cantidadPorDescontar <= 0) break;
+                    const cantDisponible = Number(lote.cantidadActual);
+                    if (cantDisponible > 0) {
+                        const cantidadADescontar = Math.min(cantDisponible, cantidadPorDescontar);
+                        lote.cantidadActual = cantDisponible - cantidadADescontar;
+                        await manager.save(lote);
+                        
+                        const movLote = manager.create(MovimientoLote, {
+                            lote: lote,
+                            detalleNota: det,
+                            cantidad: cantidadADescontar
+                        });
+                        await manager.save(movLote);
+                        
+                        cantidadPorDescontar -= cantidadADescontar;
+                    }
+                }
+                
+                if (cantidadPorDescontar > 0) {
+                    // Si hay stock en inventario pero faltaban lotes registrados, auto-crear lote para respaldar la venta
+                    const costoRef = Number(inv?.precioCompra) || Number(det.producto?.precioCompra) || 0;
+                    const autoLote = manager.create(Lote, {
+                        numeroLote: `L-STOCK-${det.producto.codigo || det.producto.id}`,
+                        producto: det.producto,
+                        sucursal: targetSucursal || inv?.sucursal || undefined,
+                        cantidadInicial: cantidadPorDescontar,
+                        cantidadActual: 0,
+                        costoUnitario: costoRef,
+                        fechaIngreso: new Date()
+                    });
+                    const savedAutoLote = await manager.save(autoLote);
+
+                    const movLote = manager.create(MovimientoLote, {
+                        lote: savedAutoLote,
+                        detalleNota: det,
+                        cantidad: cantidadPorDescontar
+                    });
+                    await manager.save(movLote);
+                    cantidadPorDescontar = 0;
+                }
+
+                if (inv) {
+                    inv.stockActual = Number(inv.stockActual) - Number(det.cantidad);
+                    await manager.save(inv);
+
+                    // Registrar en Kardex / Movimientos
+                    const cliPersona = proforma.cliente?.persona;
+                    const cliName = cliPersona ? `${cliPersona.nombres || ''} ${cliPersona.apellidos || ''}`.trim() : '';
+                    const motivo = `Venta [${savedVenta.numero}]${cliName ? ' - ' + cliName : ''}`;
+                    const mov = manager.create(MovimientoInventario, {
+                        inventario: inv,
+                        tipo: 'VENTA',
+                        cantidad: -Number(det.cantidad),
+                        motivo: motivo.trim(),
+                        numeroDocumento: savedVenta.numero,
+                        observaciones: savedVenta.observaciones || '',
+                        costoUnitario: Number(inv.precioCompra) || Number(det.producto?.precioCompra) || 0,
+                        usuario: savedVenta.usuario || undefined,
+                    });
+                    await manager.save(mov);
+                }
+            }
 
             // Actualizar la proforma original a estado CONVERTIDA
             proforma.estado = EstadoNota.CONVERTIDA;
