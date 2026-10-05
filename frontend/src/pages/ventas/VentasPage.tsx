@@ -410,7 +410,7 @@ const ventasPage: React.FC = () => {
         }
         currentY += 5;
 
-        const docTipo = newVenta.conFactura ? `Con Factura${newVenta.numeroFactura ? ` (FAC: ${newVenta.numeroFactura})` : ''}` : 'Sin Factura (Nota Venta)';
+        const docTipo = newVenta.conFactura ? `CF:${newVenta.numeroFactura || '0'}` : `XF:${newVenta.numeroFactura || '0'}`;
         doc.text(`Documento: ${docTipo}`, 14, currentY);
 
         let pagoTexto = 'Al Contado';
