@@ -13,6 +13,7 @@ import {
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { formatQuantity } from '../../utils/currencyUtils';
 import { useFilters } from '../../context/FilterContext';
+import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 
 const MovimientosPage: React.FC = () => {
     const { selectedCiudad, selectedSucursal } = useFilters();
@@ -37,6 +38,19 @@ const MovimientosPage: React.FC = () => {
         queryFn: () => productService.getAll(),
         staleTime: 60000,
     });
+
+    const productOptions: SearchableOption[] = useMemo(() => {
+        if (!productos) return [];
+        return [
+            { value: '', label: 'Todos los Productos' },
+            ...productos.map(p => ({
+                value: String(p.id),
+                label: p.nombre,
+                code: p.codigo || undefined,
+                sublabel: p.precioVenta ? `Precio: Bs. ${p.precioVenta}` : undefined
+            }))
+        ];
+    }, [productos]);
 
     const { data: sucursales } = useQuery({
         queryKey: ['sucursalesList'],
@@ -513,20 +527,14 @@ const MovimientosPage: React.FC = () => {
                 </div>
 
                 {/* Filtro por Producto (Antes de Tipo) */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm min-w-[220px] max-w-sm flex-1">
-                    <Package className="w-4 h-4 text-primary shrink-0" />
-                    <select
+                <div className="w-full sm:w-72 min-w-[220px]">
+                    <SearchableSelect
                         value={selectedProductId}
-                        onChange={(e) => setSelectedProductId(e.target.value)}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer w-full text-sm truncate"
-                    >
-                        <option value="" className="bg-background text-foreground">Todos los Productos</option>
-                        {productos?.map(p => (
-                            <option key={p.id} value={p.id} className="bg-background text-foreground">
-                                {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
-                            </option>
-                        ))}
-                    </select>
+                        onChange={(val) => setSelectedProductId(val ? String(val) : '')}
+                        options={productOptions}
+                        placeholder="Todos los Productos"
+                        searchPlaceholder="Escriba código o nombre de producto..."
+                    />
                 </div>
 
                 {/* Filtro por Tipo de Movimiento */}

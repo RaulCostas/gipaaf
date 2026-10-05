@@ -24,7 +24,9 @@ export const RequirePermission: React.FC<{ recurso: string; children: React.Reac
         return <div className="p-8 text-center text-muted-foreground">Verificando permisos...</div>;
     }
 
-    if (!isAdmin && !hasPermission(recurso)) {
+    const hasAccess = isAdmin || hasPermission(recurso) || (recurso === 'WHATSAPP' && hasPermission('CONFIGURACION'));
+
+    if (!hasAccess) {
         return (
             <div className="min-h-[60vh] flex flex-col items-center justify-center text-center p-6 space-y-4">
                 <div className="w-16 h-16 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center">

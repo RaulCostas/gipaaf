@@ -225,7 +225,12 @@ const MainLayout: React.FC = () => {
                     {renderSidebarLink("/dashboard", Home, "Inicio")}
                     
                     {navSections.map(section => {
-                        const visibleItems = section.items.filter(item => !item.perm || isAdmin || hasPermission(item.perm));
+                        const visibleItems = section.items.filter(item => 
+                            !item.perm || 
+                            isAdmin || 
+                            hasPermission(item.perm) || 
+                            (item.perm === 'WHATSAPP' && hasPermission('CONFIGURACION'))
+                        );
                         if (visibleItems.length === 0) return null;
                         return (
                             <React.Fragment key={section.title}>

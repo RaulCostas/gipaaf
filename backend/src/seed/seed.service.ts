@@ -86,6 +86,7 @@ const SYSTEM_PERMISSIONS = [
 
   // Configuración
   { nombre: 'Gestionar Sucursales y Ciudades', recurso: 'CONFIGURACION', accion: 'GESTIONAR', descripcion: 'Administrar sucursales y ciudades' },
+  { nombre: 'Ver y Configurar Chatbot WhatsApp', recurso: 'WHATSAPP', accion: 'GESTIONAR', descripcion: 'Vincular QR, configurar respuestas, catálogo y cuentas bancarias del Chatbot' },
 
   // Seguridad
   { nombre: 'Gestionar Usuarios', recurso: 'USUARIOS', accion: 'GESTIONAR', descripcion: 'Crear, editar contraseñas y desactivar usuarios' },

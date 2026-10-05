@@ -525,6 +525,27 @@ const ventasPage: React.FC = () => {
             doc.text(newVenta.observaciones, 14, finalY + 21);
         }
 
+        const bottomContentY = Math.max(currentTotalY, newVenta.observaciones ? finalY + 26 : finalY + 14);
+        let signatureY = bottomContentY + 24;
+
+        if (signatureY > 265) {
+            doc.addPage();
+            signatureY = 40;
+        }
+
+        doc.setDrawColor(160, 160, 160);
+        doc.setLineDashPattern([1, 1], 0);
+        doc.line(20, signatureY, 68, signatureY);
+        doc.line(81, signatureY, 129, signatureY);
+        doc.line(142, signatureY, 190, signatureY);
+
+        doc.setFontSize(8.5);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(60, 60, 60);
+        doc.text('ALMACEN', 44, signatureY + 5, { align: 'center' });
+        doc.text('VENDEDOR', 105, signatureY + 5, { align: 'center' });
+        doc.text('RECIBIDO POR', 166, signatureY + 5, { align: 'center' });
+
         printJsPdf(doc);
     };
 

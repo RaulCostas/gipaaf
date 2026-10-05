@@ -221,6 +221,17 @@ const MermasPage: React.FC = () => {
         return Array.from(productMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
     }, [mermasData, selectedSucursal, selectedCiudad]);
 
+    const mermaProductFilterOptions: SearchableOption[] = useMemo(() => {
+        return [
+            { value: 'all', label: availableMermaProducts.length === 0 ? 'Sin productos en mermas' : `Todos los Productos (${availableMermaProducts.length})` },
+            ...availableMermaProducts.map(p => ({
+                value: String(p.id),
+                label: p.nombre,
+                code: p.codigo || undefined,
+            }))
+        ];
+    }, [availableMermaProducts]);
+
     const filteredMermas = useMemo(() => {
         const filtered = mermasData.filter(m => {
             const prod = m.inventario?.producto;
@@ -580,22 +591,14 @@ const MermasPage: React.FC = () => {
                 </div>
 
                 {/* Filtro por Producto (Solo productos en mermas) */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                    <Package className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <select
-                        value={selectedProducto}
-                        onChange={(e) => setSelectedProducto(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer max-w-[200px] truncate"
-                    >
-                        <option value="all" className="bg-background text-foreground">
-                            {availableMermaProducts.length === 0 ? 'Sin productos en mermas' : `Todos los Productos (${availableMermaProducts.length})`}
-                        </option>
-                        {availableMermaProducts.map(p => (
-                            <option key={p.id} value={p.id} className="bg-background text-foreground">
-                                {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
-                            </option>
-                        ))}
-                    </select>
+                <div className="w-full sm:w-64 min-w-[200px]">
+                    <SearchableSelect
+                        value={selectedProducto === 'all' ? 'all' : String(selectedProducto)}
+                        onChange={(val) => setSelectedProducto(!val || val === 'all' ? 'all' : Number(val))}
+                        options={mermaProductFilterOptions}
+                        placeholder="Todos los Productos"
+                        searchPlaceholder="Escriba código o nombre de producto..."
+                    />
                 </div>
 
                 {/* Filtro por Marca */}
