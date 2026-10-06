@@ -11,7 +11,7 @@ import {
     X, Save, AlignLeft, ChevronLeft, ChevronRight, Check,
     Printer, FileText, FileSpreadsheet, User, Building2, Users,
     CheckSquare, Square, Eye, Phone, MapPin,
-    ArrowRightLeft
+    ArrowRightLeft, Store
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import { toast } from 'sonner';
@@ -221,6 +221,8 @@ const RutasPage: React.FC = () => {
             const matchVendedor = r.vendedor ? `${r.vendedor.nombres} ${r.vendedor.apellidos}`.toLowerCase().includes(query) : false;
             const matchSucursal = r.sucursal?.nombre ? r.sucursal.nombre.toLowerCase().includes(query) : false;
             const matchClientes = r.clientes ? r.clientes.some((c: any) => 
+                (c.nombreTienda && c.nombreTienda.toLowerCase().includes(query)) ||
+                (c.codigo && c.codigo.toLowerCase().includes(query)) ||
                 (c.persona?.nombres && c.persona.nombres.toLowerCase().includes(query)) ||
                 (c.persona?.apellidos && c.persona.apellidos.toLowerCase().includes(query)) ||
                 (c.persona?.ci && c.persona.ci.toLowerCase().includes(query))
@@ -265,11 +267,12 @@ const RutasPage: React.FC = () => {
         if (modalClientSearch.trim()) {
             const q = modalClientSearch.toLowerCase();
             list = list.filter(c => 
+                (c.nombreTienda && c.nombreTienda.toLowerCase().includes(q)) ||
+                (c.codigo && c.codigo.toLowerCase().includes(q)) ||
                 (c.persona?.nombres && c.persona.nombres.toLowerCase().includes(q)) ||
                 (c.persona?.apellidos && c.persona.apellidos.toLowerCase().includes(q)) ||
                 (c.persona?.ci && c.persona.ci.toLowerCase().includes(q)) ||
-                (c.persona?.direccion && c.persona.direccion.toLowerCase().includes(q)) ||
-                (c.codigo && c.codigo.toLowerCase().includes(q))
+                (c.persona?.direccion && c.persona.direccion.toLowerCase().includes(q))
             );
         }
 
@@ -300,6 +303,8 @@ const RutasPage: React.FC = () => {
         if (viewingClientSearch.trim()) {
             const q = viewingClientSearch.toLowerCase();
             list = list.filter(c => 
+                (c.nombreTienda && c.nombreTienda.toLowerCase().includes(q)) ||
+                (c.codigo && c.codigo.toLowerCase().includes(q)) ||
                 (c.persona?.nombres && c.persona.nombres.toLowerCase().includes(q)) ||
                 (c.persona?.apellidos && c.persona.apellidos.toLowerCase().includes(q)) ||
                 (c.persona?.ci && c.persona.ci.toLowerCase().includes(q)) ||
@@ -392,8 +397,9 @@ const RutasPage: React.FC = () => {
                             <tr>
                                 <td class="center font-bold">${i + 1}</td>
                                 <td>
-                                    <strong style="color: #0f172a;">${c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : 'Sin Nombre'}</strong>
-                                    ${c.codigo ? `<br><span style="font-size: 8.5px; color: #64748b;">Cód: ${c.codigo}</span>` : ''}
+                                    <strong style="color: #0f172a;">${c.nombreTienda ? c.nombreTienda : (c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : 'Sin Nombre')}</strong>
+                                    ${c.nombreTienda && c.persona ? `<br><span style="font-size: 9px; color: #475569;">👤 ${c.persona.nombres} ${c.persona.apellidos}</span>` : ''}
+                                    ${c.codigo ? `<br><span style="font-size: 8.5px; color: #64748b; font-family: monospace;">[${c.codigo}]</span>` : ''}
                                 </td>
                                 <td>${c.persona?.ci || '-'}</td>
                                 <td>${c.persona?.telefono || '-'}</td>
@@ -461,7 +467,9 @@ const RutasPage: React.FC = () => {
     const handleExportCarteraExcel = (ruta: Ruta, clients: Cliente[]) => {
         const columns = [
             { header: 'ID', dataKey: 'id' },
-            { header: 'Cliente', dataKey: 'clienteNombre' },
+            { header: 'Código', dataKey: 'codigo' },
+            { header: 'Tienda / Negocio', dataKey: 'nombreTienda' },
+            { header: 'Contacto / Cliente', dataKey: 'clienteNombre' },
             { header: 'CI / NIT', dataKey: 'ci' },
             { header: 'Teléfono', dataKey: 'telefono' },
             { header: 'Dirección', dataKey: 'direccion' },
@@ -472,7 +480,9 @@ const RutasPage: React.FC = () => {
 
         const data = clients.map(c => ({
             id: c.id,
-            clienteNombre: c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : 'Sin Nombre',
+            codigo: c.codigo || '-',
+            nombreTienda: c.nombreTienda || '-',
+            clienteNombre: c.persona ? `${c.persona.nombres} ${c.persona.apellidos}`.trim() : 'Sin Nombre',
             ci: c.persona?.ci || '-',
             telefono: c.persona?.telefono || '-',
             direccion: c.persona?.direccion || '-',
@@ -934,9 +944,23 @@ const RutasPage: React.FC = () => {
                                             </div>
                                             <div className="flex-1 min-w-0 text-xs">
                                                 <div className="flex items-center justify-between gap-2">
-                                                    <span className={`font-semibold truncate ${isSelected ? 'text-primary' : 'text-foreground'}`}>
-                                                        {client.persona ? `${client.persona.nombres} ${client.persona.apellidos}` : 'Cliente Sin Nombre'}
-                                                    </span>
+                                                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                        {client.codigo && (
+                                                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0 border">
+                                                                {client.codigo}
+                                                            </span>
+                                                        )}
+                                                        <span className={`font-bold truncate flex items-center gap-1 ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                                                            {client.nombreTienda ? (
+                                                                <>
+                                                                    <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                                    <span className="truncate">{client.nombreTienda}</span>
+                                                                </>
+                                                            ) : (
+                                                                <span>{client.persona ? `${client.persona.nombres} ${client.persona.apellidos}` : 'Cliente Sin Nombre'}</span>
+                                                            )}
+                                                        </span>
+                                                    </div>
                                                     {isAssignedToOther && (
                                                         <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium shrink-0" title="Actualmente asignado a otra ruta. Al guardarlo se transferirá a esta ruta.">
                                                             <ArrowRightLeft className="w-2.5 h-2.5" />
@@ -944,7 +968,13 @@ const RutasPage: React.FC = () => {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground text-[11px] mt-0.5">
+                                                <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground text-[11px] mt-1">
+                                                    {client.nombreTienda && client.persona && (
+                                                        <span className="flex items-center gap-1 text-foreground/80 font-medium">
+                                                            <User className="w-3 h-3 text-muted-foreground shrink-0" />
+                                                            {client.persona.nombres} {client.persona.apellidos}
+                                                        </span>
+                                                    )}
                                                     {client.persona?.ci && <span>CI/NIT: {client.persona.ci}</span>}
                                                     {client.persona?.telefono && (
                                                         <span className="flex items-center gap-0.5">
@@ -1103,10 +1133,27 @@ const RutasPage: React.FC = () => {
                                             <tr key={client.id} className="hover:bg-accent/30 transition-colors">
                                                 <td className="p-2.5 text-muted-foreground font-mono">{index + 1}</td>
                                                 <td className="p-2.5 font-semibold text-foreground">
-                                                    {client.persona ? `${client.persona.nombres} ${client.persona.apellidos}` : 'Sin Nombre'}
-                                                    {client.codigo && (
-                                                        <span className="block text-[10px] text-muted-foreground font-normal">
-                                                            Cód: {client.codigo}
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        {client.codigo && (
+                                                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">
+                                                                {client.codigo}
+                                                            </span>
+                                                        )}
+                                                        <span className="font-bold">
+                                                            {client.nombreTienda ? (
+                                                                <span className="flex items-center gap-1 text-foreground">
+                                                                    <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                                    {client.nombreTienda}
+                                                                </span>
+                                                            ) : (
+                                                                client.persona ? `${client.persona.nombres} ${client.persona.apellidos}` : 'Sin Nombre'
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    {client.nombreTienda && client.persona && (
+                                                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground font-normal mt-0.5">
+                                                            <User className="w-2.5 h-2.5" />
+                                                            {client.persona.nombres} {client.persona.apellidos}
                                                         </span>
                                                     )}
                                                 </td>

@@ -89,6 +89,16 @@ export class InventarioService implements OnModuleInit {
                     await this.loteRepo.save(nuevoLote);
                 }
             }
+
+            // 5. Sincronización de costos: Asignar precioCompra del producto a lotes que no tengan costoUnitario asignado
+            await this.loteRepo.query(`
+                UPDATE lotes l 
+                SET "costoUnitario" = p."precioCompra" 
+                FROM productos p 
+                WHERE l."productoId" = p.id 
+                  AND (l."costoUnitario" IS NULL OR l."costoUnitario" = 0)
+                  AND p."precioCompra" > 0;
+            `);
         } catch (error) {
             console.error('Error reconciliando lotes con inventario:', error);
         }

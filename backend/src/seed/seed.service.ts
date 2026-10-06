@@ -76,6 +76,7 @@ const SYSTEM_PERMISSIONS = [
   { nombre: 'Ver Kardex de Producto', recurso: 'REPORTES', accion: 'PRODUCTOS', descripcion: 'Acceso a pestaña de kardex de producto y existencias' },
   { nombre: 'Ver Kardex de Clientes', recurso: 'REPORTES', accion: 'KARDEX_CLIENTE', descripcion: 'Acceso a pestaña de historial y kardex por cliente' },
   { nombre: 'Ver Reporte de Ventas', recurso: 'REPORTES', accion: 'VENTAS', descripcion: 'Acceso a pestaña de reporte analítico de ventas' },
+  { nombre: 'Ver Reporte de Ventas x Producto', recurso: 'REPORTES', accion: 'VENTAS_PRODUCTO', descripcion: 'Acceso a pestaña de ventas por producto con costeo PEPS y margen' },
   { nombre: 'Ver Reporte de Cobranzas', recurso: 'REPORTES', accion: 'COBRANZAS', descripcion: 'Acceso a pestaña de reporte analítico de cobranzas' },
   { nombre: 'Ver Reporte de Compras', recurso: 'REPORTES', accion: 'COMPRAS', descripcion: 'Acceso a pestaña de reporte analítico de compras' },
   { nombre: 'Ver Reporte de Pagos a Proveedores', recurso: 'REPORTES', accion: 'PAGOS_PROVEEDORES', descripcion: 'Acceso a pestaña de reporte analítico de pagos a proveedores' },

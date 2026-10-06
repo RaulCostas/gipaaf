@@ -17,18 +17,35 @@ export enum EstadoNota {
     CONVERTIDA = 'CONVERTIDA',
 }
 
+export interface Lote {
+    id: number;
+    numeroLote?: string;
+    cantidadInicial?: number;
+    cantidadActual?: number;
+    costoUnitario?: number;
+    fechaIngreso?: string;
+    fechaVencimiento?: string;
+}
+
+export interface MovimientoLote {
+    id: number;
+    cantidad: number;
+    lote?: Lote;
+}
+
 export interface DetalleNota {
     id?: number;
     producto: Producto;
     cantidad: number;
     precioUnitario: number;
-    descuento: number;
+    descuento?: number;
     descuentoPorcentaje?: number;
     descuentoPromocionPorcentaje?: number;
     descuentoPromocion?: number;
     subtotal: number;
     numeroLote?: string;
     fechaVencimiento?: string;
+    movimientosLote?: MovimientoLote[];
 }
 
 export interface Nota {

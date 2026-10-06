@@ -48,13 +48,13 @@ import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
-import { formatCurrency } from '../../utils/currencyUtils';
+import { formatCurrency, formatCurrencyAmount } from '../../utils/currencyUtils';
 import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import { format, subDays, startOfMonth, startOfYear } from 'date-fns';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
-export type ReportTabType = 'estadisticas' | 'productos' | 'kardex-cliente' | 'ventas' | 'cobranzas' | 'compras' | 'pagos-proveedores';
+export type ReportTabType = 'estadisticas' | 'productos' | 'kardex-cliente' | 'ventas' | 'ventas-producto' | 'cobranzas' | 'compras' | 'pagos-proveedores';
 
 interface ReportTabConfig {
     id: ReportTabType;
@@ -68,6 +68,7 @@ const REPORT_TABS: ReportTabConfig[] = [
     { id: 'productos', label: 'Kardex de Producto', action: 'PRODUCTOS', icon: Boxes },
     { id: 'kardex-cliente', label: 'Kardex de Cliente', action: 'KARDEX_CLIENTE', icon: Users },
     { id: 'ventas', label: 'Reporte de Ventas', action: 'VENTAS', icon: ShoppingCart },
+    { id: 'ventas-producto', label: 'Reporte de Ventas x Producto', action: 'VENTAS_PRODUCTO', icon: Package },
     { id: 'cobranzas', label: 'Reporte de Cobranzas', action: 'COBRANZAS', icon: Wallet },
     { id: 'compras', label: 'Reporte de Compras', action: 'COMPRAS', icon: ShoppingBag },
     { id: 'pagos-proveedores', label: 'Reporte de Pagos a Proveedores', action: 'PAGOS_PROVEEDORES', icon: HandCoins },
@@ -151,6 +152,18 @@ const ReportesPage: React.FC = () => {
     const [ventaCurrentPage, setVentaCurrentPage] = useState(1);
 
     // ==========================================
+    // ESTADOS: REPORTE DE VENTAS X PRODUCTO
+    // ==========================================
+    const [filtroVentaProdProducto, setFiltroVentaProdProducto] = useState<string>('');
+    const [filtroVentaProdMarca, setFiltroVentaProdMarca] = useState<string>('TODOS');
+    const [filtroVentaProdVendedor, setFiltroVentaProdVendedor] = useState<string>('TODOS');
+    const [filtroVentaProdTipoPago, setFiltroVentaProdTipoPago] = useState<string>('TODOS');
+    const [ventaProdFechaDesde, setVentaProdFechaDesde] = useState<string>('');
+    const [ventaProdFechaHasta, setVentaProdFechaHasta] = useState<string>('');
+    const [ventaProdSearchTerm, setVentaProdSearchTerm] = useState('');
+    const [ventaProdCurrentPage, setVentaProdCurrentPage] = useState(1);
+
+    // ==========================================
     // ESTADOS: COBRANZAS
     // ==========================================
     const [filtroCobranzaCliente, setFiltroCobranzaCliente] = useState<string>('');
@@ -197,7 +210,7 @@ const ReportesPage: React.FC = () => {
     const { data: productsList, isLoading: loadingProducts } = useQuery({
         queryKey: ['productsListReportes'],
         queryFn: () => productService.getAll(),
-        enabled: activeTab === 'productos' || activeTab === 'estadisticas',
+        enabled: activeTab === 'productos' || activeTab === 'estadisticas' || activeTab === 'ventas-producto',
     });
 
     const { data: inventoryList, isLoading: loadingInventory } = useQuery({
@@ -221,7 +234,7 @@ const ReportesPage: React.FC = () => {
     const { data: marcasList } = useQuery({
         queryKey: ['marcasListReportes'],
         queryFn: marcaService.getAll,
-        enabled: activeTab === 'productos',
+        enabled: activeTab === 'productos' || activeTab === 'ventas-producto',
     });
 
     const { data: gruposList } = useQuery({
@@ -233,7 +246,7 @@ const ReportesPage: React.FC = () => {
     const { data: ventasList, isLoading: loadingVentas } = useQuery({
         queryKey: ['ventasListReportes'],
         queryFn: salesService.getAll,
-        enabled: activeTab === 'ventas' || activeTab === 'estadisticas' || activeTab === 'kardex-cliente',
+        enabled: activeTab === 'ventas' || activeTab === 'ventas-producto' || activeTab === 'estadisticas' || activeTab === 'kardex-cliente',
     });
 
     const { data: pagosList, isLoading: loadingCobranzas } = useQuery({
@@ -263,7 +276,7 @@ const ReportesPage: React.FC = () => {
     const { data: personalList } = useQuery({
         queryKey: ['personalListReportes'],
         queryFn: personalService.getAll,
-        enabled: activeTab === 'ventas' || activeTab === 'cobranzas' || activeTab === 'estadisticas',
+        enabled: activeTab === 'ventas' || activeTab === 'ventas-producto' || activeTab === 'cobranzas' || activeTab === 'estadisticas',
     });
 
     const { data: pagosProveedoresList, isLoading: loadingPagosProveedores } = useQuery({
@@ -1421,6 +1434,336 @@ const ReportesPage: React.FC = () => {
     ]);
 
     // ==========================================
+    // LÓGICA REPORTE DE VENTAS X PRODUCTO
+    // ==========================================
+    const hasVentaProdActiveFilters = Boolean(
+        filtroVentaProdProducto || filtroVentaProdMarca !== 'TODOS' || 
+        filtroVentaProdVendedor !== 'TODOS' || filtroVentaProdTipoPago !== 'TODOS' || 
+        ventaProdFechaDesde || ventaProdFechaHasta || ventaProdSearchTerm
+    );
+
+    const handleClearVentaProdFilters = () => {
+        setFiltroVentaProdProducto('');
+        setFiltroVentaProdMarca('TODOS');
+        setFiltroVentaProdVendedor('TODOS');
+        setFiltroVentaProdTipoPago('TODOS');
+        setVentaProdFechaDesde('');
+        setVentaProdFechaHasta('');
+        setVentaProdSearchTerm('');
+    };
+
+    const productOptionsVentaProd: SearchableOption[] = useMemo(() => {
+        if (!productsList) return [{ value: '', label: 'Todos los Productos' }];
+        return [
+            { value: '', label: 'Todos los Productos' },
+            ...productsList.map(p => ({
+                value: String(p.id),
+                label: `${p.codigo ? `[${p.codigo}] ` : ''}${p.nombre}`,
+                code: p.codigo || undefined,
+                sublabel: `Marca: ${p.marca?.nombre || 'S/M'} | P.Venta: Bs. ${Number(p.precioVenta || 0).toFixed(2)} | P.Compra: Bs. ${Number(p.precioCompra || 0).toFixed(2)}`
+            }))
+        ];
+    }, [productsList]);
+
+    const productsMap = useMemo(() => {
+        const map = new Map<number, Producto>();
+        if (productsList) {
+            productsList.forEach(p => map.set(p.id, p));
+        }
+        return map;
+    }, [productsList]);
+
+    const ventasPorProductoItems = useMemo(() => {
+        if (!ventasList) return [];
+        let sales = ventasList;
+
+        if (selectedSucursal) {
+            sales = sales.filter(p => p.sucursal?.id === Number(selectedSucursal));
+        } else if (selectedCiudad) {
+            sales = sales.filter(p => (p.sucursal as any)?.ciudad?.id === Number(selectedCiudad));
+        }
+
+        if (ventaProdFechaDesde) {
+            sales = sales.filter(p => p.fecha && p.fecha.split('T')[0] >= ventaProdFechaDesde);
+        }
+        if (ventaProdFechaHasta) {
+            sales = sales.filter(p => p.fecha && p.fecha.split('T')[0] <= ventaProdFechaHasta);
+        }
+
+        if (filtroVentaProdVendedor !== 'TODOS') {
+            sales = sales.filter(p => p.vendedor?.id === Number(filtroVentaProdVendedor));
+        }
+
+        if (filtroVentaProdTipoPago !== 'TODOS') {
+            sales = sales.filter(p => {
+                const forma = p.tipoPago || ((Number(p.diasCredito) || 0) > 0 ? 'CREDITO' : 'CONTADO');
+                return forma === filtroVentaProdTipoPago;
+            });
+        }
+
+        const items: Array<{
+            id: string;
+            ventaId: number;
+            nroVenta: string;
+            fecha: string;
+            fechaFormatted: string;
+            ciudadSucursal: string;
+            clienteTienda: string;
+            clienteNombre: string;
+            vendedorNombre: string;
+            marcaNombre: string;
+            productoCodigo: string;
+            productoNombre: string;
+            formaPago: string;
+            cantidad: number;
+            precioVenta: number;
+            precioCompra: number;
+            gananciaUnitaria: number;
+            gananciaTotal: number;
+            subtotalVenta: number;
+            subtotalCosto: number;
+            estado: string;
+            rawVenta: any;
+        }> = [];
+
+        sales.forEach(v => {
+            if (v.estado === 'ANULADA') return;
+
+            const ciudadNombre = (v.sucursal?.ciudad as any)?.nombre || (v.sucursal as any)?.ciudadNombre || '';
+            const sucursalNombre = v.sucursal?.nombre || '';
+            const ciudadSucursal = ciudadNombre 
+                ? `${ciudadNombre} (${sucursalNombre})` 
+                : sucursalNombre || '-';
+
+            const clienteTienda = v.cliente?.nombreTienda?.trim() || getClientDisplayName(v.cliente) || 'Cliente Final';
+            const clienteNombre = getClientDisplayName(v.cliente);
+
+            const vendedorNombre = v.vendedor 
+                ? `${v.vendedor.nombres || ''} ${v.vendedor.apellidos || ''}`.trim() 
+                : (v.usuario?.nombres ? `${v.usuario.nombres} ${v.usuario.apellidos || ''}`.trim() : '---');
+
+            const formaPago = v.tipoPago || ((Number(v.diasCredito) || 0) > 0 ? 'CREDITO' : 'CONTADO');
+            const fecha = v.fecha ? v.fecha.split('T')[0] : '';
+            const fechaFormatted = fecha ? fecha.split('-').reverse().join('/') : '-';
+
+            (v.detalles || []).forEach((det: any, idx: number) => {
+                const prodId = det.producto?.id || det.productoId;
+                const fullProd = productsMap.get(prodId) || det.producto;
+
+                if (filtroVentaProdProducto && String(prodId) !== filtroVentaProdProducto) {
+                    return;
+                }
+
+                const marcaNombre = fullProd?.marca?.nombre || det.producto?.marca?.nombre || '-';
+                if (filtroVentaProdMarca !== 'TODOS' && String(fullProd?.marcaId || fullProd?.marca?.id) !== filtroVentaProdMarca) {
+                    return;
+                }
+
+                const productoNombre = fullProd?.nombre || det.producto?.nombre || 'Producto no especificado';
+                const productoCodigo = fullProd?.codigo || det.producto?.codigo || '-';
+                const cantidad = Number(det.cantidad || 0);
+                const precioVenta = Number(det.precioUnitario || 0);
+
+                // Costeo PEPS (FIFO) vinculado al costo de compra específico de cada lote ingresado
+                let precioCompra = 0;
+                let subtotalCosto = 0;
+
+                if (det.movimientosLote && Array.isArray(det.movimientosLote) && det.movimientosLote.length > 0) {
+                    let cantTotalLotes = 0;
+                    let costoAcumulado = 0;
+                    for (const mov of det.movimientosLote) {
+                        const cantMov = Number(mov.cantidad || 0);
+                        const costoLote = Number(mov.lote?.costoUnitario || 0);
+                        if (costoLote > 0) {
+                            costoAcumulado += cantMov * costoLote;
+                            cantTotalLotes += cantMov;
+                        } else {
+                            const costoFallback = Number(fullProd?.precioCompra ?? det.producto?.precioCompra ?? 0);
+                            costoAcumulado += cantMov * costoFallback;
+                            cantTotalLotes += cantMov;
+                        }
+                    }
+                    if (cantTotalLotes > 0) {
+                        subtotalCosto = costoAcumulado;
+                        precioCompra = costoAcumulado / cantTotalLotes;
+                    }
+                }
+
+                if (precioCompra <= 0) {
+                    precioCompra = Number(fullProd?.precioCompra ?? det.producto?.precioCompra ?? 0);
+                    subtotalCosto = precioCompra * cantidad;
+                }
+
+                const gananciaUnitaria = precioVenta - precioCompra;
+                const gananciaTotal = (precioVenta * cantidad) - subtotalCosto;
+                const subtotalVenta = Number(det.subtotal) || (precioVenta * cantidad);
+
+                if (ventaProdSearchTerm.trim()) {
+                    const term = ventaProdSearchTerm.toLowerCase();
+                    const matches = 
+                        productoNombre.toLowerCase().includes(term) ||
+                        productoCodigo.toLowerCase().includes(term) ||
+                        marcaNombre.toLowerCase().includes(term) ||
+                        clienteTienda.toLowerCase().includes(term) ||
+                        clienteNombre.toLowerCase().includes(term) ||
+                        (v.numero || '').toLowerCase().includes(term) ||
+                        vendedorNombre.toLowerCase().includes(term) ||
+                        ciudadSucursal.toLowerCase().includes(term);
+                    if (!matches) return;
+                }
+
+                items.push({
+                    id: `${v.id}-${idx}`,
+                    ventaId: v.id,
+                    nroVenta: v.numero || 'S/N',
+                    fecha,
+                    fechaFormatted,
+                    ciudadSucursal,
+                    clienteTienda,
+                    clienteNombre,
+                    vendedorNombre,
+                    marcaNombre,
+                    productoCodigo,
+                    productoNombre,
+                    formaPago,
+                    cantidad,
+                    precioVenta,
+                    precioCompra,
+                    gananciaUnitaria,
+                    gananciaTotal,
+                    subtotalVenta,
+                    subtotalCosto,
+                    estado: v.estado || 'CONFIRMADA',
+                    rawVenta: v
+                });
+            });
+        });
+
+        return items;
+    }, [
+        ventasList, productsMap, selectedSucursal, selectedCiudad,
+        ventaProdFechaDesde, ventaProdFechaHasta, filtroVentaProdProducto,
+        filtroVentaProdMarca, filtroVentaProdVendedor, filtroVentaProdTipoPago,
+        ventaProdSearchTerm
+    ]);
+
+    const totalesVentasPorProducto = useMemo(() => {
+        const totalCantidad = ventasPorProductoItems.reduce((sum, item) => sum + item.cantidad, 0);
+        const totalPrecioVentaUnitario = ventasPorProductoItems.reduce((sum, item) => sum + item.precioVenta, 0);
+        const totalPrecioCompraUnitario = ventasPorProductoItems.reduce((sum, item) => sum + item.precioCompra, 0);
+        const totalGananciaUnitaria = ventasPorProductoItems.reduce((sum, item) => sum + item.gananciaUnitaria, 0);
+        const totalVenta = ventasPorProductoItems.reduce((sum, item) => sum + item.subtotalVenta, 0);
+        const totalCosto = ventasPorProductoItems.reduce((sum, item) => sum + item.subtotalCosto, 0);
+        const totalGanancia = ventasPorProductoItems.reduce((sum, item) => sum + item.gananciaTotal, 0);
+        const margenPromedio = totalVenta > 0 ? (totalGanancia / totalVenta) * 100 : 0;
+
+        return {
+            totalRegistros: ventasPorProductoItems.length,
+            totalCantidad,
+            totalPrecioVentaUnitario,
+            totalPrecioCompraUnitario,
+            totalGananciaUnitaria,
+            totalVenta,
+            totalCosto,
+            totalGanancia,
+            margenPromedio
+        };
+    }, [ventasPorProductoItems]);
+
+    const totalPagesVentasProducto = Math.ceil(ventasPorProductoItems.length / itemsPerPage) || 1;
+    const paginatedVentasPorProducto = useMemo(() => {
+        const start = (ventaProdCurrentPage - 1) * itemsPerPage;
+        return ventasPorProductoItems.slice(start, start + itemsPerPage);
+    }, [ventasPorProductoItems, ventaProdCurrentPage, itemsPerPage]);
+
+    React.useEffect(() => setVentaProdCurrentPage(1), [
+        ventaProdSearchTerm, filtroVentaProdProducto, filtroVentaProdMarca,
+        filtroVentaProdVendedor, filtroVentaProdTipoPago, ventaProdFechaDesde, ventaProdFechaHasta
+    ]);
+
+    const exportColumnsVentasProducto = [
+        { header: 'Fecha', dataKey: 'fechaFormatted' },
+        { header: 'Ciudad (Sucursal)', dataKey: 'ciudadSucursal' },
+        { header: 'Nro Venta', dataKey: 'nroVenta' },
+        { header: 'Cliente', dataKey: 'clienteTienda' },
+        { header: 'Vendedor', dataKey: 'vendedorNombre' },
+        { header: 'Marca', dataKey: 'marcaNombre' },
+        { header: 'Producto', dataKey: 'productoDisplay' },
+        { header: 'Forma', dataKey: 'formaPago' },
+        { header: 'Cant.', dataKey: 'cantidad' },
+        { header: 'Precio Venta', dataKey: 'precioVentaFormatted' },
+        { header: 'Precio Compra', dataKey: 'precioCompraFormatted' },
+        { header: 'Ganancia Unit.', dataKey: 'gananciaFormatted' },
+        { header: 'Ganancia Total', dataKey: 'gananciaTotalFormatted' }
+    ];
+
+    const mappedExportDataVentasProducto = useMemo(() => {
+        return ventasPorProductoItems.map(item => ({
+            fechaFormatted: item.fechaFormatted,
+            ciudadSucursal: item.ciudadSucursal,
+            nroVenta: item.nroVenta,
+            clienteTienda: item.clienteTienda,
+            vendedorNombre: item.vendedorNombre,
+            marcaNombre: item.marcaNombre,
+            productoDisplay: item.productoNombre,
+            formaPago: item.formaPago,
+            cantidad: item.cantidad,
+            precioVentaFormatted: formatCurrencyAmount(item.precioVenta),
+            precioCompraFormatted: formatCurrencyAmount(item.precioCompra),
+            gananciaFormatted: formatCurrencyAmount(item.gananciaUnitaria),
+            gananciaTotalFormatted: formatCurrencyAmount(item.gananciaTotal)
+        }));
+    }, [ventasPorProductoItems]);
+
+    const exportFooterVentasProducto = useMemo(() => {
+        return {
+            fechaFormatted: 'TOTALES',
+            ciudadSucursal: '',
+            nroVenta: '',
+            clienteTienda: '',
+            vendedorNombre: '',
+            marcaNombre: '',
+            productoDisplay: `${totalesVentasPorProducto.totalRegistros} ítems`,
+            formaPago: '',
+            cantidad: String(totalesVentasPorProducto.totalCantidad),
+            precioVentaFormatted: formatCurrencyAmount(totalesVentasPorProducto.totalPrecioVentaUnitario),
+            precioCompraFormatted: formatCurrencyAmount(totalesVentasPorProducto.totalPrecioCompraUnitario),
+            gananciaFormatted: formatCurrencyAmount(totalesVentasPorProducto.totalGananciaUnitaria),
+            gananciaTotalFormatted: formatCurrencyAmount(totalesVentasPorProducto.totalGanancia)
+        };
+    }, [totalesVentasPorProducto]);
+
+    const getFiltersTextVentasProducto = () => {
+        const texts: string[] = [];
+        if (selectedCiudad) {
+            const c = ciudades?.find((ci: any) => ci.id === Number(selectedCiudad));
+            texts.push(`Ciudad: ${c?.nombre || selectedCiudad}`);
+        }
+        if (selectedSucursal) {
+            const s = sucursales?.find((su: any) => su.id === Number(selectedSucursal));
+            texts.push(`Sucursal: ${s?.nombre || selectedSucursal}`);
+        }
+        if (filtroVentaProdProducto) {
+            const p = productsMap.get(Number(filtroVentaProdProducto));
+            if (p) texts.push(`Producto: [${p.codigo || ''}] ${p.nombre}`);
+        }
+        if (filtroVentaProdMarca !== 'TODOS') {
+            const m = marcasList?.find(m => String(m.id) === filtroVentaProdMarca);
+            if (m) texts.push(`Marca: ${m.nombre}`);
+        }
+        if (filtroVentaProdVendedor !== 'TODOS') {
+            const v = vendedoresList.find(ve => String(ve.id) === filtroVentaProdVendedor);
+            if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+        }
+        if (filtroVentaProdTipoPago !== 'TODOS') texts.push(`Forma Pago: ${filtroVentaProdTipoPago}`);
+        if (ventaProdFechaDesde && ventaProdFechaHasta) texts.push(`Rango: ${ventaProdFechaDesde.split('-').reverse().join('/')} al ${ventaProdFechaHasta.split('-').reverse().join('/')}`);
+        else if (ventaProdFechaDesde) texts.push(`Desde: ${ventaProdFechaDesde.split('-').reverse().join('/')}`);
+        else if (ventaProdFechaHasta) texts.push(`Hasta: ${ventaProdFechaHasta.split('-').reverse().join('/')}`);
+        if (ventaProdSearchTerm) texts.push(`Búsqueda: "${ventaProdSearchTerm}"`);
+        return texts.join(' | ') || 'Todos los registros';
+    };
+
+    // ==========================================
     // LÓGICA COBRANZAS
     // ==========================================
     const metodosPagoUnicos = useMemo(() => {
@@ -2106,6 +2449,9 @@ const ReportesPage: React.FC = () => {
         } else if (activeTab === 'ventas') {
             if (!mappedExportDataVentas.length) return;
             printData('Reporte de Ventas Realizadas', getExportColumnsVentas(), mappedExportDataVentas, getFiltersTextVentas());
+        } else if (activeTab === 'ventas-producto') {
+            if (!mappedExportDataVentasProducto.length) return;
+            printData('Reporte de Ventas por Producto', exportColumnsVentasProducto, mappedExportDataVentasProducto, getFiltersTextVentasProducto(), exportFooterVentasProducto, 'landscape');
         } else if (activeTab === 'cobranzas') {
             if (!mappedExportDataCobranzas.length) return;
             printData('Reporte de Cobranzas / Pagos de Clientes', getExportColumnsCobranzas(), mappedExportDataCobranzas, getFiltersTextCobranzas(), undefined, 'landscape');
@@ -2129,6 +2475,9 @@ const ReportesPage: React.FC = () => {
         } else if (activeTab === 'ventas') {
             if (!mappedExportDataVentas.length) return;
             exportToPDF('Reporte de Ventas Realizadas', getExportColumnsVentas(), mappedExportDataVentas, 'ventas_reporte', getFiltersTextVentas());
+        } else if (activeTab === 'ventas-producto') {
+            if (!mappedExportDataVentasProducto.length) return;
+            exportToPDF('Reporte de Ventas por Producto', exportColumnsVentasProducto, mappedExportDataVentasProducto, 'ventas_por_producto_reporte', getFiltersTextVentasProducto(), exportFooterVentasProducto, 'landscape');
         } else if (activeTab === 'cobranzas') {
             if (!mappedExportDataCobranzas.length) return;
             exportToPDF('Reporte de Cobranzas / Pagos de Clientes', getExportColumnsCobranzas(), mappedExportDataCobranzas, 'cobranzas_reporte', getFiltersTextCobranzas(), undefined, 'landscape');
@@ -2152,6 +2501,9 @@ const ReportesPage: React.FC = () => {
         } else if (activeTab === 'ventas') {
             if (!mappedExportDataVentas.length) return;
             exportToExcel(getExportColumnsVentas(), mappedExportDataVentas, 'ventas_reporte');
+        } else if (activeTab === 'ventas-producto') {
+            if (!mappedExportDataVentasProducto.length) return;
+            exportToExcel(exportColumnsVentasProducto, mappedExportDataVentasProducto, 'ventas_por_producto_reporte', exportFooterVentasProducto);
         } else if (activeTab === 'cobranzas') {
             if (!mappedExportDataCobranzas.length) return;
             exportToExcel(getExportColumnsCobranzas(), mappedExportDataCobranzas, 'cobranzas_reporte');
@@ -3587,6 +3939,380 @@ const ReportesPage: React.FC = () => {
                                     <button 
                                         onClick={() => setVentaCurrentPage(p => Math.min(totalPagesVentas, p + 1))}
                                         disabled={ventaCurrentPage === totalPagesVentas}
+                                        className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                                    >
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
+
+            {/* ========================================== */}
+            {/* TAB: VENTAS X PRODUCTO */}
+            {/* ========================================== */}
+            {activeTab === 'ventas-producto' && (
+                <>
+                    {/* Tarjetas Resumen KPIs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="p-4 bg-card border rounded-xl shadow-sm space-y-2 relative overflow-hidden">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Unidades Vendidas</span>
+                                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                                    <Package className="w-4 h-4" />
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-2xl font-black text-foreground">
+                                    {totalesVentasPorProducto.totalCantidad.toLocaleString('es-BO')} u.
+                                </div>
+                                <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                                    <span className="font-semibold text-foreground">{totalesVentasPorProducto.totalRegistros}</span> líneas de detalle
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-card border rounded-xl shadow-sm space-y-2 relative overflow-hidden">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Ingresos (Venta)</span>
+                                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">
+                                    <ShoppingCart className="w-4 h-4" />
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-2xl font-black text-foreground">
+                                    {formatCurrency(totalesVentasPorProducto.totalVenta)}
+                                </div>
+                                <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                                    Total facturado / notas
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-card border rounded-xl shadow-sm space-y-2 relative overflow-hidden">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Costo Compra Total</span>
+                                <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400">
+                                    <ShoppingBag className="w-4 h-4" />
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-2xl font-black text-foreground">
+                                    {formatCurrency(totalesVentasPorProducto.totalCosto)}
+                                </div>
+                                <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                                    Costo base de inventario
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-card border rounded-xl shadow-sm space-y-2 relative overflow-hidden">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Ganancia Neta Total</span>
+                                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400">
+                                    <TrendingUp className="w-4 h-4" />
+                                </div>
+                            </div>
+                            <div>
+                                <div className={`text-2xl font-black ${totalesVentasPorProducto.totalGanancia >= 0 ? 'text-purple-600 dark:text-purple-400' : 'text-red-600 dark:text-red-400'}`}>
+                                    {formatCurrency(totalesVentasPorProducto.totalGanancia)}
+                                </div>
+                                <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                                    Margen prom: <span className="font-bold text-foreground">{totalesVentasPorProducto.margenPromedio.toFixed(1)}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Filtros de Ventas x Producto */}
+                    <div className="bg-card p-4 border rounded-xl shadow-sm space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                            {/* Filtro Producto */}
+                            <div className="space-y-1 lg:col-span-2">
+                                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                    <Package className="w-3.5 h-3.5 text-primary" /> Producto
+                                </label>
+                                <SearchableSelect 
+                                    value={filtroVentaProdProducto} 
+                                    onChange={(val) => { setFiltroVentaProdProducto(String(val || '')); setVentaProdCurrentPage(1); }} 
+                                    options={productOptionsVentaProd}
+                                    placeholder="Todos los Productos"
+                                    searchPlaceholder="Buscar por código o nombre..."
+                                />
+                            </div>
+
+                            {/* Filtro Marca */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                    <Tag className="w-3.5 h-3.5 text-primary" /> Marca
+                                </label>
+                                <select 
+                                    value={filtroVentaProdMarca} 
+                                    onChange={(e) => setFiltroVentaProdMarca(e.target.value)} 
+                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                                >
+                                    <option value="TODOS">Todas las Marcas</option>
+                                    {marcasList?.map(m => (
+                                        <option key={m.id} value={m.id}>{m.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Filtro Vendedor */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                    <User className="w-3.5 h-3.5 text-primary" /> Vendedor
+                                </label>
+                                <select 
+                                    value={filtroVentaProdVendedor} 
+                                    onChange={(e) => setFiltroVentaProdVendedor(e.target.value)} 
+                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                                >
+                                    <option value="TODOS">Todos los Vendedores</option>
+                                    {vendedoresList.map(v => (
+                                        <option key={v.id} value={v.id}>{v.nombres} {v.apellidos}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Filtro Fecha Desde */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5 text-primary" /> Fecha Desde
+                                </label>
+                                <input 
+                                    type="date" 
+                                    value={ventaProdFechaDesde} 
+                                    onChange={(e) => setVentaProdFechaDesde(e.target.value)} 
+                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20" 
+                                />
+                            </div>
+
+                            {/* Filtro Fecha Hasta + Botón Limpiar */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5 text-primary" /> Fecha Hasta
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="date" 
+                                        value={ventaProdFechaHasta} 
+                                        onChange={(e) => setVentaProdFechaHasta(e.target.value)} 
+                                        className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20" 
+                                    />
+                                    {hasVentaProdActiveFilters && (
+                                        <button
+                                            type="button"
+                                            onClick={handleClearVentaProdFilters}
+                                            className="px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent border rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 h-[38px]"
+                                            title="Limpiar filtros"
+                                        >
+                                            <X className="w-3.5 h-3.5" /> Limpiar
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Fila de Búsqueda y Filtro de Forma de Pago */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t">
+                            <div className="relative w-full max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar producto, cliente, nro venta, marca..." 
+                                    value={ventaProdSearchTerm} 
+                                    onChange={(e) => setVentaProdSearchTerm(e.target.value)} 
+                                    className="w-full pl-9 pr-8 p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20" 
+                                />
+                                {ventaProdSearchTerm && (
+                                    <button onClick={() => setVentaProdSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 hover:bg-accent rounded text-muted-foreground">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Forma de Pago:</label>
+                                <select 
+                                    value={filtroVentaProdTipoPago} 
+                                    onChange={(e) => setFiltroVentaProdTipoPago(e.target.value)} 
+                                    className="p-2 border rounded-lg bg-background text-xs font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                                >
+                                    <option value="TODOS">Todas las Formas</option>
+                                    <option value="CONTADO">Al Contado</option>
+                                    <option value="CREDITO">A Crédito</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Tabla Ventas por Producto */}
+                    <div className="bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[1250px]">
+                                <thead>
+                                    <tr className="bg-muted/50 border-b">
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-10 text-center">#</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fecha</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ciudad (Sucursal)</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nro Venta</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cliente</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendedor</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Marca</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Forma</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Cant.</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Precio Venta</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Precio Compra</th>
+                                        <th className="p-3.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Ganancia</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {loadingVentas || loadingProducts ? (
+                                        <tr>
+                                            <td colSpan={13} className="p-8 text-center text-muted-foreground animate-pulse text-sm">
+                                                Cargando reporte de ventas por producto...
+                                            </td>
+                                        </tr>
+                                    ) : paginatedVentasPorProducto.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={13} className="p-8 text-center text-muted-foreground text-sm">
+                                                No se encontraron ventas registradas para los filtros seleccionados.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        paginatedVentasPorProducto.map((item, index) => {
+                                            const isPositiva = item.gananciaUnitaria >= 0;
+                                            return (
+                                                <tr key={item.id} className="hover:bg-accent/30 transition-colors group">
+                                                    <td className="p-3.5 text-xs font-mono text-muted-foreground text-center">
+                                                        {(ventaProdCurrentPage - 1) * itemsPerPage + index + 1}
+                                                    </td>
+                                                    <td className="p-3.5 text-xs font-medium whitespace-nowrap">
+                                                        {item.fechaFormatted}
+                                                    </td>
+                                                    <td className="p-3.5 text-xs text-muted-foreground">
+                                                        <div className="font-medium text-foreground">{item.ciudadSucursal}</div>
+                                                    </td>
+                                                    <td className="p-3.5 text-xs">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setViewingDetalleVenta(item.rawVenta)}
+                                                            className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-all inline-flex items-center gap-1 cursor-pointer"
+                                                            title="Ver venta completa"
+                                                        >
+                                                            <Eye className="w-3 h-3" />
+                                                            {item.nroVenta}
+                                                        </button>
+                                                    </td>
+                                                    <td className="p-3.5 text-xs">
+                                                        <div className="flex items-center gap-1 font-bold text-foreground max-w-[180px] truncate" title={item.clienteTienda}>
+                                                            <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                            <span className="truncate">{item.clienteTienda}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-3.5 text-xs text-muted-foreground max-w-[140px] truncate" title={item.vendedorNombre}>
+                                                        {item.vendedorNombre}
+                                                    </td>
+                                                    <td className="p-3.5 text-xs font-semibold text-foreground">
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground font-bold">
+                                                            {item.marcaNombre}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-3.5 text-xs max-w-[240px]">
+                                                        <div className="font-medium text-foreground truncate" title={item.productoNombre}>
+                                                            {item.productoNombre}
+                                                        </div>
+                                                        {item.productoCodigo !== '-' && (
+                                                            <div className="text-[10px] text-muted-foreground font-mono">
+                                                                {item.productoCodigo}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-3.5 text-xs text-center">
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                            item.formaPago === 'CREDITO' 
+                                                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' 
+                                                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                                                        }`}>
+                                                            {item.formaPago}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-3.5 text-xs font-mono font-bold text-center text-foreground">
+                                                        {item.cantidad}
+                                                    </td>
+                                                    <td className="p-3.5 text-xs font-mono font-semibold text-right text-foreground">
+                                                        {formatCurrency(item.precioVenta)}
+                                                    </td>
+                                                    <td className="p-3.5 text-xs font-mono text-right text-muted-foreground">
+                                                        {formatCurrency(item.precioCompra)}
+                                                    </td>
+                                                    <td className="p-3.5 text-xs font-mono text-right">
+                                                        <div className={`font-bold ${isPositiva ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                                            {formatCurrency(item.gananciaUnitaria)}
+                                                        </div>
+                                                        <div className="text-[10px] text-muted-foreground" title="Ganancia Total = Ganancia Unit. x Cantidad">
+                                                            Tot: {formatCurrency(item.gananciaTotal)}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                                {/* Fila de Totales */}
+                                {ventasPorProductoItems.length > 0 && (
+                                    <tfoot>
+                                        <tr className="bg-muted/50 font-bold border-t text-xs">
+                                            <td colSpan={9} className="p-3.5 text-left uppercase tracking-wider text-foreground font-black">
+                                                TOTALES ({ventasPorProductoItems.length} registros)
+                                            </td>
+                                            <td className="p-3.5 text-center font-mono font-black text-foreground">
+                                                {totalesVentasPorProducto.totalCantidad.toLocaleString('es-BO')}
+                                            </td>
+                                            <td className="p-3.5 text-right font-mono font-black text-foreground">
+                                                {formatCurrency(totalesVentasPorProducto.totalPrecioVentaUnitario)}
+                                            </td>
+                                            <td className="p-3.5 text-right font-mono font-black text-muted-foreground">
+                                                {formatCurrency(totalesVentasPorProducto.totalPrecioCompraUnitario)}
+                                            </td>
+                                            <td className="p-3.5 text-right font-mono font-black text-purple-600 dark:text-purple-400">
+                                                <div className="font-bold">
+                                                    {formatCurrency(totalesVentasPorProducto.totalGananciaUnitaria)}
+                                                </div>
+                                                <div className="text-[10px] text-muted-foreground font-normal" title="Ganancia Total = Ganancia Unit. x Cantidad">
+                                                    Tot: {formatCurrency(totalesVentasPorProducto.totalGanancia)}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                )}
+                            </table>
+                        </div>
+
+                        {/* Paginación */}
+                        {totalPagesVentasProducto > 1 && (
+                            <div className="flex items-center justify-between p-4 border-t bg-muted/20">
+                                <span className="text-sm text-muted-foreground">
+                                    Mostrando {((ventaProdCurrentPage - 1) * itemsPerPage) + 1} a {Math.min(ventaProdCurrentPage * itemsPerPage, ventasPorProductoItems.length)} de {ventasPorProductoItems.length}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => setVentaProdCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={ventaProdCurrentPage === 1}
+                                        className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                                    >
+                                        <ChevronLeft className="w-4 h-4" />
+                                    </button>
+                                    <span className="text-sm font-medium px-2">
+                                        Página {ventaProdCurrentPage} de {totalPagesVentasProducto}
+                                    </span>
+                                    <button 
+                                        onClick={() => setVentaProdCurrentPage(p => Math.min(totalPagesVentasProducto, p + 1))}
+                                        disabled={ventaProdCurrentPage === totalPagesVentasProducto}
                                         className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors cursor-pointer"
                                     >
                                         <ChevronRight className="w-4 h-4" />

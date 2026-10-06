@@ -207,6 +207,60 @@ export const exportToPDF = async (
   doc.save(`${filename}.pdf`);
 };
 
+const parsePossibleExcelNumber = (val: any, colKey?: string, header?: string): any => {
+  if (val === null || val === undefined || val === '') return '';
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (typeof val === 'boolean') return val ? 'Activo' : 'Inactivo';
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return '';
+
+    // Ignore dates (e.g. 2026-10-06, 06/10/2026, 06-10-2026)
+    if (/^\d{2,4}[-/]\d{2}[-/]\d{2,4}$/.test(trimmed)) return trimmed;
+
+    // Clean currency prefixes (Bs., $us, BOB, USD, $)
+    const cleanStr = trimmed.replace(/^(Bs\.?|\$us|BOB|USD|\$)\s*/i, '').trim();
+
+    // Check European decimal format: "1.234,56" or "150,00" or "-1.234,56"
+    if (/^-?\d{1,3}(\.\d{3})*,\d+$/.test(cleanStr) || /^-?\d+,\d+$/.test(cleanStr)) {
+      const num = parseFloat(cleanStr.replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(num)) return num;
+    }
+
+    // Check standard decimal format: "1,234.56" or "150.00" or "-1,234.56"
+    if (/^-?\d{1,3}(,\d{3})*\.\d+$/.test(cleanStr) || /^-?\d+\.\d+$/.test(cleanStr)) {
+      const num = parseFloat(cleanStr.replace(/,/g, ''));
+      if (!isNaN(num)) return num;
+    }
+
+    // Check pure integers for known numeric columns
+    const colName = `${colKey || ''} ${header || ''}`.toLowerCase();
+    const isKnownNumericCol = 
+      colName.includes('cant') || 
+      colName.includes('precio') || 
+      colName.includes('costo') || 
+      colName.includes('ganancia') || 
+      colName.includes('total') || 
+      colName.includes('subtotal') || 
+      colName.includes('descuento') || 
+      colName.includes('saldo') || 
+      colName.includes('monto') || 
+      colName.includes('stock') || 
+      colName.includes('deuda') || 
+      colName.includes('credito') ||
+      colName.includes('abono') ||
+      colName.includes('existencia') ||
+      colName.includes('ingreso') ||
+      colName.includes('salida');
+
+    if (isKnownNumericCol && /^-?\d+$/.test(cleanStr)) {
+      const num = parseInt(cleanStr, 10);
+      if (!isNaN(num)) return num;
+    }
+  }
+  return val;
+};
+
 export const exportToExcel = (
   columns: ExportColumn[], 
   data: any[], 
@@ -217,8 +271,7 @@ export const exportToExcel = (
     const newRow: any = {};
     columns.forEach(col => {
       let val = row[col.dataKey];
-      if (typeof val === 'boolean') val = val ? 'Activo' : 'Inactivo';
-      newRow[col.header] = val || '';
+      newRow[col.header] = parsePossibleExcelNumber(val, col.dataKey, col.header);
     });
     return newRow;
   });
@@ -228,13 +281,28 @@ export const exportToExcel = (
     footArray.forEach(f => {
       const footerRow: any = {};
       columns.forEach(col => {
-        footerRow[col.header] = f[col.dataKey] ?? '';
+        const fVal = f[col.dataKey] ?? '';
+        footerRow[col.header] = parsePossibleExcelNumber(fVal, col.dataKey, col.header);
       });
       mappedData.push(footerRow);
     });
   }
 
   const worksheet = XLSX.utils.json_to_sheet(mappedData);
+
+  // Apply native Excel number format to numeric cells so formulas like SUM work automatically
+  Object.keys(worksheet).forEach(cellRef => {
+    if (cellRef.startsWith('!')) return;
+    const cell = worksheet[cellRef];
+    if (cell && cell.t === 'n') {
+      if (Number.isInteger(cell.v)) {
+        cell.z = '#,##0';
+      } else {
+        cell.z = '#,##0.00';
+      }
+    }
+  });
+
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Datos');
   

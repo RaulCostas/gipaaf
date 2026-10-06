@@ -3460,7 +3460,18 @@ UPDATE productos SET "precioCompra" = 0.79, "actualizadoEn" = NOW() WHERE codigo
 -- [ZY-PMC-20] Vaso para Pintura Caja ZY 2l
 UPDATE productos SET "precioCompra" = 2.48, "actualizadoEn" = NOW() WHERE codigo = 'ZY-PMC-20';
 
--- VERIFICACIÓN FINAL
+-- =================================================================
+-- ACTUALIZACIÓN DE LOTES HISTÓRICOS / INVENTARIO INICIAL (PEPS / FIFO)
+-- =================================================================
+UPDATE lotes l 
+SET "costoUnitario" = p."precioCompra",
+    "actualizadoEn" = NOW()
+FROM productos p 
+WHERE l."productoId" = p.id 
+  AND (l."costoUnitario" IS NULL OR l."costoUnitario" = 0)
+  AND p."precioCompra" > 0;
+
+-- VERIFICACIÓN FINAL: PRODUCTOS
 SELECT 
     COUNT(*) as total_productos,
     COUNT(CASE WHEN "precioCompra" > 0 THEN 1 END) as con_precio_compra,
@@ -3470,4 +3481,12 @@ SELECT
     ROUND(AVG("precioCompra"), 2) as costo_promedio
 FROM productos;
 
+-- VERIFICACIÓN FINAL: LOTES (COSTO UNITARIO PEPS)
+SELECT 
+    COUNT(*) as total_lotes,
+    COUNT(CASE WHEN "costoUnitario" > 0 THEN 1 END) as lotes_con_costo,
+    COUNT(CASE WHEN "costoUnitario" = 0 OR "costoUnitario" IS NULL THEN 1 END) as lotes_sin_costo
+FROM lotes;
+
 COMMIT;
+

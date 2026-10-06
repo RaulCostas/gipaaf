@@ -53,6 +53,32 @@ const SECTIONS_CONFIG = [
     }
 ];
 
+const REPORTES_ACTION_ORDER = [
+    'ESTADISTICAS',
+    'PRODUCTOS',
+    'KARDEX_CLIENTE',
+    'VENTAS',
+    'VENTAS_PRODUCTO',
+    'COBRANZAS',
+    'COMPRAS',
+    'PAGOS_PROVEEDORES'
+];
+
+const sortPermissions = (a: Permiso, b: Permiso, secRecursos: string[]) => {
+    const indexA = secRecursos.indexOf(a.recurso.toUpperCase());
+    const indexB = secRecursos.indexOf(b.recurso.toUpperCase());
+    if (indexA !== indexB) return indexA - indexB;
+
+    if (a.recurso.toUpperCase() === 'REPORTES' && b.recurso.toUpperCase() === 'REPORTES') {
+        const orderA = REPORTES_ACTION_ORDER.indexOf(a.accion?.toUpperCase());
+        const orderB = REPORTES_ACTION_ORDER.indexOf(b.accion?.toUpperCase());
+        if (orderA !== -1 && orderB !== -1) return orderA - orderB;
+        if (orderA !== -1) return -1;
+        if (orderB !== -1) return 1;
+    }
+    return a.id - b.id;
+};
+
 const RolesPage: React.FC = () => {
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -208,12 +234,7 @@ const RolesPage: React.FC = () => {
 
         const sections = SECTIONS_CONFIG.map(sec => {
             const perms = matchingPerms.filter(p => sec.recursos.includes(p.recurso.toUpperCase()));
-            perms.sort((a, b) => {
-                const indexA = sec.recursos.indexOf(a.recurso.toUpperCase());
-                const indexB = sec.recursos.indexOf(b.recurso.toUpperCase());
-                if (indexA !== indexB) return indexA - indexB;
-                return a.id - b.id;
-            });
+            perms.sort((a, b) => sortPermissions(a, b, sec.recursos));
             return {
                 ...sec,
                 perms
@@ -249,12 +270,7 @@ const RolesPage: React.FC = () => {
 
         const sections = SECTIONS_CONFIG.map(sec => {
             const perms = matchingPerms.filter(p => sec.recursos.includes(p.recurso.toUpperCase()));
-            perms.sort((a, b) => {
-                const indexA = sec.recursos.indexOf(a.recurso.toUpperCase());
-                const indexB = sec.recursos.indexOf(b.recurso.toUpperCase());
-                if (indexA !== indexB) return indexA - indexB;
-                return a.id - b.id;
-            });
+            perms.sort((a, b) => sortPermissions(a, b, sec.recursos));
             return {
                 ...sec,
                 perms

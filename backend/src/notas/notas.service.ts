@@ -30,8 +30,43 @@ export class NotasService {
         private dataSource: DataSource,
     ) { }
 
-    async generarSiguienteNumero(manager: EntityManager, tipo: TipoNota): Promise<string> {
-        const prefix = (tipo || 'NOT').substring(0, 3).toUpperCase();
+    private getSucursalCode(sucursal?: Sucursal | null): string {
+        if (!sucursal) return '';
+        const ciudad = (sucursal.ciudad?.nombre || '').toUpperCase().trim();
+        const nombre = (sucursal.nombre || '').toUpperCase().trim();
+
+        if (ciudad.includes('COCHABAMBA') || nombre.includes('COCHABAMBA') || nombre.includes('CBBA')) return 'CBBA';
+        if (ciudad.includes('LA PAZ') || nombre.includes('LA PAZ') || nombre.includes('LPZ') || nombre.includes('LP')) return 'LP';
+        if (ciudad.includes('SANTA CRUZ') || nombre.includes('SANTA CRUZ') || nombre.includes('SCZ') || nombre.includes('SC')) return 'SCZ';
+        if (ciudad.includes('ORURO') || nombre.includes('ORURO')) return 'ORU';
+        if (ciudad.includes('POTOSI') || ciudad.includes('POTOSÍ') || nombre.includes('POTOSI')) return 'PTS';
+        if (ciudad.includes('TARIJA') || nombre.includes('TARIJA')) return 'TJA';
+        if (ciudad.includes('CHUQUISACA') || ciudad.includes('SUCRE') || nombre.includes('SUCRE')) return 'CHQ';
+        if (ciudad.includes('BENI') || nombre.includes('BENI')) return 'BEN';
+        if (ciudad.includes('PANDO') || nombre.includes('PANDO')) return 'PAN';
+
+        const clean = (ciudad || nombre).replace(/[^A-Z0-9]/g, '');
+        return clean ? clean.substring(0, 4) : `SUC${sucursal.id}`;
+    }
+
+    async generarSiguienteNumero(manager: EntityManager, tipo: TipoNota, sucursalInput?: any): Promise<string> {
+        const tipoPrefix = (tipo || 'NOT').substring(0, 3).toUpperCase();
+        
+        let sucursal: Sucursal | null = null;
+        const sucursalId = typeof sucursalInput === 'object' ? sucursalInput?.id : Number(sucursalInput);
+        if (sucursalId && !isNaN(sucursalId)) {
+            sucursal = await manager.findOne(Sucursal, { where: { id: sucursalId }, relations: ['ciudad'] });
+        } else if (sucursalInput && typeof sucursalInput === 'object' && sucursalInput.nombre) {
+            sucursal = sucursalInput as Sucursal;
+        }
+
+        if (!sucursal) {
+            sucursal = await manager.findOne(Sucursal, { where: { activo: true }, relations: ['ciudad'] });
+        }
+
+        const sucCode = this.getSucursalCode(sucursal);
+        const prefix = sucCode ? `${tipoPrefix}-${sucCode}` : tipoPrefix;
+
         const todasNotas = await manager
             .createQueryBuilder(Nota, 'nota')
             .withDeleted()
@@ -43,11 +78,10 @@ export class NotasService {
         for (const n of todasNotas) {
             if (n.numero) {
                 const parts = n.numero.split('-');
-                if (parts.length === 2) {
-                    const parsed = parseInt(parts[1], 10);
-                    if (!isNaN(parsed) && parsed > maxNum) {
-                        maxNum = parsed;
-                    }
+                const lastPart = parts[parts.length - 1];
+                const parsed = parseInt(lastPart, 10);
+                if (!isNaN(parsed) && parsed > maxNum) {
+                    maxNum = parsed;
                 }
             }
         }
@@ -74,6 +108,8 @@ export class NotasService {
             .leftJoinAndSelect('nota.usuario', 'usuario')
             .leftJoinAndSelect('nota.detalles', 'detalles')
             .leftJoinAndSelect('detalles.producto', 'producto')
+            .leftJoinAndSelect('detalles.movimientosLote', 'movimientosLote')
+            .leftJoinAndSelect('movimientosLote.lote', 'lote')
             .leftJoinAndSelect('nota.costoImportacion', 'costoImportacion')
             .orderBy('nota.fecha', 'DESC')
             .addOrderBy('nota.id', 'DESC');
@@ -100,6 +136,8 @@ export class NotasService {
             .leftJoinAndSelect('nota.usuario', 'usuario')
             .leftJoinAndSelect('nota.detalles', 'detalles')
             .leftJoinAndSelect('detalles.producto', 'producto')
+            .leftJoinAndSelect('detalles.movimientosLote', 'movimientosLote')
+            .leftJoinAndSelect('movimientosLote.lote', 'lote')
             .leftJoinAndSelect('nota.costoImportacion', 'costoImportacion')
             .where('nota.id = :id', { id })
             .getOne();
@@ -111,8 +149,9 @@ export class NotasService {
     async create(data: Partial<Nota> & { detalles: Partial<DetalleNota>[] }) {
         try {
             return await this.dataSource.transaction(async (manager) => {
-                // Generate unique number
-                const numero = await this.generarSiguienteNumero(manager, data.tipo || TipoNota.VENTA);
+                // Generate unique number per branch
+                const targetSucursalInput = (data as any).sucursal?.id || (data as any).sucursalId || (data as any).sucursal || (data as any).almacenId;
+                const numero = await this.generarSiguienteNumero(manager, data.tipo || TipoNota.VENTA, targetSucursalInput);
 
                                 let subtotalGeneral = 0;
                 const detallesConSubtotal = (data.detalles || []).map(det => {
@@ -590,22 +629,33 @@ export class NotasService {
                 }
                 
                 if (nota.tipo === TipoNota.COMPRA) {
+                    const costoImp = await manager.findOne(CostoImportacion, { where: { notaId: nota.id } });
+                    let factorIncremento = 1;
+                    if (costoImp && Number(costoImp.costoFobBob) > 0) {
+                        factorIncremento = 1 + ((Number(costoImp.totalGastosBob) || 0) / Number(costoImp.costoFobBob));
+                    }
+
+                    const rate = (nota.moneda === Moneda.USD) ? (Number(nota.tipoCambio) || 6.96) : 1;
+                    let precioUnitarioBob = Number(det.precioUnitario) || 0;
+                    if (nota.moneda === Moneda.USD) {
+                        precioUnitarioBob = precioUnitarioBob * rate;
+                    }
+                    const costoUnitarioBob = Number((precioUnitarioBob * factorIncremento).toFixed(2));
+
                     const nuevoLote = manager.create(Lote, {
                         numeroLote: det.numeroLote || `L-${nota.numero}-${det.id}`,
                         producto: det.producto,
                         sucursal: targetSucursal || inv?.sucursal || undefined,
                         cantidadInicial: det.cantidad,
                         cantidadActual: det.cantidad,
-                        costoUnitario: det.precioUnitario,
-                        fechaIngreso: new Date(),
+                        costoUnitario: costoUnitarioBob,
+                        fechaIngreso: nota.fecha ? new Date(nota.fecha) : new Date(),
                         fechaVencimiento: det.fechaVencimiento,
                         notaIngreso: nota
                     });
                     await manager.save(nuevoLote);
 
                     let finalInv = inv;
-                    const rate = (nota.moneda === Moneda.USD) ? (Number(nota.tipoCambio) || 6.96) : 1;
-                    const costoUnitarioBob = Number((Number(det.precioUnitario) * rate).toFixed(2));
 
                     if (inv) {
                         inv.stockActual = Number(inv.stockActual) + Number(det.cantidad);
@@ -1118,8 +1168,9 @@ export class NotasService {
                 }
             }
 
-            // Generar nuevo número de venta correlativo y seguro
-            const numeroVenta = await this.generarSiguienteNumero(manager, TipoNota.VENTA);
+            // Generar nuevo número de venta correlativo y seguro por sucursal
+            const targetSucursalInput = proforma.sucursal?.id || proforma.sucursal;
+            const numeroVenta = await this.generarSiguienteNumero(manager, TipoNota.VENTA, targetSucursalInput);
             
             // Crear nueva Nota de tipo VENTA con la fecha actual y estado CONFIRMADA
             const nuevaVenta = manager.create(Nota, {
