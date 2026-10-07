@@ -74,6 +74,17 @@ const ventasPage: React.FC = () => {
         }
     });
 
+    const availableVendedores = useMemo(() => {
+        if (!vendedores) return [];
+        let list = vendedores;
+        if (selectedSucursal) {
+            list = list.filter(v => v.sucursal?.id === Number(selectedSucursal));
+        } else if (selectedCiudad) {
+            list = list.filter(v => (v.sucursal as any)?.ciudad?.id === Number(selectedCiudad));
+        }
+        return list;
+    }, [vendedores, selectedSucursal, selectedCiudad]);
+
     const { data: clients } = useQuery({
         queryKey: ['clients'],
         queryFn: () => clientService.getAll(),
@@ -927,7 +938,7 @@ const ventasPage: React.FC = () => {
 
                 {/* Filtro por Vendedor (Multi-selección) */}
                 <MultiSelectVendedores
-                    vendedores={vendedores}
+                    vendedores={availableVendedores}
                     selectedVendedores={selectedVendedores}
                     onChange={setSelectedVendedores}
                     isRestrictedVendor={isRestrictedVendor}
@@ -1267,7 +1278,7 @@ const ventasPage: React.FC = () => {
                                 className={`w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 ${isRestrictedVendor ? 'opacity-80 bg-muted/50 cursor-not-allowed' : ''}`}
                             >
                                 <option value="">Seleccione vendedor...</option>
-                                {vendedores?.map(v => (
+                                {availableVendedores?.map(v => (
                                     <option key={v.id} value={v.id}>
                                         {v.nombres} {v.apellidos}
                                     </option>

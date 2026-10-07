@@ -131,6 +131,17 @@ const CobranzasPage: React.FC = () => {
         }
     });
 
+    const availableVendedores = useMemo(() => {
+        if (!vendedores) return [];
+        let list = vendedores;
+        if (selectedSucursal) {
+            list = list.filter(v => v.sucursal?.id === Number(selectedSucursal));
+        } else if (selectedCiudad) {
+            list = list.filter(v => (v.sucursal as any)?.ciudad?.id === Number(selectedCiudad));
+        }
+        return list;
+    }, [vendedores, selectedSucursal, selectedCiudad]);
+
     const { data: sucursales } = useQuery({ queryKey: ['sucursales'], queryFn: sucursalService.getAll });
     const { data: ciudades } = useQuery({ queryKey: ['ciudades'], queryFn: getCiudades });
 
@@ -822,7 +833,7 @@ const CobranzasPage: React.FC = () => {
                 {/* Filtro Vendedor */}
                 <div className="w-56 sm:w-64">
                     <MultiSelectVendedores
-                        vendedores={vendedores}
+                        vendedores={availableVendedores}
                         selectedVendedores={filtroVendedores}
                         onChange={(vals) => {
                             setFiltroVendedores(vals);

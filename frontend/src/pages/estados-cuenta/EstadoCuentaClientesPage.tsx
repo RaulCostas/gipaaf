@@ -232,8 +232,15 @@ const EstadoCuentaClientesPage: React.FC = () => {
     };
 
     const vendedores = useMemo(() => {
-        return personalList?.filter(p => p.cargo === 'VENDEDOR' && p.activo) || [];
-    }, [personalList]);
+        if (!personalList) return [];
+        let list = personalList.filter(p => p.cargo === 'VENDEDOR' && p.activo);
+        if (selectedSucursal) {
+            list = list.filter(p => p.sucursal?.id === Number(selectedSucursal));
+        } else if (selectedCiudad) {
+            list = list.filter(p => (p.sucursal as any)?.ciudad?.id === Number(selectedCiudad));
+        }
+        return list;
+    }, [personalList, selectedSucursal, selectedCiudad]);
 
     const handleOpenCarteraModal = (initialVendedorId?: string) => {
         const vId = initialVendedorId || (selectedVendedores.length === 1 ? selectedVendedores[0] : '') || (personalList && personalList[0] ? String(personalList[0].id) : '');

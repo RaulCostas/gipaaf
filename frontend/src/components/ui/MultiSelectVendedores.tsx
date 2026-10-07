@@ -160,11 +160,6 @@ export const MultiSelectVendedores: React.FC<MultiSelectVendedoresProps> = ({
                                             className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary accent-primary cursor-pointer"
                                         />
                                         <span className="truncate flex-1">{v.nombres} {v.apellidos}</span>
-                                        {v.sucursal?.nombre && (
-                                            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                                {v.sucursal.nombre}
-                                            </span>
-                                        )}
                                     </label>
                                 );
                             })

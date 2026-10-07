@@ -223,8 +223,15 @@ const MuestrasPage: React.FC = () => {
     });
 
     const vendedores = useMemo(() => {
-        return personal?.filter(p => p.cargo === 'VENDEDOR' && p.activo) || [];
-    }, [personal]);
+        if (!personal) return [];
+        let list = personal.filter(p => p.cargo === 'VENDEDOR' && p.activo);
+        if (selectedSucursal) {
+            list = list.filter(p => p.sucursal?.id === Number(selectedSucursal));
+        } else if (selectedCiudad) {
+            list = list.filter(p => (p.sucursal as any)?.ciudad?.id === Number(selectedCiudad));
+        }
+        return list;
+    }, [personal, selectedSucursal, selectedCiudad]);
 
     const { data: ciudades } = useQuery({
         queryKey: ['ciudadesList'],
@@ -1229,7 +1236,7 @@ const MuestrasPage: React.FC = () => {
                                         className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm appearance-none"
                                     >
                                         <option value="">Sin asignar / Opcional</option>
-                                        {personal?.map(p => (
+                                        {vendedores?.map(p => (
                                             <option key={p.id} value={p.id}>
                                                 {p.nombres} {p.apellidos}
                                             </option>

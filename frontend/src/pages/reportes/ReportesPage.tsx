@@ -322,8 +322,14 @@ const ReportesPage: React.FC = () => {
     // Vendedores activos
     const vendedoresList = useMemo(() => {
         if (!personalList) return [];
-        return personalList.filter(p => p.cargo === 'VENDEDOR' && p.activo);
-    }, [personalList]);
+        let list = personalList.filter(p => p.cargo === 'VENDEDOR' && p.activo);
+        if (selectedSucursal) {
+            list = list.filter(p => p.sucursal?.id === Number(selectedSucursal));
+        } else if (selectedCiudad) {
+            list = list.filter(p => (p.sucursal as any)?.ciudad?.id === Number(selectedCiudad));
+        }
+        return list;
+    }, [personalList, selectedSucursal, selectedCiudad]);
 
     // Clientes únicos ordenados para el selector
     const clientesUnicos = useMemo(() => {
