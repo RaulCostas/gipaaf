@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
+import MultiSelectVendedores from '../../components/ui/MultiSelectVendedores';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
@@ -29,7 +30,8 @@ import {
 } from 'lucide-react';
 
 const MuestrasPage: React.FC = () => {
-    const { isAdmin, hasAction, userPersonal } = useAuth();
+    const { isAdmin, isVendedor, isJefeVentas, hasAction, userPersonal } = useAuth();
+    const isRestrictedVendor = isVendedor && !isAdmin && !isJefeVentas && !!userPersonal;
     const canCreate = isAdmin || hasAction('MUESTRAS', 'CREAR');
     const canEdit = isAdmin || hasAction('MUESTRAS', 'EDITAR');
     const canReturn = isAdmin || hasAction('MUESTRAS', 'RETORNAR') || hasAction('MUESTRAS', 'CREAR');
@@ -49,7 +51,7 @@ const MuestrasPage: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [estadoFilter, setEstadoFilter] = useState<string>('TODOS');
     const [clienteFilter, setClienteFilter] = useState<string>('all');
-    const [vendedorFilter, setVendedorFilter] = useState<string>('all');
+    const [selectedVendedores, setSelectedVendedores] = useState<string[]>([]);
     const [productoFilter, setProductoFilter] = useState<string>('all');
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
@@ -220,6 +222,10 @@ const MuestrasPage: React.FC = () => {
         queryFn: personalService.getAll,
     });
 
+    const vendedores = useMemo(() => {
+        return personal?.filter(p => p.cargo === 'VENDEDOR' && p.activo) || [];
+    }, [personal]);
+
     const { data: ciudades } = useQuery({
         queryKey: ['ciudadesList'],
         queryFn: getCiudades,
@@ -279,7 +285,7 @@ const MuestrasPage: React.FC = () => {
         searchTerm ||
         estadoFilter !== 'TODOS' ||
         clienteFilter !== 'all' ||
-        vendedorFilter !== 'all' ||
+        selectedVendedores.length > 0 ||
         productoFilter !== 'all' ||
         fechaDesde ||
         fechaHasta
@@ -289,7 +295,7 @@ const MuestrasPage: React.FC = () => {
         setSearchTerm('');
         setEstadoFilter('TODOS');
         setClienteFilter('all');
-        setVendedorFilter('all');
+        setSelectedVendedores([]);
         setProductoFilter('all');
         setFechaDesde('');
         setFechaHasta('');
@@ -303,7 +309,14 @@ const MuestrasPage: React.FC = () => {
             if (selectedCiudad && (m.sucursal?.ciudad as any)?.id !== Number(selectedCiudad)) return false;
             if (estadoFilter !== 'TODOS' && m.estado !== estadoFilter) return false;
             if (clienteFilter !== 'all' && m.cliente?.id !== Number(clienteFilter)) return false;
-            if (vendedorFilter !== 'all' && m.vendedor?.id !== Number(vendedorFilter)) return false;
+            
+            if (isRestrictedVendor) {
+                if (m.vendedor?.id !== userPersonal.id) return false;
+            } else if (selectedVendedores.length > 0) {
+                const vendSet = new Set(selectedVendedores.map(id => Number(id)));
+                if (!m.vendedor?.id || !vendSet.has(m.vendedor.id)) return false;
+            }
+
             if (productoFilter !== 'all') {
                 const pId = Number(productoFilter);
                 const hasProd = m.detalles?.some(d => d.producto?.id === pId || (d as any).productoId === pId);
@@ -334,7 +347,7 @@ const MuestrasPage: React.FC = () => {
             }
             return true;
         });
-    }, [muestrasList, selectedSucursal, selectedCiudad, estadoFilter, clienteFilter, vendedorFilter, productoFilter, fechaDesde, fechaHasta, searchTerm]);
+    }, [muestrasList, selectedSucursal, selectedCiudad, estadoFilter, clienteFilter, selectedVendedores, isRestrictedVendor, userPersonal, productoFilter, fechaDesde, fechaHasta, searchTerm]);
 
     const totalPages = Math.ceil(filteredMuestras.length / itemsPerPage) || 1;
     const paginatedMuestras = useMemo(() => {
@@ -342,7 +355,7 @@ const MuestrasPage: React.FC = () => {
         return filteredMuestras.slice(start, start + itemsPerPage);
     }, [filteredMuestras, currentPage]);
 
-    React.useEffect(() => setCurrentPage(1), [searchTerm, estadoFilter, clienteFilter, vendedorFilter, productoFilter, fechaDesde, fechaHasta]);
+    React.useEffect(() => setCurrentPage(1), [searchTerm, estadoFilter, clienteFilter, selectedVendedores, productoFilter, fechaDesde, fechaHasta]);
 
     // Mutations
     const createMutation = useMutation({
@@ -631,10 +644,14 @@ const MuestrasPage: React.FC = () => {
             texts.push(`Cliente: ${cliName}`);
         }
 
-        if (vendedorFilter !== 'all') {
-            const vend = personal?.find((v: any) => v.id === Number(vendedorFilter));
-            const vendName = vend ? `${vend.nombres} ${vend.apellidos}`.trim() : 'Vendedor';
-            texts.push(`Vendedor: ${vendName}`);
+        if (selectedVendedores.length > 0) {
+            if (selectedVendedores.length === 1) {
+                const vend = personal?.find((v: any) => String(v.id) === selectedVendedores[0]);
+                const vendName = vend ? `${vend.nombres} ${vend.apellidos}`.trim() : 'Vendedor';
+                texts.push(`Vendedor: ${vendName}`);
+            } else {
+                texts.push(`Vendedores: ${selectedVendedores.length} seleccionados`);
+            }
         }
 
         if (productoFilter !== 'all') {
@@ -867,20 +884,15 @@ const MuestrasPage: React.FC = () => {
                 </div>
 
                 {/* Filtro por Vendedor */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                    <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <select
-                        value={vendedorFilter}
-                        onChange={(e) => setVendedorFilter(e.target.value)}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[180px]"
-                    >
-                        <option value="all" className="bg-background text-foreground">Todos los Vendedores</option>
-                        {personal?.map(p => (
-                            <option key={p.id} value={p.id} className="bg-background text-foreground">
-                                {p.nombres} {p.apellidos}
-                            </option>
-                        ))}
-                    </select>
+                <div className="w-56 sm:w-64">
+                    <MultiSelectVendedores
+                        vendedores={vendedores}
+                        selectedVendedores={selectedVendedores}
+                        onChange={setSelectedVendedores}
+                        isRestrictedVendor={isRestrictedVendor}
+                        userPersonal={userPersonal}
+                        placeholder="Todos los Vendedores"
+                    />
                 </div>
 
                 {/* Filtro por Producto (Solo productos en muestras) */}

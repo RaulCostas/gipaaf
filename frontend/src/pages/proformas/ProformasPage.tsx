@@ -14,6 +14,7 @@ import { EstadoNota } from '../../api/purchaseService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
+import { MultiSelectVendedores } from '../../components/ui/MultiSelectVendedores';
 import { Search, Plus, Trash2, CheckCircle, Calculator, User, Package, Calendar, X, ShoppingCart, Eye, Edit, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, Receipt, CreditCard, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -35,7 +36,7 @@ const ProformasPage: React.FC = () => {
     const [isViewing, setIsViewing] = useState(false);
     const [anularConfirmId, setAnularConfirmId] = useState<number | null>(null);
     const [search, setSearch] = useState('');
-    const [selectedVendedor, setSelectedVendedor] = useState('all');
+    const [selectedVendedores, setSelectedVendedores] = useState<string[]>([]);
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -624,8 +625,9 @@ const ProformasPage: React.FC = () => {
 
         if (isRestrictedVendor) {
             filtered = filtered.filter(p => p.vendedor?.id === userPersonal.id);
-        } else if (selectedVendedor !== 'all') {
-            filtered = filtered.filter(p => p.vendedor?.id === Number(selectedVendedor));
+        } else if (selectedVendedores.length > 0) {
+            const setIds = new Set(selectedVendedores.map(id => Number(id)));
+            filtered = filtered.filter(p => p.vendedor?.id && setIds.has(p.vendedor.id));
         }
 
         if (fechaDesde) {
@@ -656,7 +658,7 @@ const ProformasPage: React.FC = () => {
         }
 
         return filtered;
-    }, [proformas, search, selectedSucursal, selectedCiudad, selectedVendedor, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
+    }, [proformas, search, selectedSucursal, selectedCiudad, selectedVendedores, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
 
     const getExportColumns = () => {
         let cols = [
@@ -673,7 +675,7 @@ const ProformasPage: React.FC = () => {
             { header: 'Estado', dataKey: 'estado' }
         ];
 
-        if (selectedVendedor !== 'all') {
+        if (selectedVendedores.length === 1) {
             cols = cols.filter(c => c.dataKey !== 'vendedorNombre');
         }
         if (selectedSucursal) {
@@ -737,9 +739,12 @@ const ProformasPage: React.FC = () => {
             if (s) texts.push(`Sucursal: ${s.nombre}`);
         }
 
-        if (selectedVendedor !== 'all') {
-            const v = vendedores?.find(ve => ve.id === Number(selectedVendedor));
-            if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+        if (selectedVendedores.length > 0) {
+            const vendNames = vendedores
+                ?.filter(ve => selectedVendedores.includes(String(ve.id)))
+                .map(ve => `${ve.nombres} ${ve.apellidos}`)
+                .join(', ');
+            if (vendNames) texts.push(`Vendedores: ${vendNames}`);
         }
 
         if (fechaDesde && fechaHasta) {
@@ -781,9 +786,9 @@ const ProformasPage: React.FC = () => {
         exportToExcel(getExportColumns(), getFormattedData(), 'proformas_reporte');
     };
 
-    const hasActiveFilters = selectedVendedor !== 'all' || !!fechaDesde || !!fechaHasta || !!search;
+    const hasActiveFilters = selectedVendedores.length > 0 || !!fechaDesde || !!fechaHasta || !!search;
     const handleClearFilters = () => {
-        setSelectedVendedor('all');
+        setSelectedVendedores([]);
         setFechaDesde('');
         setFechaHasta('');
         setSearch('');
@@ -844,30 +849,14 @@ const ProformasPage: React.FC = () => {
                     )}
                 </div>
 
-                {/* Filtro por Vendedor */}
-                {isRestrictedVendor ? (
-                    <div className="flex items-center gap-2 bg-card border border-primary/30 rounded-lg px-3 py-2 shadow-sm text-sm text-primary font-medium">
-                        <User className="w-4 h-4 text-primary shrink-0" />
-                        <span>Mis Proformas ({userPersonal.nombres} {userPersonal.apellidos})</span>
-                        <Lock className="w-3.5 h-3.5 text-muted-foreground ml-1" />
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                        <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <select
-                            value={selectedVendedor}
-                            onChange={(e) => setSelectedVendedor(e.target.value)}
-                            className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm"
-                        >
-                            <option value="all" className="bg-background text-foreground">Todos los Vendedores</option>
-                            {vendedores?.map(v => (
-                                <option key={v.id} value={v.id} className="bg-background text-foreground">
-                                    {v.nombres} {v.apellidos}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                )}
+                {/* Filtro por Vendedor (Multi-selección) */}
+                <MultiSelectVendedores
+                    vendedores={vendedores}
+                    selectedVendedores={selectedVendedores}
+                    onChange={setSelectedVendedores}
+                    isRestrictedVendor={isRestrictedVendor}
+                    userPersonal={userPersonal}
+                />
 
                 {/* Filtro Fecha Desde */}
                 <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
@@ -912,7 +901,7 @@ const ProformasPage: React.FC = () => {
                         <tr className="bg-muted/50 border-b">
                             <th className="p-4 text-sm font-semibold text-muted-foreground">Número / Fecha</th>
                             <th className="p-4 text-sm font-semibold text-muted-foreground">Cliente</th>
-                            {selectedVendedor === 'all' && (
+                            {selectedVendedores.length !== 1 && (
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Vendedor</th>
                             )}
                             <th className="p-4 text-sm font-semibold text-muted-foreground text-right">SubTotal</th>
@@ -926,7 +915,7 @@ const ProformasPage: React.FC = () => {
                     <tbody className="divide-y">
                         {loadingProformas ? (
                             <tr>
-                                <td colSpan={7 + (selectedVendedor === 'all' ? 1 : 0)} className="p-8 text-center text-muted-foreground">
+                                <td colSpan={7 + (selectedVendedores.length !== 1 ? 1 : 0)} className="p-8 text-center text-muted-foreground">
                                     <div className="flex items-center justify-center gap-2">
                                         <Loader2 className="w-5 h-5 animate-spin text-primary" />
                                         <span>Cargando proformas...</span>
@@ -982,7 +971,7 @@ const ProformasPage: React.FC = () => {
                                             )}
                                         </div>
                                     </td>
-                                    {selectedVendedor === 'all' && (
+                                    {selectedVendedores.length !== 1 && (
                                         <td className="p-4">
                                             <div className="flex flex-col">
                                                 <span className="text-sm font-medium text-muted-foreground">
@@ -1088,7 +1077,7 @@ const ProformasPage: React.FC = () => {
                     })
                 ) : (
                     <tr>
-                        <td colSpan={7 + (selectedVendedor === 'all' ? 1 : 0)} className="p-8 text-center text-muted-foreground">
+                        <td colSpan={7 + (selectedVendedores.length !== 1 ? 1 : 0)} className="p-8 text-center text-muted-foreground">
                             No hay proformas registradas.
                         </td>
                     </tr>

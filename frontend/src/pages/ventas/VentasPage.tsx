@@ -15,7 +15,8 @@ import { getCiudades } from '../../api/ciudadService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
-import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, User, Package, Calendar, X, Eye, Edit, AlertTriangle, FileText, Receipt, Building2, Info, CreditCard, Clock, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MultiSelectVendedores } from '../../components/ui/MultiSelectVendedores';
+import { Search, Plus, Trash2, CheckCircle, Calculator, ShoppingCart, Printer, User, Package, Calendar, X, Eye, Edit, AlertTriangle, FileText, Receipt, Building2, Info, CreditCard, Clock, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -35,7 +36,8 @@ const ventasPage: React.FC = () => {
     const [isViewing, setIsViewing] = useState(false);
     const [anularConfirmId, setAnularConfirmId] = useState<number | null>(null);
     const [search, setSearch] = useState('');
-    const [selectedVendedor, setSelectedVendedor] = useState('all');
+    const [selectedVendedores, setSelectedVendedores] = useState<string[]>([]);
+
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -705,8 +707,9 @@ const ventasPage: React.FC = () => {
 
         if (isRestrictedVendor) {
             filtered = filtered.filter(p => p.vendedor?.id === userPersonal.id);
-        } else if (selectedVendedor !== 'all') {
-            filtered = filtered.filter(p => p.vendedor?.id === Number(selectedVendedor));
+        } else if (selectedVendedores.length > 0) {
+            const setIds = new Set(selectedVendedores.map(id => Number(id)));
+            filtered = filtered.filter(p => p.vendedor?.id && setIds.has(p.vendedor.id));
         }
 
         if (fechaDesde) {
@@ -737,7 +740,7 @@ const ventasPage: React.FC = () => {
         }
 
         return filtered;
-    }, [ventas, search, selectedSucursal, selectedCiudad, selectedVendedor, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
+    }, [ventas, search, selectedSucursal, selectedCiudad, selectedVendedores, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
 
     const totalPages = Math.ceil(filteredventas.length / itemsPerPage) || 1;
 
@@ -748,7 +751,7 @@ const ventasPage: React.FC = () => {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [search, selectedSucursal, selectedCiudad, selectedVendedor, fechaDesde, fechaHasta]);
+    }, [search, selectedSucursal, selectedCiudad, selectedVendedores, fechaDesde, fechaHasta]);
 
     const exportColumns = [
         { header: 'N° Venta', dataKey: 'numero' },
@@ -812,9 +815,12 @@ const ventasPage: React.FC = () => {
             if (s) texts.push(`Sucursal: ${s.nombre}`);
         }
 
-        if (selectedVendedor !== 'all') {
-            const v = vendedores?.find(ve => ve.id === Number(selectedVendedor));
-            if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+        if (selectedVendedores.length > 0) {
+            const vendNames = vendedores
+                ?.filter(ve => selectedVendedores.includes(String(ve.id)))
+                .map(ve => `${ve.nombres} ${ve.apellidos}`)
+                .join(', ');
+            if (vendNames) texts.push(`Vendedores: ${vendNames}`);
         }
 
         if (fechaDesde && fechaHasta) {
@@ -856,9 +862,9 @@ const ventasPage: React.FC = () => {
         exportToExcel(exportColumns, getFormattedData(), 'ventas_reporte');
     };
 
-    const hasActiveFilters = selectedVendedor !== 'all' || !!fechaDesde || !!fechaHasta || !!search;
+    const hasActiveFilters = selectedVendedores.length > 0 || !!fechaDesde || !!fechaHasta || !!search;
     const handleClearFilters = () => {
-        setSelectedVendedor('all');
+        setSelectedVendedores([]);
         setFechaDesde('');
         setFechaHasta('');
         setSearch('');
@@ -919,30 +925,14 @@ const ventasPage: React.FC = () => {
                     )}
                 </div>
 
-                {/* Filtro por Vendedor */}
-                {isRestrictedVendor ? (
-                    <div className="flex items-center gap-2 bg-card border border-primary/30 rounded-lg px-3 py-2 shadow-sm text-sm text-primary font-medium">
-                        <User className="w-4 h-4 text-primary shrink-0" />
-                        <span>Mis Ventas ({userPersonal.nombres} {userPersonal.apellidos})</span>
-                        <Lock className="w-3.5 h-3.5 text-muted-foreground ml-1" />
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                        <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <select
-                            value={selectedVendedor}
-                            onChange={(e) => setSelectedVendedor(e.target.value)}
-                            className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm"
-                        >
-                            <option value="all" className="bg-background text-foreground">Todos los Vendedores</option>
-                            {vendedores?.map(v => (
-                                <option key={v.id} value={v.id} className="bg-background text-foreground">
-                                    {v.nombres} {v.apellidos}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                )}
+                {/* Filtro por Vendedor (Multi-selección) */}
+                <MultiSelectVendedores
+                    vendedores={vendedores}
+                    selectedVendedores={selectedVendedores}
+                    onChange={setSelectedVendedores}
+                    isRestrictedVendor={isRestrictedVendor}
+                    userPersonal={userPersonal}
+                />
 
                 {/* Filtro Fecha Desde */}
                 <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">

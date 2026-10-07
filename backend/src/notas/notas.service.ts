@@ -1231,9 +1231,7 @@ export class NotasService implements OnModuleInit {
                 impuesto: proforma.impuesto,
                 total: proforma.total,
                 saldo: proforma.saldo !== undefined ? proforma.saldo : proforma.total,
-                observaciones: proforma.observaciones 
-                    ? `${proforma.observaciones} (Generada desde Proforma ${proforma.numero})` 
-                    : `Generada desde Proforma ${proforma.numero}`,
+                observaciones: proforma.observaciones || undefined,
                 detalles: (proforma.detalles || []).map(d => manager.create(DetalleNota, {
                     producto: d.producto,
                     cantidad: d.cantidad,

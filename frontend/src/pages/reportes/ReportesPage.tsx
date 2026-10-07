@@ -47,6 +47,7 @@ import {
 import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
+import MultiSelectVendedores from '../../components/ui/MultiSelectVendedores';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { formatCurrency, formatCurrencyAmount } from '../../utils/currencyUtils';
 import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
@@ -75,7 +76,8 @@ const REPORT_TABS: ReportTabConfig[] = [
 ];
 
 const ReportesPage: React.FC = () => {
-    const { isAdmin, hasAction } = useAuth();
+    const { isAdmin, isVendedor, isJefeVentas, hasAction, userPersonal } = useAuth();
+    const isRestrictedVendor = isVendedor && !isAdmin && !isJefeVentas && !!userPersonal;
     const { selectedSucursal, selectedCiudad } = useFilters();
 
     const availableTabs = useMemo(() => {
@@ -143,7 +145,7 @@ const ReportesPage: React.FC = () => {
     // ESTADOS: VENTAS
     // ==========================================
     const [filtroVentaCliente, setFiltroVentaCliente] = useState<string>('');
-    const [filtroVentaVendedor, setFiltroVentaVendedor] = useState<string>('TODOS');
+    const [filtroVentaVendedores, setFiltroVentaVendedores] = useState<string[]>([]);
     const [filtroVentaTipoDoc, setFiltroVentaTipoDoc] = useState<string>('TODOS');
     const [filtroVentaEstado, setFiltroVentaEstado] = useState<string>('TODOS');
     const [ventaFechaDesde, setVentaFechaDesde] = useState<string>('');
@@ -156,7 +158,7 @@ const ReportesPage: React.FC = () => {
     // ==========================================
     const [filtroVentaProdProducto, setFiltroVentaProdProducto] = useState<string>('');
     const [filtroVentaProdMarca, setFiltroVentaProdMarca] = useState<string>('TODOS');
-    const [filtroVentaProdVendedor, setFiltroVentaProdVendedor] = useState<string>('TODOS');
+    const [filtroVentaProdVendedores, setFiltroVentaProdVendedores] = useState<string[]>([]);
     const [filtroVentaProdTipoPago, setFiltroVentaProdTipoPago] = useState<string>('TODOS');
     const [ventaProdFechaDesde, setVentaProdFechaDesde] = useState<string>('');
     const [ventaProdFechaHasta, setVentaProdFechaHasta] = useState<string>('');
@@ -167,7 +169,7 @@ const ReportesPage: React.FC = () => {
     // ESTADOS: COBRANZAS
     // ==========================================
     const [filtroCobranzaCliente, setFiltroCobranzaCliente] = useState<string>('');
-    const [filtroCobranzaVendedor, setFiltroCobranzaVendedor] = useState<string>('TODOS');
+    const [filtroCobranzaVendedores, setFiltroCobranzaVendedores] = useState<string[]>([]);
     const [filtroCobranzaEstado, setFiltroCobranzaEstado] = useState<'TODOS' | 'ACTIVO' | 'ANULADO'>('TODOS');
     const [filtroCobranzaMetodo, setFiltroCobranzaMetodo] = useState<string>('TODOS');
     const [cobranzaFechaDesde, setCobranzaFechaDesde] = useState<string>('');
@@ -1295,14 +1297,14 @@ const ReportesPage: React.FC = () => {
     // LÓGICA VENTAS
     // ==========================================
     const hasVentaActiveFilters = Boolean(
-        filtroVentaCliente || filtroVentaVendedor !== 'TODOS' || 
+        filtroVentaCliente || filtroVentaVendedores.length > 0 || 
         filtroVentaTipoDoc !== 'TODOS' || filtroVentaEstado !== 'TODOS' || 
         ventaFechaDesde || ventaFechaHasta || ventaSearchTerm
     );
 
     const handleClearVentaFilters = () => {
         setFiltroVentaCliente('');
-        setFiltroVentaVendedor('TODOS');
+        setFiltroVentaVendedores([]);
         setFiltroVentaTipoDoc('TODOS');
         setFiltroVentaEstado('TODOS');
         setVentaFechaDesde('');
@@ -1321,7 +1323,14 @@ const ReportesPage: React.FC = () => {
         }
 
         if (filtroVentaCliente) filtered = filtered.filter(p => String(p.cliente?.id) === filtroVentaCliente);
-        if (filtroVentaVendedor !== 'TODOS') filtered = filtered.filter(p => p.vendedor?.id === Number(filtroVentaVendedor));
+        
+        if (isRestrictedVendor) {
+            filtered = filtered.filter(p => p.vendedor?.id === userPersonal.id);
+        } else if (filtroVentaVendedores.length > 0) {
+            const setIds = new Set(filtroVentaVendedores.map(id => Number(id)));
+            filtered = filtered.filter(p => p.vendedor?.id && setIds.has(p.vendedor.id));
+        }
+
         if (filtroVentaTipoDoc === 'CON_FACTURA') filtered = filtered.filter(p => p.conFactura);
         else if (filtroVentaTipoDoc === 'SIN_FACTURA') filtered = filtered.filter(p => !p.conFactura);
         if (filtroVentaEstado !== 'TODOS') filtered = filtered.filter(p => p.estado === filtroVentaEstado);
@@ -1342,7 +1351,7 @@ const ReportesPage: React.FC = () => {
         }
 
         return filtered;
-    }, [ventasList, selectedSucursal, selectedCiudad, filtroVentaCliente, filtroVentaVendedor, filtroVentaTipoDoc, filtroVentaEstado, ventaFechaDesde, ventaFechaHasta, ventaSearchTerm]);
+    }, [ventasList, selectedSucursal, selectedCiudad, filtroVentaCliente, filtroVentaVendedores, isRestrictedVendor, userPersonal, filtroVentaTipoDoc, filtroVentaEstado, ventaFechaDesde, ventaFechaHasta, ventaSearchTerm]);
 
     const exportColumnsVentas = [
         { header: 'Fecha', dataKey: 'fechaFormatted' },
@@ -1399,9 +1408,13 @@ const ReportesPage: React.FC = () => {
                 texts.push(`Cliente: ${nombre}`);
             }
         }
-        if (filtroVentaVendedor !== 'TODOS') {
-            const v = vendedoresList.find(ve => String(ve.id) === filtroVentaVendedor);
-            if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+        if (filtroVentaVendedores.length > 0) {
+            if (filtroVentaVendedores.length === 1) {
+                const v = vendedoresList.find(ve => String(ve.id) === filtroVentaVendedores[0]);
+                if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+            } else {
+                texts.push(`Vendedores: ${filtroVentaVendedores.length} seleccionados`);
+            }
         }
         if (filtroVentaTipoDoc === 'CON_FACTURA') texts.push('Tipo: Con Factura');
         else if (filtroVentaTipoDoc === 'SIN_FACTURA') texts.push('Tipo: Sin Factura');
@@ -1416,7 +1429,7 @@ const ReportesPage: React.FC = () => {
     const getExportColumnsVentas = () => {
         let cols = [...exportColumnsVentas];
         if (filtroVentaCliente) cols = cols.filter(c => c.dataKey !== 'clienteNombre');
-        if (filtroVentaVendedor !== 'TODOS') cols = cols.filter(c => c.dataKey !== 'vendedorNombre');
+        if (filtroVentaVendedores.length === 1) cols = cols.filter(c => c.dataKey !== 'vendedorNombre');
         if (selectedSucursal) cols = cols.filter(c => c.dataKey !== 'sucursalNombre');
         if (filtroVentaEstado !== 'TODOS') cols = cols.filter(c => c.dataKey !== 'estado');
         return cols;
@@ -1429,7 +1442,7 @@ const ReportesPage: React.FC = () => {
     }, [filteredVentas, ventaCurrentPage]);
 
     React.useEffect(() => setVentaCurrentPage(1), [
-        ventaSearchTerm, filtroVentaCliente, filtroVentaVendedor, 
+        ventaSearchTerm, filtroVentaCliente, filtroVentaVendedores, 
         filtroVentaTipoDoc, filtroVentaEstado, ventaFechaDesde, ventaFechaHasta
     ]);
 
@@ -1438,14 +1451,14 @@ const ReportesPage: React.FC = () => {
     // ==========================================
     const hasVentaProdActiveFilters = Boolean(
         filtroVentaProdProducto || filtroVentaProdMarca !== 'TODOS' || 
-        filtroVentaProdVendedor !== 'TODOS' || filtroVentaProdTipoPago !== 'TODOS' || 
+        filtroVentaProdVendedores.length > 0 || filtroVentaProdTipoPago !== 'TODOS' || 
         ventaProdFechaDesde || ventaProdFechaHasta || ventaProdSearchTerm
     );
 
     const handleClearVentaProdFilters = () => {
         setFiltroVentaProdProducto('');
         setFiltroVentaProdMarca('TODOS');
-        setFiltroVentaProdVendedor('TODOS');
+        setFiltroVentaProdVendedores([]);
         setFiltroVentaProdTipoPago('TODOS');
         setVentaProdFechaDesde('');
         setVentaProdFechaHasta('');
@@ -1490,8 +1503,11 @@ const ReportesPage: React.FC = () => {
             sales = sales.filter(p => p.fecha && p.fecha.split('T')[0] <= ventaProdFechaHasta);
         }
 
-        if (filtroVentaProdVendedor !== 'TODOS') {
-            sales = sales.filter(p => p.vendedor?.id === Number(filtroVentaProdVendedor));
+        if (isRestrictedVendor) {
+            sales = sales.filter(p => p.vendedor?.id === userPersonal.id);
+        } else if (filtroVentaProdVendedores.length > 0) {
+            const setIds = new Set(filtroVentaProdVendedores.map(id => Number(id)));
+            sales = sales.filter(p => p.vendedor?.id && setIds.has(p.vendedor.id));
         }
 
         if (filtroVentaProdTipoPago !== 'TODOS') {
@@ -1643,7 +1659,7 @@ const ReportesPage: React.FC = () => {
     }, [
         ventasList, productsMap, selectedSucursal, selectedCiudad,
         ventaProdFechaDesde, ventaProdFechaHasta, filtroVentaProdProducto,
-        filtroVentaProdMarca, filtroVentaProdVendedor, filtroVentaProdTipoPago,
+        filtroVentaProdMarca, filtroVentaProdVendedores, isRestrictedVendor, userPersonal, filtroVentaProdTipoPago,
         ventaProdSearchTerm
     ]);
 
@@ -1678,7 +1694,7 @@ const ReportesPage: React.FC = () => {
 
     React.useEffect(() => setVentaProdCurrentPage(1), [
         ventaProdSearchTerm, filtroVentaProdProducto, filtroVentaProdMarca,
-        filtroVentaProdVendedor, filtroVentaProdTipoPago, ventaProdFechaDesde, ventaProdFechaHasta
+        filtroVentaProdVendedores, filtroVentaProdTipoPago, ventaProdFechaDesde, ventaProdFechaHasta
     ]);
 
     const exportColumnsVentasProducto = [
@@ -1751,9 +1767,13 @@ const ReportesPage: React.FC = () => {
             const m = marcasList?.find(m => String(m.id) === filtroVentaProdMarca);
             if (m) texts.push(`Marca: ${m.nombre}`);
         }
-        if (filtroVentaProdVendedor !== 'TODOS') {
-            const v = vendedoresList.find(ve => String(ve.id) === filtroVentaProdVendedor);
-            if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+        if (filtroVentaProdVendedores.length > 0) {
+            if (filtroVentaProdVendedores.length === 1) {
+                const v = vendedoresList.find(ve => String(ve.id) === filtroVentaProdVendedores[0]);
+                if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+            } else {
+                texts.push(`Vendedores: ${filtroVentaProdVendedores.length} seleccionados`);
+            }
         }
         if (filtroVentaProdTipoPago !== 'TODOS') texts.push(`Forma Pago: ${filtroVentaProdTipoPago}`);
         if (ventaProdFechaDesde && ventaProdFechaHasta) texts.push(`Rango: ${ventaProdFechaDesde.split('-').reverse().join('/')} al ${ventaProdFechaHasta.split('-').reverse().join('/')}`);
@@ -1776,14 +1796,14 @@ const ReportesPage: React.FC = () => {
     }, [pagosList]);
 
     const hasCobranzaActiveFilters = Boolean(
-        filtroCobranzaCliente || filtroCobranzaVendedor !== 'TODOS' || 
+        filtroCobranzaCliente || filtroCobranzaVendedores.length > 0 || 
         filtroCobranzaEstado !== 'TODOS' || filtroCobranzaMetodo !== 'TODOS' || 
         cobranzaFechaDesde || cobranzaFechaHasta || cobranzaSearchTerm
     );
 
     const handleClearCobranzaFilters = () => {
         setFiltroCobranzaCliente('');
-        setFiltroCobranzaVendedor('TODOS');
+        setFiltroCobranzaVendedores([]);
         setFiltroCobranzaEstado('TODOS');
         setFiltroCobranzaMetodo('TODOS');
         setCobranzaFechaDesde('');
@@ -1802,12 +1822,17 @@ const ReportesPage: React.FC = () => {
         }
 
         if (filtroCobranzaCliente) filtered = filtered.filter(p => String(p.cliente?.id) === filtroCobranzaCliente);
-        if (filtroCobranzaVendedor !== 'TODOS') {
+        
+        if (isRestrictedVendor) {
+            filtered = filtered.filter(p => p.nota?.vendedor?.id === userPersonal.id);
+        } else if (filtroCobranzaVendedores.length > 0) {
+            const setIds = new Set(filtroCobranzaVendedores.map(id => Number(id)));
             filtered = filtered.filter(p => {
                 const vendedorId = p.nota?.vendedor?.id || p.nota?.usuario?.personal?.id || p.nota?.usuario?.id;
-                return p.nota?.vendedor?.id === Number(filtroCobranzaVendedor) || String(vendedorId) === filtroCobranzaVendedor;
+                return (p.nota?.vendedor?.id && setIds.has(p.nota.vendedor.id)) || (vendedorId && setIds.has(Number(vendedorId)));
             });
         }
+
         if (filtroCobranzaEstado === 'ACTIVO') filtered = filtered.filter(p => p.activo);
         else if (filtroCobranzaEstado === 'ANULADO') filtered = filtered.filter(p => !p.activo);
         if (filtroCobranzaMetodo !== 'TODOS') filtered = filtered.filter(p => (p.metodoPago || 'Efectivo') === filtroCobranzaMetodo);
@@ -1834,7 +1859,7 @@ const ReportesPage: React.FC = () => {
         }
 
         return filtered;
-    }, [pagosList, selectedSucursal, selectedCiudad, cobranzaSearchTerm, filtroCobranzaCliente, filtroCobranzaVendedor, filtroCobranzaEstado, filtroCobranzaMetodo, cobranzaFechaDesde, cobranzaFechaHasta]);
+    }, [pagosList, selectedSucursal, selectedCiudad, cobranzaSearchTerm, filtroCobranzaCliente, filtroCobranzaVendedores, isRestrictedVendor, userPersonal, filtroCobranzaEstado, filtroCobranzaMetodo, cobranzaFechaDesde, cobranzaFechaHasta]);
 
     const exportColumnsCobranzas = [
         { header: 'Fecha', dataKey: 'fecha' },
@@ -1894,9 +1919,13 @@ const ReportesPage: React.FC = () => {
                 texts.push(`Cliente: ${nombre}`);
             }
         }
-        if (filtroCobranzaVendedor !== 'TODOS') {
-            const v = vendedoresList.find(ve => String(ve.id) === filtroCobranzaVendedor);
-            if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+        if (filtroCobranzaVendedores.length > 0) {
+            if (filtroCobranzaVendedores.length === 1) {
+                const v = vendedoresList.find(ve => String(ve.id) === filtroCobranzaVendedores[0]);
+                if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+            } else {
+                texts.push(`Vendedores: ${filtroCobranzaVendedores.length} seleccionados`);
+            }
         }
         if (filtroCobranzaEstado === 'ACTIVO') texts.push('Estado: Activos');
         else if (filtroCobranzaEstado === 'ANULADO') texts.push('Estado: Anulados');
@@ -1911,7 +1940,7 @@ const ReportesPage: React.FC = () => {
     const getExportColumnsCobranzas = () => {
         let cols = [...exportColumnsCobranzas];
         if (filtroCobranzaCliente) cols = cols.filter(c => c.dataKey !== 'clienteNombre');
-        if (filtroCobranzaVendedor !== 'TODOS') cols = cols.filter(c => c.dataKey !== 'vendedorNombre');
+        if (filtroCobranzaVendedores.length === 1) cols = cols.filter(c => c.dataKey !== 'vendedorNombre');
         if (filtroCobranzaMetodo && filtroCobranzaMetodo !== 'TODOS') cols = cols.filter(c => c.dataKey !== 'metodoPago');
         if (filtroCobranzaEstado !== 'TODOS') cols = cols.filter(c => c.dataKey !== 'estado');
         return cols;
@@ -1924,7 +1953,7 @@ const ReportesPage: React.FC = () => {
     }, [filteredCobranzas, cobranzaCurrentPage]);
 
     React.useEffect(() => setCobranzaCurrentPage(1), [
-        cobranzaSearchTerm, filtroCobranzaCliente, filtroCobranzaVendedor, filtroCobranzaEstado, 
+        cobranzaSearchTerm, filtroCobranzaCliente, filtroCobranzaVendedores, filtroCobranzaEstado, 
         filtroCobranzaMetodo, cobranzaFechaDesde, cobranzaFechaHasta
     ]);
 
@@ -3684,16 +3713,17 @@ const ReportesPage: React.FC = () => {
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                                     <User className="w-3.5 h-3.5 text-primary" /> Vendedor
                                 </label>
-                                <select 
-                                    value={filtroVentaVendedor} 
-                                    onChange={(e) => setFiltroVentaVendedor(e.target.value)} 
-                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                                >
-                                    <option value="TODOS">Todos los Vendedores</option>
-                                    {vendedoresList.map(v => (
-                                        <option key={v.id} value={v.id}>{v.nombres} {v.apellidos}</option>
-                                    ))}
-                                </select>
+                                <MultiSelectVendedores
+                                    vendedores={vendedoresList}
+                                    selectedVendedores={filtroVentaVendedores}
+                                    onChange={(vals) => {
+                                        setFiltroVentaVendedores(vals);
+                                        setVentaCurrentPage(1);
+                                    }}
+                                    isRestrictedVendor={isRestrictedVendor}
+                                    userPersonal={userPersonal}
+                                    placeholder="Todos los Vendedores"
+                                />
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
@@ -3789,7 +3819,7 @@ const ReportesPage: React.FC = () => {
                                         <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fecha</th>
                                         <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nro. Venta / Factura</th>
                                         {!filtroVentaCliente && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cliente</th>}
-                                        {filtroVentaVendedor === 'TODOS' && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendedor</th>}
+                                        {filtroVentaVendedores.length !== 1 && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendedor</th>}
                                         <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nota de Venta</th>
                                         {!selectedSucursal && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sucursal</th>}
                                         <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">SubTotal</th>
@@ -3865,7 +3895,7 @@ const ReportesPage: React.FC = () => {
                                                             </div>
                                                         </td>
                                                     )}
-                                                    {filtroVentaVendedor === 'TODOS' && (
+                                                    {filtroVentaVendedores.length !== 1 && (
                                                         <td className="p-4 text-sm text-muted-foreground">
                                                             {s.vendedor ? `${s.vendedor.nombres} ${s.vendedor.apellidos}` : '---'}
                                                         </td>
@@ -4065,16 +4095,17 @@ const ReportesPage: React.FC = () => {
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                                     <User className="w-3.5 h-3.5 text-primary" /> Vendedor
                                 </label>
-                                <select 
-                                    value={filtroVentaProdVendedor} 
-                                    onChange={(e) => setFiltroVentaProdVendedor(e.target.value)} 
-                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                                >
-                                    <option value="TODOS">Todos los Vendedores</option>
-                                    {vendedoresList.map(v => (
-                                        <option key={v.id} value={v.id}>{v.nombres} {v.apellidos}</option>
-                                    ))}
-                                </select>
+                                <MultiSelectVendedores
+                                    vendedores={vendedoresList}
+                                    selectedVendedores={filtroVentaProdVendedores}
+                                    onChange={(vals) => {
+                                        setFiltroVentaProdVendedores(vals);
+                                        setVentaProdCurrentPage(1);
+                                    }}
+                                    isRestrictedVendor={isRestrictedVendor}
+                                    userPersonal={userPersonal}
+                                    placeholder="Todos los Vendedores"
+                                />
                             </div>
 
                             {/* Filtro Fecha Desde */}
@@ -4348,16 +4379,17 @@ const ReportesPage: React.FC = () => {
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                                     <Users className="w-3.5 h-3.5 text-primary" /> Vendedor
                                 </label>
-                                <select 
-                                    value={filtroCobranzaVendedor} 
-                                    onChange={(e) => setFiltroCobranzaVendedor(e.target.value)} 
-                                    className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                                >
-                                    <option value="TODOS">Todos los Vendedores</option>
-                                    {vendedoresList.map(v => (
-                                        <option key={v.id} value={v.id}>{v.nombres} {v.apellidos}</option>
-                                    ))}
-                                </select>
+                                <MultiSelectVendedores
+                                    vendedores={vendedoresList}
+                                    selectedVendedores={filtroCobranzaVendedores}
+                                    onChange={(vals) => {
+                                        setFiltroCobranzaVendedores(vals);
+                                        setCobranzaCurrentPage(1);
+                                    }}
+                                    isRestrictedVendor={isRestrictedVendor}
+                                    userPersonal={userPersonal}
+                                    placeholder="Todos los Vendedores"
+                                />
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground flex items-center gap-1">
@@ -4453,7 +4485,7 @@ const ReportesPage: React.FC = () => {
                                         <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fecha</th>
                                         <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nro. Venta</th>
                                         {!filtroCobranzaCliente && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cliente</th>}
-                                        {filtroCobranzaVendedor === 'TODOS' && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendedor</th>}
+                                        {filtroCobranzaVendedores.length !== 1 && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendedor</th>}
                                         <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nota de Venta</th>
                                         {(!filtroCobranzaMetodo || filtroCobranzaMetodo === 'TODOS') && <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Método de Pago</th>}
                                         <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Referencia</th>
@@ -4533,7 +4565,7 @@ const ReportesPage: React.FC = () => {
                                                             </div>
                                                         </td>
                                                     )}
-                                                    {filtroCobranzaVendedor === 'TODOS' && (
+                                                    {filtroCobranzaVendedores.length !== 1 && (
                                                         <td className="p-4 text-sm text-muted-foreground">
                                                             {vendedorLabel}
                                                         </td>

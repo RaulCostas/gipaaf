@@ -17,6 +17,7 @@ import {
 import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
+import MultiSelectVendedores from '../../components/ui/MultiSelectVendedores';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { exportToPDF, exportToExcel, printData, printGroupedData, exportGroupedToPDF, exportGroupedToExcel, type GroupedExportSection } from '../../utils/exportUtils';
@@ -33,7 +34,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedClienteId, setSelectedClienteId] = useState<string>('');
-    const [selectedVendedorId, setSelectedVendedorId] = useState<string>('');
+    const [selectedVendedores, setSelectedVendedores] = useState<string[]>([]);
     const [estadoFiltro, setEstadoFiltro] = useState<'TODOS' | 'PENDIENTE' | 'EN_MORA' | 'AL_DIA' | 'SALDADO'>('PENDIENTE');
     const [facturaFiltro, setFacturaFiltro] = useState<'TODOS' | 'CON_FACTURA' | 'SIN_FACTURA'>('TODOS');
     const [fechaDesde, setFechaDesde] = useState<string>('');
@@ -230,8 +231,12 @@ const EstadoCuentaClientesPage: React.FC = () => {
         };
     };
 
+    const vendedores = useMemo(() => {
+        return personalList?.filter(p => p.cargo === 'VENDEDOR' && p.activo) || [];
+    }, [personalList]);
+
     const handleOpenCarteraModal = (initialVendedorId?: string) => {
-        const vId = initialVendedorId || selectedVendedorId || (personalList && personalList[0] ? String(personalList[0].id) : '');
+        const vId = initialVendedorId || (selectedVendedores.length === 1 ? selectedVendedores[0] : '') || (personalList && personalList[0] ? String(personalList[0].id) : '');
         const targetVend = personalList?.find(p => String(p.id) === String(vId));
         const phone = targetVend?.telefono || '';
         const initialSucursalId = targetVend?.sucursal?.id 
@@ -349,8 +354,9 @@ const EstadoCuentaClientesPage: React.FC = () => {
         // Specific Vendedor filter
         if (isRestrictedVendor) {
             filtered = filtered.filter(s => s.vendedor?.id === userPersonal.id);
-        } else if (selectedVendedorId) {
-            filtered = filtered.filter(s => s.vendedor?.id === Number(selectedVendedorId));
+        } else if (selectedVendedores.length > 0) {
+            const vendSet = new Set(selectedVendedores.map(id => Number(id)));
+            filtered = filtered.filter(s => s.vendedor?.id && vendSet.has(s.vendedor.id));
         }
 
         // Debt / Mora status filter
@@ -397,7 +403,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
         }
 
         return filtered;
-    }, [salesList, selectedSucursal, selectedCiudad, selectedClienteId, selectedVendedorId, estadoFiltro, facturaFiltro, fechaDesde, fechaHasta, searchTerm, isRestrictedVendor, userPersonal]);
+    }, [salesList, selectedSucursal, selectedCiudad, selectedClienteId, selectedVendedores, estadoFiltro, facturaFiltro, fechaDesde, fechaHasta, searchTerm, isRestrictedVendor, userPersonal]);
 
     // Financial Metrics Calculation
     const metrics = useMemo(() => {
@@ -461,7 +467,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
         return filteredVentas.slice(start, start + itemsPerPage);
     }, [filteredVentas, currentPage]);
 
-    React.useEffect(() => setCurrentPage(1), [selectedClienteId, selectedVendedorId, estadoFiltro, facturaFiltro, fechaDesde, fechaHasta, searchTerm]);
+    React.useEffect(() => setCurrentPage(1), [selectedClienteId, selectedVendedores, estadoFiltro, facturaFiltro, fechaDesde, fechaHasta, searchTerm]);
 
     // Export reports
     const exportColumns = [
@@ -531,10 +537,14 @@ const EstadoCuentaClientesPage: React.FC = () => {
         }
 
         // Vendedor
-        if (selectedVendedorId) {
-            const ve = personalList?.find(p => String(p.id) === String(selectedVendedorId));
-            if (ve) {
-                texts.push(`Vendedor: ${ve.nombres} ${ve.apellidos}`);
+        if (selectedVendedores.length > 0) {
+            if (selectedVendedores.length === 1) {
+                const ve = personalList?.find(p => String(p.id) === selectedVendedores[0]);
+                if (ve) {
+                    texts.push(`Vendedor: ${ve.nombres} ${ve.apellidos}`);
+                }
+            } else {
+                texts.push(`Vendedores: ${selectedVendedores.length} seleccionados`);
             }
         }
 
@@ -594,7 +604,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
     const getExportColumns = () => {
         // Al agrupar por cliente, la cabecera del grupo muestra al cliente, manteniendo las demás columnas
         let cols = exportColumns.filter(c => c.dataKey !== 'clienteNombre');
-        if (selectedVendedorId) {
+        if (selectedVendedores.length === 1) {
             cols = cols.filter(c => c.dataKey !== 'vendedorNombre');
         }
         return cols;
@@ -602,6 +612,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
 
     const getGroupedExportData = (): GroupedExportSection[] => {
         const groupsMap = new Map<string, {
+            clientCode: string;
             clientTitle: string;
             rows: any[];
             totalVenta: number;
@@ -612,9 +623,11 @@ const EstadoCuentaClientesPage: React.FC = () => {
         filteredVentas.forEach(v => {
             const cliKey = v.cliente?.id ? String(v.cliente.id) : 'sin_cliente';
             const clientTitle = getClientGroupTitle(v.cliente);
+            const clientCode = (v.cliente?.codigo || '').trim();
 
             if (!groupsMap.has(cliKey)) {
                 groupsMap.set(cliKey, {
+                    clientCode,
                     clientTitle,
                     rows: [],
                     totalVenta: 0,
@@ -624,8 +637,11 @@ const EstadoCuentaClientesPage: React.FC = () => {
             }
 
             const grp = groupsMap.get(cliKey)!;
+            if (!grp.clientCode && clientCode) {
+                grp.clientCode = clientCode;
+            }
+
             const isUSD = v.moneda === 'USD';
-            const sim = isUSD ? '$us' : 'Bs.';
             const total = Number(v.total) || 0;
             const saldo = Number(v.saldo) || 0;
             const cobrado = Math.max(0, total - saldo);
@@ -665,19 +681,37 @@ const EstadoCuentaClientesPage: React.FC = () => {
         const totalIndex = cols.findIndex(c => c.dataKey === 'totalFormateado');
         const prevKey = totalIndex > 0 ? cols[totalIndex - 1].dataKey : 'observaciones';
 
-        return Array.from(groupsMap.values()).map(g => {
-            const subtotals: Record<string, string> = {
-                [prevKey]: 'SUBTOTAL',
-                totalFormateado: fmt(g.totalVenta),
-                cobradoFormateado: fmt(g.totalCobrado),
-                saldoFormateado: fmt(g.totalSaldo)
-            };
-            return {
-                groupTitle: g.clientTitle,
-                rows: g.rows,
-                subtotals
-            };
-        });
+        return Array.from(groupsMap.values())
+            .sort((a, b) => {
+                const codeA = a.clientCode?.trim() || '';
+                const codeB = b.clientCode?.trim() || '';
+                if (codeA && codeB) {
+                    return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+                }
+                if (codeA) return -1;
+                if (codeB) return 1;
+                return a.clientTitle.localeCompare(b.clientTitle, undefined, { numeric: true, sensitivity: 'base' });
+            })
+            .map(g => {
+                g.rows.sort((r1, r2) => {
+                    const f1 = r1.fecha ? r1.fecha.substring(0, 10) : '';
+                    const f2 = r2.fecha ? r2.fecha.substring(0, 10) : '';
+                    if (f1 !== f2) return f1.localeCompare(f2);
+                    return (r1.numero || '').localeCompare(r2.numero || '', undefined, { numeric: true });
+                });
+
+                const subtotals: Record<string, string> = {
+                    [prevKey]: 'SUBTOTAL',
+                    totalFormateado: fmt(g.totalVenta),
+                    cobradoFormateado: fmt(g.totalCobrado),
+                    saldoFormateado: fmt(g.totalSaldo)
+                };
+                return {
+                    groupTitle: g.clientTitle,
+                    rows: g.rows,
+                    subtotals
+                };
+            });
     };
 
     const getTotalsFooter = (): Record<string, string> => {
@@ -855,38 +889,24 @@ const EstadoCuentaClientesPage: React.FC = () => {
                     </div>
 
                     {/* Selector de Vendedor */}
-                    {isRestrictedVendor ? (
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-primary" /> Vendedor</span>
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                            <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-primary" /> Vendedor</span>
+                            {isRestrictedVendor && (
                                 <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5 font-normal">
                                     <Lock className="w-3 h-3" /> Fijo a tu cuenta
                                 </span>
-                            </label>
-                            <div className="w-full p-2 border border-primary/30 rounded-lg bg-muted/40 text-sm font-medium text-primary flex items-center justify-between">
-                                <span>{userPersonal.nombres} {userPersonal.apellidos}</span>
-                                <Lock className="w-3.5 h-3.5 text-muted-foreground" />
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                                <Users className="w-3.5 h-3.5 text-primary" /> Filtrar por Vendedor
-                            </label>
-                            <select
-                                value={selectedVendedorId}
-                                onChange={(e) => setSelectedVendedorId(e.target.value)}
-                                className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all hover:border-primary/50"
-                            >
-                                <option value="">Todos los Vendedores</option>
-                                {personalList?.map(v => (
-                                    <option key={v.id} value={v.id}>
-                                        {v.nombres} {v.apellidos}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
+                            )}
+                        </label>
+                        <MultiSelectVendedores
+                            vendedores={vendedores}
+                            selectedVendedores={selectedVendedores}
+                            onChange={setSelectedVendedores}
+                            isRestrictedVendor={isRestrictedVendor}
+                            userPersonal={userPersonal}
+                            placeholder="Todos los Vendedores"
+                        />
+                    </div>
 
                     {/* Filtro de Tipo de Facturación */}
                     <div className="space-y-1">
@@ -947,11 +967,11 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 onChange={(e) => setFechaHasta(e.target.value)}
                                 className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
                             />
-                            {(fechaDesde || fechaHasta || selectedClienteId || selectedVendedorId || estadoFiltro !== 'PENDIENTE' || facturaFiltro !== 'TODOS') && (
+                            {(fechaDesde || fechaHasta || selectedClienteId || selectedVendedores.length > 0 || estadoFiltro !== 'PENDIENTE' || facturaFiltro !== 'TODOS' || searchTerm) && (
                                 <button
                                     onClick={() => {
                                         setSelectedClienteId('');
-                                        setSelectedVendedorId('');
+                                        setSelectedVendedores([]);
                                         setEstadoFiltro('PENDIENTE');
                                         setFacturaFiltro('TODOS');
                                         setFechaDesde('');
@@ -1027,7 +1047,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 {!selectedClienteId && (
                                     <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cliente</th>
                                 )}
-                                {!selectedVendedorId && (
+                                {selectedVendedores.length !== 1 && (
                                     <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendedor</th>
                                 )}
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nota de Venta</th>
@@ -1045,7 +1065,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                         <tbody className="divide-y">
                             {loadingSales ? (
                                 <tr>
-                                    <td colSpan={10 + (!selectedClienteId ? 1 : 0) + (!selectedVendedorId ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
+                                    <td colSpan={10 + (!selectedClienteId ? 1 : 0) + (selectedVendedores.length !== 1 ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         <div className="flex items-center justify-center gap-2">
                                             <Loader2 className="w-5 h-5 animate-spin text-primary" />
                                             <span>Cargando estado de cuentas de clientes...</span>
@@ -1054,7 +1074,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 </tr>
                             ) : paginatedVentas.length === 0 ? (
                                 <tr>
-                                    <td colSpan={10 + (!selectedClienteId ? 1 : 0) + (!selectedVendedorId ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
+                                    <td colSpan={10 + (!selectedClienteId ? 1 : 0) + (selectedVendedores.length !== 1 ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         No se encontraron cuentas por cobrar para los filtros seleccionados.
                                     </td>
                                 </tr>
@@ -1107,7 +1127,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                                 </div>
                                             </td>
                                         )}
-                                        {!selectedVendedorId && (
+                                        {selectedVendedores.length !== 1 && (
                                             <td className="p-4 text-sm text-muted-foreground">
                                                 {vendedorLabel}
                                             </td>

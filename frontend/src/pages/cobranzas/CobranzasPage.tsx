@@ -13,6 +13,7 @@ import {
 import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
+import MultiSelectVendedores from '../../components/ui/MultiSelectVendedores';
 import { toast } from 'sonner';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { format } from 'date-fns';
@@ -38,7 +39,7 @@ const CobranzasPage: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [filtroCliente, setFiltroCliente] = useState<string>('');
-    const [filtroVendedor, setFiltroVendedor] = useState<string>('');
+    const [filtroVendedores, setFiltroVendedores] = useState<string[]>([]);
     const [filtroEstado, setFiltroEstado] = useState<'TODOS' | 'ACTIVO' | 'ANULADO'>('TODOS');
     const [filtroMetodo, setFiltroMetodo] = useState<string>('TODOS');
     const [fechaDesde, setFechaDesde] = useState<string>('');
@@ -463,10 +464,12 @@ const CobranzasPage: React.FC = () => {
 
         if (isRestrictedVendor) {
             filtered = filtered.filter(p => p.nota?.vendedor?.id === userPersonal.id);
+        } else if (filtroVendedores.length > 0) {
+            const vendSet = new Set(filtroVendedores.map(id => Number(id)));
+            filtered = filtered.filter(p => p.nota?.vendedor?.id && vendSet.has(p.nota.vendedor.id));
         }
 
         if (filtroCliente) filtered = filtered.filter(p => String(p.cliente?.id) === filtroCliente);
-        if (filtroVendedor) filtered = filtered.filter(p => String(p.nota?.vendedor?.id) === filtroVendedor);
         if (filtroEstado === 'ACTIVO') filtered = filtered.filter(p => p.activo);
         else if (filtroEstado === 'ANULADO') filtered = filtered.filter(p => !p.activo);
         if (filtroMetodo !== 'TODOS') filtered = filtered.filter(p => (p.metodoPago || 'Efectivo') === filtroMetodo);
@@ -493,7 +496,7 @@ const CobranzasPage: React.FC = () => {
         }
 
         return filtered;
-    }, [pagosList, selectedSucursal, selectedCiudad, searchTerm, filtroCliente, filtroVendedor, filtroEstado, filtroMetodo, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
+    }, [pagosList, selectedSucursal, selectedCiudad, searchTerm, filtroCliente, filtroVendedores, filtroEstado, filtroMetodo, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
 
     const exportColumns = [
         { header: 'Fecha', dataKey: 'fecha' },
@@ -557,9 +560,13 @@ const CobranzasPage: React.FC = () => {
                 texts.push(`Cliente: ${nombre}`);
             }
         }
-        if (filtroVendedor) {
-            const v = vendedores?.find((ve: any) => String(ve.id) === filtroVendedor);
-            if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+        if (filtroVendedores.length > 0) {
+            if (filtroVendedores.length === 1) {
+                const v = vendedores?.find((ve: any) => String(ve.id) === filtroVendedores[0]);
+                if (v) texts.push(`Vendedor: ${v.nombres} ${v.apellidos}`);
+            } else {
+                texts.push(`Vendedores: ${filtroVendedores.length} seleccionados`);
+            }
         }
         if (filtroEstado === 'ACTIVO') texts.push('Estado: Activos');
         else if (filtroEstado === 'ANULADO') texts.push('Estado: Anulados');
@@ -813,29 +820,19 @@ const CobranzasPage: React.FC = () => {
                 </div>
 
                 {/* Filtro Vendedor */}
-                {isRestrictedVendor ? (
-                    <div className="flex items-center gap-2 bg-card border border-primary/30 rounded-lg px-3 py-2 shadow-sm text-sm text-primary font-medium">
-                        <User className="w-4 h-4 text-primary shrink-0" />
-                        <span>Mis Cobranzas ({userPersonal.nombres} {userPersonal.apellidos})</span>
-                        <Lock className="w-3.5 h-3.5 text-muted-foreground ml-1" />
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                        <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <select
-                            value={filtroVendedor}
-                            onChange={(e) => { setFiltroVendedor(e.target.value); setCurrentPage(1); }}
-                            className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm max-w-[180px] truncate"
-                        >
-                            <option value="" className="bg-background text-foreground">Todos los Vendedores</option>
-                            {vendedores?.map(v => (
-                                <option key={v.id} value={v.id} className="bg-background text-foreground">
-                                    {v.nombres} {v.apellidos}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                )}
+                <div className="w-56 sm:w-64">
+                    <MultiSelectVendedores
+                        vendedores={vendedores}
+                        selectedVendedores={filtroVendedores}
+                        onChange={(vals) => {
+                            setFiltroVendedores(vals);
+                            setCurrentPage(1);
+                        }}
+                        isRestrictedVendor={isRestrictedVendor}
+                        userPersonal={userPersonal}
+                        placeholder="Todos los Vendedores"
+                    />
+                </div>
 
                 {/* Filtro Fecha Desde */}
                 <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
@@ -862,12 +859,12 @@ const CobranzasPage: React.FC = () => {
                 </div>
 
                 {/* Botón Limpiar Filtros */}
-                {(searchTerm || filtroCliente || filtroVendedor || fechaDesde || fechaHasta) && (
+                {(searchTerm || filtroCliente || filtroVendedores.length > 0 || fechaDesde || fechaHasta) && (
                     <button
                         onClick={() => {
                             setSearchTerm('');
                             setFiltroCliente('');
-                            setFiltroVendedor('');
+                            setFiltroVendedores([]);
                             setFechaDesde('');
                             setFechaHasta('');
                             setCurrentPage(1);
