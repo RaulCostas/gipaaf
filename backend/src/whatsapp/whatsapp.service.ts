@@ -103,6 +103,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(WhatsAppService.name);
     private sessions: Map<number, BranchSession> = new Map();
     private baseAuthDir = path.join(process.cwd(), 'whatsapp_auth');
+    private processedMsgIds = new Set<string>();
+    private recentSenderActivity = new Map<string, { lastMsgAt: number; count: number; lastFallbackAt: number; blockedUntil?: number }>();
 
     constructor(
         @InjectRepository(Producto)
@@ -616,10 +618,32 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
             session.sock.ev.on('messages.upsert', async ({ messages, type }) => {
                 if (type !== 'notify') return;
+                const nowSec = Math.floor(Date.now() / 1000);
+
                 for (const m of messages) {
                     if (!m.message || m.key.fromMe) continue;
                     const jid = m.key.remoteJid;
                     if (!jid) continue;
+
+                    // Deduplicación de mensajes procesados
+                    const msgId = m.key.id;
+                    if (msgId) {
+                        if (this.processedMsgIds.has(msgId)) continue;
+                        this.processedMsgIds.add(msgId);
+                        if (this.processedMsgIds.size > 2500) {
+                            const first = this.processedMsgIds.values().next().value;
+                            if (first) this.processedMsgIds.delete(first);
+                        }
+                    }
+
+                    // Ignorar mensajes con más de 60 segundos de antigüedad (evita flood al conectar)
+                    const msgTimestamp = typeof m.messageTimestamp === 'number'
+                        ? m.messageTimestamp
+                        : (Number((m.messageTimestamp as any)?.low) || Number(m.messageTimestamp) || 0);
+
+                    if (msgTimestamp > 0 && (nowSec - msgTimestamp) > 60) {
+                        continue;
+                    }
 
                     // Restricción estricta de Grupos, Canales y Listas de Difusión
                     const isGroup = jid.endsWith('@g.us') || jid.includes('@g.us') || !!m.key.participant;
@@ -643,6 +667,44 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                         msg?.documentWithCaptionMessage?.message?.documentMessage?.caption;
 
                     if (!text || !text.trim()) continue;
+
+                    // Anti-bucle: Ignorar mensajes que contengan texto/menús emitidos por el propio bot
+                    if (this.isBotMessage(text)) {
+                        this.logger.warn(`[Sucursal ${session.sucursalNombre}] Mensaje con contenido de bot detectado de ${jid}. Ignorando para evitar bucles.`);
+                        continue;
+                    }
+
+                    const resolvedPhone = this.resolvePhoneNumberFromJid(session, jid);
+                    const digitsOnly = resolvedPhone 
+                        ? resolvedPhone.replace(/\D/g, '') 
+                        : jid.split('@')[0].split(':')[0].replace(/\D/g, '');
+
+                    // Anti-bucle entre sucursales: Ignorar si proviene de otra sucursal conectada o del mismo número
+                    const isOtherBranch = await this.isFromConnectedBranchOrSelf(session, digitsOnly, jid);
+                    if (isOtherBranch) {
+                        this.logger.warn(`[Sucursal ${session.sucursalNombre}] Mensaje proveniente de otra sucursal conectada o del mismo bot (+${digitsOnly}). Ignorando.`);
+                        continue;
+                    }
+
+                    // Limitador de tasa (Anti-spam / Anti-flood por contacto)
+                    const nowMs = Date.now();
+                    const activity = this.recentSenderActivity.get(jid) || { lastMsgAt: 0, count: 0, lastFallbackAt: 0 };
+                    if (activity.blockedUntil && activity.blockedUntil > nowMs) {
+                        continue;
+                    }
+                    if (nowMs - activity.lastMsgAt < 10000) {
+                        activity.count++;
+                        if (activity.count > 5) {
+                            activity.blockedUntil = nowMs + 60000; // Pausa temporal de 1 minuto
+                            this.recentSenderActivity.set(jid, activity);
+                            this.logger.warn(`[Sucursal ${session.sucursalNombre}] Contacto ${jid} superó 5 mensajes en 10s. Activando protección anti-flood por 60s.`);
+                            continue;
+                        }
+                    } else {
+                        activity.count = 1;
+                    }
+                    activity.lastMsgAt = nowMs;
+                    this.recentSenderActivity.set(jid, activity);
 
                     const pushName = m.pushName || 'Usuario';
                     this.logBranchMessage(session, {
@@ -693,6 +755,67 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         } catch (e) {
             this.logger.error(`Error al limpiar directorio de autenticación para sucursal ${session.sucursalId}:`, e);
         }
+    }
+
+    private isBotMessage(text: string): boolean {
+        if (!text || typeof text !== 'string') return false;
+        const lower = text.toLowerCase();
+        return (
+            lower.includes('*gipaaf*') ||
+            lower.includes('asistente virtual') ||
+            lower.includes('🤖') ||
+            lower.includes('menú principal') ||
+            lower.includes('menu principal') ||
+            lower.includes('cuentas bancarias oficiales') ||
+            lower.includes('consulta de precios y stock') ||
+            lower.includes('extracto de cuenta y saldo') ||
+            lower.includes('información institucional') ||
+            lower.includes('escribe directamente el nombre o código') ||
+            lower.includes('acceso deshabilitado / registro inactivo') ||
+            lower.includes('comunícate con administración para mayor información')
+        );
+    }
+
+    private async isFromConnectedBranchOrSelf(session: BranchSession, senderPhone: string, jid: string): Promise<boolean> {
+        if (!senderPhone && !jid) return true;
+        const cleanSender = senderPhone ? senderPhone.replace(/\D/g, '') : '';
+        const senderLast8 = cleanSender.length >= 8 ? cleanSender.slice(-8) : cleanSender;
+
+        // 1. Verificar si el remitente es el mismo número del bot de esta sucursal
+        if (session.connectedUser?.id) {
+            const ownPhone = session.connectedUser.id.replace(/\D/g, '');
+            const ownLast8 = ownPhone.length >= 8 ? ownPhone.slice(-8) : ownPhone;
+            if (cleanSender && ownPhone && (cleanSender === ownPhone || senderLast8 === ownLast8)) {
+                return true;
+            }
+        }
+
+        // 2. Verificar si el remitente coincide con cualquier OTRA sucursal conectada en el sistema
+        for (const [_, otherSession] of this.sessions) {
+            if (otherSession.connectedUser?.id) {
+                const otherPhone = otherSession.connectedUser.id.replace(/\D/g, '');
+                const otherLast8 = otherPhone.length >= 8 ? otherPhone.slice(-8) : otherPhone;
+                if (cleanSender && otherPhone && (cleanSender === otherPhone || senderLast8 === otherLast8)) {
+                    return true;
+                }
+            }
+        }
+
+        // 3. Verificar contra los números telefónicos registrados de las sucursales en la base de datos
+        try {
+            const allSucursales = await this.sucursalRepo.find({ where: { activo: true }, select: ['telefono'] });
+            for (const suc of allSucursales) {
+                if (suc.telefono) {
+                    const sucPhone = suc.telefono.replace(/\D/g, '');
+                    const sucLast8 = sucPhone.length >= 8 ? sucPhone.slice(-8) : sucPhone;
+                    if (cleanSender && sucPhone && (cleanSender === sucPhone || senderLast8 === sucLast8)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (e) {}
+
+        return false;
     }
 
     private logBranchMessage(session: BranchSession, msg: WhatsAppMessageLog) {
@@ -4515,6 +4638,13 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 if (directProductStock) {
                     responseText = directProductStock;
                 } else {
+                    const nowMs = Date.now();
+                    const activity = this.recentSenderActivity.get(jid) || { lastMsgAt: nowMs, count: 1, lastFallbackAt: 0 };
+                    if (nowMs - (activity.lastFallbackAt || 0) < 25000) {
+                        return; // No volver a spamear el menú si ya se le envió en los últimos 25 segundos
+                    }
+                    activity.lastFallbackAt = nowMs;
+                    this.recentSenderActivity.set(jid, activity);
                     responseText = this.buildMenu(session, userName, false, false, false, false, false, false);
                 }
             }
@@ -4616,6 +4746,13 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             if (directProductStock) {
                 responseText = directProductStock;
             } else {
+                const nowMs = Date.now();
+                const activity = this.recentSenderActivity.get(jid) || { lastMsgAt: nowMs, count: 1, lastFallbackAt: 0 };
+                if (nowMs - (activity.lastFallbackAt || 0) < 25000) {
+                    return; // No volver a spamear el menú si ya se le envió en los últimos 25 segundos
+                }
+                activity.lastFallbackAt = nowMs;
+                this.recentSenderActivity.set(jid, activity);
                 responseText = this.buildMenu(session, userName, isPersonal, isGerente, isAdmin, isJefeVentas, isVendedor, isCliente, personal?.sucursal);
             }
         }
