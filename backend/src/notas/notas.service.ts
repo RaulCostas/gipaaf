@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, EntityManager } from 'typeorm';
 import { Nota, TipoNota, EstadoNota } from './nota.entity';
@@ -21,7 +21,7 @@ import { Proveedor } from '../proveedores/proveedor.entity';
 import { Personal } from '../personal/personal.entity';
 
 @Injectable()
-export class NotasService {
+export class NotasService implements OnModuleInit {
     constructor(
         @InjectRepository(Nota) private notaRepo: Repository<Nota>,
         @InjectRepository(DetalleNota) private detalleRepo: Repository<DetalleNota>,
@@ -29,6 +29,16 @@ export class NotasService {
         @InjectRepository(CostoImportacion) private costoImportacionRepo: Repository<CostoImportacion>,
         private dataSource: DataSource,
     ) { }
+
+    async onModuleInit() {
+        try {
+            await this.detalleRepo.query(`
+                ALTER TABLE detalle_notas ADD COLUMN IF NOT EXISTS "aplicaDescuentoFijo" BOOLEAN DEFAULT false;
+            `);
+        } catch (e) {
+            console.error('Error auto-migrating detalle_notas columns:', e);
+        }
+    }
 
     private getSucursalCode(sucursal?: Sucursal | null): string {
         if (!sucursal) return '';
@@ -158,14 +168,25 @@ export class NotasService {
                     const cant = Number(det.cantidad) || 0;
                     const pu = Number(det.precioUnitario) || 0;
                     const descPorc = Number(det.descuentoPorcentaje) || 0;
-                    const descMonto = Number(((cant * pu * descPorc) / 100).toFixed(2));
-                    const subtotal = Number(((cant * pu) - descMonto).toFixed(2));
+                    const hasFijo = Boolean(det.aplicaDescuentoFijo);
+                    const montoBase = cant * pu;
+                    let sub1 = montoBase;
+                    if (descPorc > 0) {
+                        sub1 = montoBase * (1 - descPorc / 100);
+                    }
+                    let subFinal = sub1;
+                    if (hasFijo) {
+                        subFinal = sub1 * 0.97; // 3% fijo
+                    }
+                    const subtotal = Number(subFinal.toFixed(2));
+                    const descMonto = Number((montoBase - subFinal).toFixed(2));
                     subtotalGeneral += subtotal;
                     return {
                         ...det,
                         cantidad: cant,
                         precioUnitario: pu,
                         descuentoPorcentaje: descPorc,
+                        aplicaDescuentoFijo: hasFijo,
                         descuentoMonto: descMonto,
                         subtotal
                     };
@@ -370,8 +391,18 @@ export class NotasService {
                     const cant = Number(det.cantidad) || 0;
                     const pu = Number(det.precioUnitario) || 0;
                     const descPorc = Number(det.descuentoPorcentaje) || 0;
-                    const descMonto = Number(((cant * pu * descPorc) / 100).toFixed(2));
-                    const subtotal = Number(((cant * pu) - descMonto).toFixed(2));
+                    const hasFijo = Boolean(det.aplicaDescuentoFijo);
+                    const montoBase = cant * pu;
+                    let sub1 = montoBase;
+                    if (descPorc > 0) {
+                        sub1 = montoBase * (1 - descPorc / 100);
+                    }
+                    let subFinal = sub1;
+                    if (hasFijo) {
+                        subFinal = sub1 * 0.97; // 3% fijo
+                    }
+                    const subtotal = Number(subFinal.toFixed(2));
+                    const descMonto = Number((montoBase - subFinal).toFixed(2));
                     subtotalGeneral += subtotal;
 
                     const nuevoDet = manager.create(DetalleNota, {
@@ -1209,6 +1240,7 @@ export class NotasService {
                     precioUnitario: d.precioUnitario,
                     descuentoPorcentaje: d.descuentoPorcentaje || 0,
                     descuentoMonto: d.descuentoMonto || 0,
+                    aplicaDescuentoFijo: d.aplicaDescuentoFijo || false,
                     subtotal: d.subtotal,
                     numeroLote: d.numeroLote || undefined,
                     fechaVencimiento: d.fechaVencimiento || undefined,

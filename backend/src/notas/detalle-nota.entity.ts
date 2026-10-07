@@ -36,6 +36,9 @@ export class DetalleNota {
     @Column({ type: 'decimal', precision: 12, scale: 2, default: 0, nullable: true })
     descuentoMonto: number;
 
+    @Column({ type: 'boolean', default: false, nullable: true })
+    aplicaDescuentoFijo: boolean;
+
     @Column({ nullable: true })
     numeroLote: string;
 

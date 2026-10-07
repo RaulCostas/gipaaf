@@ -221,40 +221,33 @@ const parsePossibleExcelNumber = (val: any, colKey?: string, header?: string): a
     // Clean currency prefixes (Bs., $us, BOB, USD, $)
     const cleanStr = trimmed.replace(/^(Bs\.?|\$us|BOB|USD|\$)\s*/i, '').trim();
 
-    // Check European decimal format: "1.234,56" or "150,00" or "-1.234,56"
+    // 1. European decimal format with comma: "1.234,56" or "150,00" or "-1.234,56" or "0,75"
     if (/^-?\d{1,3}(\.\d{3})*,\d+$/.test(cleanStr) || /^-?\d+,\d+$/.test(cleanStr)) {
       const num = parseFloat(cleanStr.replace(/\./g, '').replace(',', '.'));
       if (!isNaN(num)) return num;
     }
 
-    // Check standard decimal format: "1,234.56" or "150.00" or "-1,234.56"
-    if (/^-?\d{1,3}(,\d{3})*\.\d+$/.test(cleanStr) || /^-?\d+\.\d+$/.test(cleanStr)) {
+    // 2. European integer with dots as thousands: "13.750", "1.375.000", "-13.750" (strictly groups of 3 digits after dot, no comma)
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(cleanStr)) {
+      const num = parseInt(cleanStr.replace(/\./g, ''), 10);
+      if (!isNaN(num)) return num;
+    }
+
+    // 3. Standard US format with commas as thousands: "1,234.56" or "13,750"
+    if (/^-?\d{1,3}(,\d{3})+\.\d+$/.test(cleanStr) || /^-?\d{1,3}(,\d{3})+$/.test(cleanStr)) {
       const num = parseFloat(cleanStr.replace(/,/g, ''));
       if (!isNaN(num)) return num;
     }
 
-    // Check pure integers for known numeric columns
-    const colName = `${colKey || ''} ${header || ''}`.toLowerCase();
-    const isKnownNumericCol = 
-      colName.includes('cant') || 
-      colName.includes('precio') || 
-      colName.includes('costo') || 
-      colName.includes('ganancia') || 
-      colName.includes('total') || 
-      colName.includes('subtotal') || 
-      colName.includes('descuento') || 
-      colName.includes('saldo') || 
-      colName.includes('monto') || 
-      colName.includes('stock') || 
-      colName.includes('deuda') || 
-      colName.includes('credito') ||
-      colName.includes('abono') ||
-      colName.includes('existencia') ||
-      colName.includes('ingreso') ||
-      colName.includes('salida');
-
-    if (isKnownNumericCol && /^-?\d+$/.test(cleanStr)) {
+    // 4. Pure integers: "13750", "5", "-100"
+    if (/^-?\d+$/.test(cleanStr)) {
       const num = parseInt(cleanStr, 10);
+      if (!isNaN(num)) return num;
+    }
+
+    // 5. Standard decimal with dot: "13.75", "0.5"
+    if (/^-?\d+\.\d+$/.test(cleanStr)) {
+      const num = parseFloat(cleanStr);
       if (!isNaN(num)) return num;
     }
   }
@@ -873,8 +866,7 @@ export const exportGroupedToExcel = (
       const newRow: any = {};
       columns.forEach(col => {
         let val = r[col.dataKey];
-        if (typeof val === 'boolean') val = val ? 'Activo' : 'Inactivo';
-        newRow[col.header] = val ?? '';
+        newRow[col.header] = parsePossibleExcelNumber(val, col.dataKey, col.header);
       });
       mappedData.push(newRow);
     });
@@ -882,7 +874,8 @@ export const exportGroupedToExcel = (
     if (g.subtotals) {
       const subRow: any = {};
       columns.forEach(col => {
-        subRow[col.header] = g.subtotals ? (g.subtotals[col.dataKey] ?? '') : '';
+        const sVal = g.subtotals ? (g.subtotals[col.dataKey] ?? '') : '';
+        subRow[col.header] = parsePossibleExcelNumber(sVal, col.dataKey, col.header);
       });
       mappedData.push(subRow);
     }
@@ -891,12 +884,27 @@ export const exportGroupedToExcel = (
   if (grandTotalFooter) {
     const footerRow: any = {};
     columns.forEach(col => {
-      footerRow[col.header] = grandTotalFooter[col.dataKey] ?? '';
+      const fVal = grandTotalFooter[col.dataKey] ?? '';
+      footerRow[col.header] = parsePossibleExcelNumber(fVal, col.dataKey, col.header);
     });
     mappedData.push(footerRow);
   }
 
   const worksheet = XLSX.utils.json_to_sheet(mappedData);
+
+  // Apply native Excel number format to numeric cells so formulas like SUM work automatically
+  Object.keys(worksheet).forEach(cellRef => {
+    if (cellRef.startsWith('!')) return;
+    const cell = worksheet[cellRef];
+    if (cell && cell.t === 'n') {
+      if (Number.isInteger(cell.v)) {
+        cell.z = '#,##0';
+      } else {
+        cell.z = '#,##0.00';
+      }
+    }
+  });
+
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Datos');
   

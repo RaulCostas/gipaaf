@@ -93,9 +93,9 @@ const InventarioPage: React.FC = () => {
     });
 
     const exportColumns = [
-        { header: 'Producto', dataKey: 'producto' },
-        { header: 'Marca', dataKey: 'marca' },
         { header: 'Código', dataKey: 'codigo' },
+        { header: 'Marca', dataKey: 'marca' },
+        { header: 'Producto', dataKey: 'producto' },
         { header: 'Sucursal', dataKey: 'sucursal' },
         { header: 'Stock Actual', dataKey: 'stock' },
         { header: 'Stock Mínimo', dataKey: 'stockMinimo' },

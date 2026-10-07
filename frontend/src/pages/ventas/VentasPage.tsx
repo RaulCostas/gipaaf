@@ -1,4 +1,4 @@
-import { formatCurrency } from '../../utils/currencyUtils';
+import { formatCurrency, formatCurrencyAmount } from '../../utils/currencyUtils';
 import { toast } from 'sonner';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -318,6 +318,7 @@ const ventasPage: React.FC = () => {
                 cantidad: Number(d.cantidad),
                 precioUnitario: Number(d.precioUnitario),
                 descuentoPorcentaje: Number(d.descuentoPorcentaje || 0),
+                aplicaDescuentoFijo: Boolean(d.aplicaDescuentoFijo),
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
@@ -358,6 +359,7 @@ const ventasPage: React.FC = () => {
                 cantidad: Number(d.cantidad),
                 precioUnitario: Number(d.precioUnitario),
                 descuentoPorcentaje: Number(d.descuentoPorcentaje || 0),
+                aplicaDescuentoFijo: Boolean(d.aplicaDescuentoFijo),
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
@@ -424,7 +426,7 @@ const ventasPage: React.FC = () => {
         }
         doc.text(`Condición: ${pagoTexto}`, 80, currentY);
 
-        const hasItemDiscount = newVenta.detalles.some((det: any) => Number(det.descuentoPorcentaje) > 0);
+        const hasItemDiscount = newVenta.detalles.some((det: any) => Number(det.descuentoPorcentaje) > 0 || Boolean(det.aplicaDescuentoFijo));
 
         const tableColumn = hasItemDiscount
             ? ["Código", "Producto", "Cant.", "P.Unit", "Desc. %", "Subtotal"]
@@ -432,6 +434,7 @@ const ventasPage: React.FC = () => {
 
         const tableRows = newVenta.detalles.map((det: any) => {
             const descPct = Number(det.descuentoPorcentaje) || 0;
+            const hasFijo = Boolean(det.aplicaDescuentoFijo);
 
             const row = [
                 det.producto?.codigo || '-',
@@ -441,7 +444,10 @@ const ventasPage: React.FC = () => {
             ];
 
             if (hasItemDiscount) {
-                row.push(descPct > 0 ? `${descPct}%` : '0%');
+                const parts: string[] = [];
+                if (descPct > 0) parts.push(`${descPct}%`);
+                if (hasFijo) parts.push('3% Fijo');
+                row.push(parts.length > 0 ? parts.join(' + ') : '0%');
             }
 
             row.push(formatCurrency(det.subtotal));
@@ -565,6 +571,7 @@ const ventasPage: React.FC = () => {
                 cantidad: 1,
                 precioUnitario: precioVentaNum,
                 descuentoPorcentaje: 0,
+                aplicaDescuentoFijo: false,
                 subtotal: precioVentaNum
             }]
         });
@@ -576,15 +583,28 @@ const ventasPage: React.FC = () => {
         setNewVenta({ ...newVenta, detalles: newDetails });
     };
 
-    const updateDetail = (index: number, field: string, value: number) => {
+    const updateDetail = (index: number, field: string, value: any) => {
         const newDetails = [...newVenta.detalles];
         const det = { ...newDetails[index], [field]: value };
         const cant = Number(det.cantidad) || 0;
         const pu = Number(det.precioUnitario) || 0;
         const descPorc = Math.max(0, Math.min(100, Number(det.descuentoPorcentaje) || 0));
         det.descuentoPorcentaje = descPorc;
-        const descMonto = (cant * pu * descPorc) / 100;
-        det.subtotal = Number(((cant * pu) - descMonto).toFixed(2));
+        const hasFijo = Boolean(det.aplicaDescuentoFijo);
+        det.aplicaDescuentoFijo = hasFijo;
+
+        const montoBase = cant * pu;
+        let sub1 = montoBase;
+        if (descPorc > 0) {
+            sub1 = montoBase * (1 - descPorc / 100);
+        }
+        let subFinal = sub1;
+        if (hasFijo) {
+            subFinal = sub1 * 0.97; // 3% fijo
+        }
+
+        det.subtotal = Number(subFinal.toFixed(2));
+        det.descuentoMonto = Number((montoBase - subFinal).toFixed(2));
         newDetails[index] = det;
         setNewVenta({ ...newVenta, detalles: newDetails });
     };
@@ -594,8 +614,17 @@ const ventasPage: React.FC = () => {
             const cant = Number(det.cantidad) || 0;
             const pu = Number(det.precioUnitario) || 0;
             const descPorc = Number(det.descuentoPorcentaje) || 0;
-            const itemSubtotal = (cant * pu) * (1 - descPorc / 100);
-            return acc + itemSubtotal;
+            const hasFijo = Boolean(det.aplicaDescuentoFijo);
+            const montoBase = cant * pu;
+            let sub1 = montoBase;
+            if (descPorc > 0) {
+                sub1 = montoBase * (1 - descPorc / 100);
+            }
+            let subFinal = sub1;
+            if (hasFijo) {
+                subFinal = sub1 * 0.97; // 3% fijo
+            }
+            return acc + Number(subFinal.toFixed(2));
         }, 0);
         
         // 1. Descuento estándar
@@ -649,7 +678,8 @@ const ventasPage: React.FC = () => {
                 producto: { id: d.productoId },
                 cantidad: d.cantidad,
                 precioUnitario: d.precioUnitario,
-                descuentoPorcentaje: Number(d.descuentoPorcentaje || 0)
+                descuentoPorcentaje: Number(d.descuentoPorcentaje || 0),
+                aplicaDescuentoFijo: Boolean(d.aplicaDescuentoFijo)
             })),
             descuentoPorcentaje: newVenta.descuentoPorcentaje,
             aplicaDescuentoFijo: Boolean(newVenta.aplicaDescuentoFijo),
@@ -1432,6 +1462,7 @@ const ventasPage: React.FC = () => {
                                             <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Cant.</th>
                                             <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">P.Unit</th>
                                             <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Desc. %</th>
+                                            <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">3% Fijo</th>
                                             <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Subtotal</th>
                                             <th className="p-3"></th>
                                         </tr>
@@ -1439,7 +1470,7 @@ const ventasPage: React.FC = () => {
                                     <tbody className="divide-y">
                                         {newVenta.detalles.length === 0 && (
                                             <tr>
-                                                <td colSpan={6} className="p-8 text-center text-muted-foreground italic">
+                                                <td colSpan={7} className="p-8 text-center text-muted-foreground italic">
                                                     El carrito está vacío.
                                                 </td>
                                             </tr>
@@ -1530,12 +1561,24 @@ const ventasPage: React.FC = () => {
                                                         </div>
                                                     </td>
 
+                                                    <td className="p-3 text-center">
+                                                        <label className="inline-flex items-center justify-center cursor-pointer select-none">
+                                                            <input
+                                                                disabled={isViewing}
+                                                                type="checkbox"
+                                                                checked={Boolean(det.aplicaDescuentoFijo)}
+                                                                onChange={(e) => updateDetail(index, 'aplicaDescuentoFijo', e.target.checked)}
+                                                                className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                                                            />
+                                                        </label>
+                                                    </td>
+
                                                     <td className={`p-3 text-center font-bold ${isExceeded ? 'text-red-600' : ''}`}>
                                                         <div className="flex flex-col items-center">
-                                                            <span>{formatCurrency(det.subtotal)}</span>
-                                                            {Number(det.descuentoPorcentaje) > 0 && (
+                                                            <span>{formatCurrencyAmount(det.subtotal)}</span>
+                                                            {(Number(det.descuentoPorcentaje) > 0 || Boolean(det.aplicaDescuentoFijo)) && (
                                                                 <span className="text-[10px] font-normal text-muted-foreground line-through">
-                                                                    {formatCurrency(det.cantidad * det.precioUnitario)}
+                                                                    {formatCurrencyAmount(det.cantidad * det.precioUnitario)}
                                                                 </span>
                                                             )}
                                                         </div>
