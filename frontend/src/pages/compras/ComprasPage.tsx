@@ -265,17 +265,23 @@ const ComprasPage: React.FC = () => {
         const prod = products?.find(p => p.id === Number(prodId));
         if (!prod) return;
 
-        if (newNota.detalles.some((d: any) => d.productoId === prod.id)) return;
+        if (newNota.detalles.some((d: any) => Number(d.productoId || d.producto?.id) === prod.id)) {
+            toast.info('El producto ya está en la lista. Puede modificar su cantidad directamente.');
+            return;
+        }
 
+        const pu = Number(prod.precioCompra) || 0;
         setNewNota({
             ...newNota,
             detalles: [...newNota.detalles, {
                 productoId: prod.id,
                 producto: prod,
                 cantidad: 1,
-                precioUnitario: prod.precioCompra,
+                precioUnitario: pu,
                 descuento: 0,
-                subtotal: prod.precioCompra
+                numeroLote: '',
+                fechaVencimiento: '',
+                subtotal: pu
             }]
         });
     };
@@ -289,13 +295,15 @@ const ComprasPage: React.FC = () => {
     const updateDetail = (index: number, field: string, value: any) => {
         const newDetails = [...newNota.detalles];
         const det = { ...newDetails[index], [field]: value };
-        det.subtotal = det.cantidad * det.precioUnitario;
+        const cant = Number(det.cantidad) || 0;
+        const pu = Number(det.precioUnitario) || 0;
+        det.subtotal = cant * pu;
         newDetails[index] = det;
         setNewNota({ ...newNota, detalles: newDetails });
     };
 
     const calculateTotals = () => {
-        const subtotal = newNota.detalles.reduce((acc: number, det: any) => acc + (det.cantidad * det.precioUnitario), 0);
+        const subtotal = newNota.detalles.reduce((acc: number, det: any) => acc + ((Number(det.cantidad) || 0) * (Number(det.precioUnitario) || 0)), 0);
         const desc1 = (subtotal * Number(newNota.descuentoPorcentaje || 0)) / 100;
         const total = subtotal - desc1;
         return { subtotal, desc1, total };
@@ -337,9 +345,9 @@ const ComprasPage: React.FC = () => {
         }
 
         const tableData = newNota.detalles.map((d: any) => {
-            const prod = products?.find(p => p.id === d.productoId);
+            const prod = products?.find(p => p.id === Number(d.productoId || d.producto?.id)) || d.producto;
             return [
-                prod ? `${prod.codigo} - ${prod.nombre}` : 'Producto',
+                prod ? `${prod.codigo || ''} - ${prod.nombre || ''}` : 'Producto',
                 d.numeroLote || '-',
                 d.fechaVencimiento ? d.fechaVencimiento.split('T')[0].split('-').reverse().join('/') : '-',
                 d.cantidad,
@@ -398,7 +406,7 @@ const ComprasPage: React.FC = () => {
             id: nota.id,
             estado: nota.estado,
             proveedorId: nota.proveedor?.id || '',
-            sucursalId: nota.sucursal?.id || '',
+            sucursalId: nota.sucursal?.id || (nota.almacen?.sucursal?.id || nota.almacenId || ''),
             moneda: nota.moneda || 'BOB',
             tipoCambio: nota.tipoCambio != null ? String(nota.tipoCambio) : '6.96',
             fecha: nota.fecha ? nota.fecha.split('T')[0] : '',
@@ -407,13 +415,13 @@ const ComprasPage: React.FC = () => {
             descuentoPromocionPorcentaje: Number(nota.descuentoPromocionPorcentaje || 0),
             detalles: (nota.detalles || []).map((d: any) => ({
                 producto: d.producto,
-                productoId: d.producto?.id || d.id,
+                productoId: d.producto?.id || d.productoId || (typeof d.producto === 'number' ? d.producto : d.id),
                 cantidad: Number(d.cantidad) || 0,
                 precioUnitario: Number(d.precioUnitario) || 0,
                 descuento: Number(d.descuento) || 0,
-                numeroLote: d.numeroLote,
-                fechaVencimiento: d.fechaVencimiento ? d.fechaVencimiento.split('T')[0] : '',
-                subtotal: Number(d.subtotal) || 0
+                numeroLote: d.numeroLote || (d.movimientosLote?.[0]?.lote?.numeroLote) || '',
+                fechaVencimiento: d.fechaVencimiento ? d.fechaVencimiento.split('T')[0] : (d.movimientosLote?.[0]?.lote?.fechaVencimiento ? String(d.movimientosLote[0].lote.fechaVencimiento).split('T')[0] : ''),
+                subtotal: Number(d.subtotal) || (Number(d.cantidad || 0) * Number(d.precioUnitario || 0))
             }))
         });
         setIsEditing(true);
@@ -424,23 +432,24 @@ const ComprasPage: React.FC = () => {
     const openViewModal = (nota: any) => {
         setNewNota({
             id: nota.id,
+            estado: nota.estado,
             proveedorId: nota.proveedor?.id || '',
-            sucursalId: nota.sucursal?.id || '',
+            sucursalId: nota.sucursal?.id || (nota.almacen?.sucursal?.id || nota.almacenId || ''),
             moneda: nota.moneda || 'BOB',
             tipoCambio: nota.tipoCambio != null ? String(nota.tipoCambio) : '6.96',
             fecha: nota.fecha ? nota.fecha.split('T')[0] : '',
             observaciones: nota.observaciones || '',
             descuentoPorcentaje: Number(nota.descuentoPorcentaje || 0),
             descuentoPromocionPorcentaje: Number(nota.descuentoPromocionPorcentaje || 0),
-            detalles: nota.detalles.map((d: any) => ({
+            detalles: (nota.detalles || []).map((d: any) => ({
                 producto: d.producto,
-                productoId: d.producto?.id || d.productoId,
+                productoId: d.producto?.id || d.productoId || (typeof d.producto === 'number' ? d.producto : d.id),
                 cantidad: Number(d.cantidad) || 0,
                 precioUnitario: Number(d.precioUnitario) || 0,
                 descuento: Number(d.descuento) || 0,
-                numeroLote: d.numeroLote,
-                fechaVencimiento: d.fechaVencimiento ? d.fechaVencimiento.split('T')[0] : '',
-                subtotal: Number(d.subtotal) || 0
+                numeroLote: d.numeroLote || (d.movimientosLote?.[0]?.lote?.numeroLote) || '',
+                fechaVencimiento: d.fechaVencimiento ? d.fechaVencimiento.split('T')[0] : (d.movimientosLote?.[0]?.lote?.fechaVencimiento ? String(d.movimientosLote[0].lote.fechaVencimiento).split('T')[0] : ''),
+                subtotal: Number(d.subtotal) || (Number(d.cantidad || 0) * Number(d.precioUnitario || 0))
             }))
         });
         setIsViewing(true);
@@ -474,12 +483,12 @@ const ComprasPage: React.FC = () => {
             descuentoPorcentaje: newNota.descuentoPorcentaje,
             descuentoPromocionPorcentaje: 0,
             detalles: newNota.detalles.map((d: any) => ({
-                producto: { id: d.productoId },
-                cantidad: d.cantidad,
-                precioUnitario: d.precioUnitario,
-                descuento: d.descuento,
+                producto: { id: Number(d.productoId || d.producto?.id || d.producto) },
+                cantidad: Number(d.cantidad) || 0,
+                precioUnitario: Number(d.precioUnitario) || 0,
+                descuento: Number(d.descuento) || 0,
                 numeroLote: d.numeroLote || null,
-                fechaVencimiento: d.fechaVencimiento || null
+                fechaVencimiento: d.fechaVencimiento ? d.fechaVencimiento.split('T')[0] : null
             }))
         };
         if (isEditing) {
@@ -883,7 +892,7 @@ const ComprasPage: React.FC = () => {
                                                 </button>
                                             );
                                         })()}
-                                        {canEdit && p.estado !== EstadoNota.ANULADA && (
+                                        {p.estado !== EstadoNota.ANULADA && (
                                             <button
                                                 onClick={() => openEditModal(p)}
                                                 className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"

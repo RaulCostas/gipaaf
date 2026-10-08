@@ -302,6 +302,12 @@ export class NotasService implements OnModuleInit {
                 if (data.conFactura !== undefined) nota.conFactura = Boolean(data.conFactura);
                 if (data.numeroFactura !== undefined) nota.numeroFactura = data.numeroFactura;
                 if (data.observaciones !== undefined) nota.observaciones = data.observaciones;
+                if (data.moneda !== undefined) nota.moneda = data.moneda;
+                if (data.tipoCambio !== undefined) {
+                    nota.tipoCambio = Number(data.tipoCambio) || (data.moneda === Moneda.USD ? 6.96 : 1);
+                } else if (data.moneda === Moneda.BOB) {
+                    nota.tipoCambio = 1;
+                }
 
                 if (!data.detalles || !Array.isArray(data.detalles)) {
                     // Si no se enviaron detalles, guardar cambios administrativos
@@ -621,6 +627,12 @@ export class NotasService implements OnModuleInit {
                 nota.descuentoPromocion = descuento2;
                 nota.descuentoPorcentaje = descPorc1;
                 nota.descuentoPromocionPorcentaje = descPorc2;
+                if (data.moneda !== undefined) nota.moneda = data.moneda;
+                if (data.tipoCambio !== undefined) {
+                    nota.tipoCambio = Number(data.tipoCambio) || (data.moneda === Moneda.USD ? 6.96 : 1);
+                } else if (data.moneda === Moneda.BOB) {
+                    nota.tipoCambio = 1;
+                }
 
                 return await manager.save(nota);
             });
