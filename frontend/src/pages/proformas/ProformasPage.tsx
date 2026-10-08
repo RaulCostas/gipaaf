@@ -471,8 +471,35 @@ const ProformasPage: React.FC = () => {
             }
         });
 
-        const finalY = (doc as any).lastAutoTable.finalY || currentY + 8;
+        let finalY = (doc as any).lastAutoTable.finalY || currentY + 8;
         const totals = calculateTotals();
+
+        // Calculate required vertical height for footer (totals + notes)
+        const sonText = `Son: ${numeroALetras(totals.total)}`;
+        const sonLines = doc.splitTextToSize(sonText, 110);
+        const sonHeight = sonLines.length * 4.5;
+
+        let obsHeight = 0;
+        let obsLines: string[] = [];
+        if (newProforma.observaciones) {
+            obsLines = doc.splitTextToSize(newProforma.observaciones, 110);
+            obsHeight = 6 + (obsLines.length * 4.5);
+        }
+        const leftContentHeight = sonHeight + obsHeight;
+
+        let rightLinesCount = 2; // Subtotal and Total
+        if (totals.desc1 > 0) rightLinesCount++;
+        if (totals.desc2 > 0) rightLinesCount++;
+        const rightHeight = rightLinesCount * 5 + 4;
+
+        const summaryContentHeight = Math.max(leftContentHeight, rightHeight) + 8;
+
+        // If footer doesn't fit on the current page, move it to a new page
+        if (finalY + summaryContentHeight > 275) {
+            doc.addPage();
+            finalY = 20;
+        }
+
         let currentTotalY = finalY + 8;
         
         doc.setFontSize(9.5);
@@ -494,17 +521,21 @@ const ProformasPage: React.FC = () => {
         doc.setFont("helvetica", "bold");
         doc.text(`Total: ${formatCurrency(totals.total)}`, 196, currentTotalY, { align: 'right' });
         
+        const startSonY = finalY + 8;
         doc.setFontSize(9.5);
         doc.setFont("helvetica", "normal");
-        doc.text(`Son: ${numeroALetras(totals.total)}`, 14, finalY + 8);
+        doc.text(sonLines, 14, startSonY);
         
+        let leftEndY = startSonY + sonHeight;
+
         if (newProforma.observaciones) {
+            const obsStartY = leftEndY + 4;
             doc.setFontSize(9);
             doc.setTextColor(80, 80, 80);
             doc.setFont("helvetica", "normal");
-            doc.text('Notas:', 14, finalY + 16);
+            doc.text('Notas:', 14, obsStartY);
             doc.setFont("helvetica", "italic");
-            doc.text(newProforma.observaciones, 14, finalY + 21);
+            doc.text(obsLines, 14, obsStartY + 4.5);
         }
 
         printJsPdf(doc);

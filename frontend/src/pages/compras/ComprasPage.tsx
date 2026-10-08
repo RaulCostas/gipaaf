@@ -380,7 +380,11 @@ const ComprasPage: React.FC = () => {
             }
         });
 
-        const finalY = (doc as any).lastAutoTable.finalY + 8;
+        let finalY = (doc as any).lastAutoTable.finalY + 8;
+        if (finalY > 275) {
+            doc.addPage();
+            finalY = 25;
+        }
         doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(30, 30, 30);
