@@ -187,20 +187,20 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                 current.motivo = String(value);
             } else if (field === 'tipoCambio') {
                 current.tipoCambio = value;
-                const rowTc = parseFloat(String(value).replace(',', '.')) || tcFobNum || 1;
+                const rowTc = parseFloat(String(value).replace(',', '.')) || 0;
                 if (current.montoUsd !== undefined && current.montoUsd !== null && current.montoUsd > 0) {
                     current.montoBob = Number((current.montoUsd * rowTc).toFixed(2));
                 }
             } else if (field === 'montoUsd') {
                 const usd = Number(value) || 0;
                 current.montoUsd = usd;
-                const rowTc = parseFloat(String(current.tipoCambio !== undefined && current.tipoCambio !== '' ? current.tipoCambio : tipoCambioFob).replace(',', '.')) || tcFobNum || 1;
+                const rowTc = parseFloat(String(current.tipoCambio !== undefined && current.tipoCambio !== '' ? current.tipoCambio : 0).replace(',', '.')) || 0;
                 // Auto convert to Bob when USD is entered
                 current.montoBob = Number((usd * rowTc).toFixed(2));
             } else if (field === 'montoBob') {
                 const bob = Number(value) || 0;
                 current.montoBob = bob;
-                const rowTc = parseFloat(String(current.tipoCambio !== undefined && current.tipoCambio !== '' ? current.tipoCambio : tipoCambioFob).replace(',', '.')) || tcFobNum || 1;
+                const rowTc = parseFloat(String(current.tipoCambio !== undefined && current.tipoCambio !== '' ? current.tipoCambio : 0).replace(',', '.')) || 0;
                 if (isUSD && rowTc > 0) {
                     current.montoUsd = Number((bob / rowTc).toFixed(2));
                 }
@@ -219,7 +219,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
     };
 
     const handleAddGastoRow = () => {
-        setGastos(prev => [...prev, { motivo: '', montoUsd: 0, tipoCambio: tipoCambioFob || '6.96', montoBob: 0, porcentaje: 0 }]);
+        setGastos(prev => [...prev, { motivo: '', montoUsd: 0, tipoCambio: '', montoBob: 0, porcentaje: 0 }]);
     };
 
     const handleRemoveGastoRow = (index: number) => {
@@ -232,7 +232,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
 
         for (const preset of DEFAULT_EXPENSE_PRESETS) {
             if (!existingMotivos.has(preset.toLowerCase())) {
-                newItems.push({ motivo: preset, montoUsd: 0, tipoCambio: tipoCambioFob || '6.96', montoBob: 0, porcentaje: 0 });
+                newItems.push({ motivo: preset, montoUsd: 0, tipoCambio: '', montoBob: 0, porcentaje: 0 });
             }
         }
         setGastos(newItems);
@@ -302,7 +302,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                 gastos: gastos.map(g => ({
                     motivo: g.motivo,
                     montoUsd: isUSD ? (Number(g.montoUsd) || 0) : 0,
-                    tipoCambio: isUSD ? (parseFloat(String(g.tipoCambio !== undefined && g.tipoCambio !== '' ? g.tipoCambio : tipoCambioFob).replace(',', '.')) || tcFobNum) : 1,
+                    tipoCambio: isUSD ? (parseFloat(String(g.tipoCambio !== undefined && g.tipoCambio !== '' ? g.tipoCambio : 0).replace(',', '.')) || 0) : 0,
                     montoBob: Number(g.montoBob) || 0,
                     porcentaje: costoFobBob > 0 ? Number(((Number(g.montoBob) * 100) / costoFobBob).toFixed(2)) : 0
                 }))
@@ -335,12 +335,12 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
         }
 
         const rowsHtml = gastos.map(g => {
-            const itemTc = g.tipoCambio !== undefined && g.tipoCambio !== '' ? g.tipoCambio : tipoCambioFob;
+            const itemTc = g.tipoCambio !== undefined && g.tipoCambio !== '' ? g.tipoCambio : 0;
             return `
             <tr>
                 <td style="border: 1px solid #ddd; padding: 6px 10px; font-size: 12px;">${g.motivo || '-'}</td>
                 ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">${g.montoUsd ? g.montoUsd.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</td>` : ''}
-                ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-family: monospace;">${itemTc ? Number(itemTc).toFixed(2) : '-'}</td>` : ''}
+                ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-family: monospace;">${itemTc !== undefined && itemTc !== null ? Number(itemTc).toFixed(2) : '0.00'}</td>` : ''}
                 <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-weight: bold;">${(Number(g.montoBob) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">${costoFobBob > 0 ? ((Number(g.montoBob) * 100) / costoFobBob).toFixed(2) : '0.00'}%</td>
             </tr>
@@ -780,7 +780,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                                                         <input
                                                             type="text"
                                                             inputMode="decimal"
-                                                            placeholder={String(tipoCambioFob || '6.96')}
+                                                            placeholder="0.00"
                                                             value={gasto.tipoCambio !== undefined && gasto.tipoCambio !== null ? gasto.tipoCambio : ''}
                                                             onChange={(e) => {
                                                                 const val = e.target.value.replace(',', '.');
