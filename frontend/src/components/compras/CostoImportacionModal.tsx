@@ -3,7 +3,7 @@ import Modal from '../ui/Modal';
 import { 
     Calculator, Plus, Trash2, Save, X, Printer, 
     Sparkles, DollarSign, Calendar, Building2, Package, Coins,
-    CreditCard, Receipt, FileText, Upload, Eye
+    CreditCard, Receipt, FileText, Upload, Eye, FileDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { importacionService } from '../../api/importacionService';
@@ -11,6 +11,9 @@ import type { CostoImportacionData, GastoImportacionItem } from '../../api/impor
 import { formatCurrency } from '../../utils/currencyUtils';
 import { format } from 'date-fns';
 import { useQueryClient } from '@tanstack/react-query';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { getBase64ImageFromURL } from '../../utils/exportUtils';
 
 interface CostoImportacionModalProps {
     isOpen: boolean;
@@ -323,24 +326,18 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
         }
     };
 
-    // Print liquidation sheet with GIPAAF logo
+    // Print liquidation sheet with GIPAAF logo (opens native print dialog)
     const handlePrint = () => {
         const sucursalName = selectedSucursalObj?.nombre || '';
         const ciudadName = selectedSucursalObj?.ciudad?.nombre ? ` - ${selectedSucursalObj.ciudad.nombre}` : '';
-
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) {
-            toast.error('Por favor permite las ventanas emergentes para imprimir');
-            return;
-        }
 
         const rowsHtml = gastos.map(g => {
             const itemTc = g.tipoCambio !== undefined && g.tipoCambio !== '' ? g.tipoCambio : 0;
             return `
             <tr>
                 <td style="border: 1px solid #ddd; padding: 6px 10px; font-size: 12px;">${g.motivo || '-'}</td>
-                ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">${g.montoUsd ? g.montoUsd.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</td>` : ''}
-                ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-family: monospace;">${itemTc !== undefined && itemTc !== null ? Number(itemTc).toFixed(2) : '0.00'}</td>` : ''}
+                ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">${g.montoUsd ? Number(g.montoUsd).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>` : ''}
+                ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-family: monospace;">${itemTc !== undefined && itemTc !== null && Number(itemTc) > 0 ? Number(itemTc).toFixed(2) : '-'}</td>` : ''}
                 <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-weight: bold;">${(Number(g.montoBob) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">${costoFobBob > 0 ? ((Number(g.montoBob) * 100) / costoFobBob).toFixed(2) : '0.00'}%</td>
             </tr>
@@ -357,24 +354,26 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
             </tr>
         `).join('');
 
-        printWindow.document.write(`
+        const fechaFormatted = fecha ? fecha.split('-').reverse().join('/') : '-';
+
+        const htmlContent = `
             <!DOCTYPE html>
             <html>
             <head>
                 <title>Costo de Importación - ${compra?.numero || ''}</title>
                 <style>
-                    @page { size: auto; margin: 15mm; }
-                    body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 20px; color: #111; }
-                    .header-box { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #eaeaea; padding-bottom: 12px; margin-bottom: 15px; }
-                    .logo { max-height: 52px; object-fit: contain; }
+                    @page { size: auto; margin: 12mm; }
+                    body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 10px; color: #111; }
+                    .header-box { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #eaeaea; padding-bottom: 10px; margin-bottom: 12px; }
+                    .logo { max-height: 48px; object-fit: contain; }
                     .title-box { text-align: right; }
-                    .title { font-size: 19px; font-weight: bold; color: #b91c1c; text-transform: uppercase; margin: 0 0 4px 0; }
-                    .subtitle { font-size: 13px; font-weight: bold; color: #333; text-transform: uppercase; margin: 0; }
-                    .info-bar { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 12px; border-radius: 6px; }
-                    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-                    th { background-color: #2980b9; color: #ffffff; border: 1px solid #2980b9; padding: 8px 10px; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .title { font-size: 18px; font-weight: bold; color: #0f172a; text-transform: uppercase; margin: 0 0 3px 0; }
+                    .subtitle { font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase; margin: 0; }
+                    .info-bar { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+                    th { background-color: #2980b9; color: #ffffff; border: 1px solid #2980b9; padding: 7px 8px; font-size: 11.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     .highlight { background-color: #fef08a; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                    .footer-note { font-size: 11px; font-style: italic; color: #666; margin-top: 15px; }
+                    .footer-note { font-size: 10.5px; font-style: italic; color: #666; margin-top: 10px; }
                 </style>
             </head>
             <body>
@@ -389,7 +388,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                 <div class="info-bar">
                     <span><strong>N° Compra:</strong> ${compra?.numero || '-'}</span>
                     <span><strong>Moneda Compra:</strong> ${monedaCompra}</span>
-                    <span><strong>Fecha Liquidación:</strong> ${fecha.split('-').reverse().join('/')}</span>
+                    <span><strong>Fecha Liquidación:</strong> ${fechaFormatted}</span>
                     ${isUSD ? `<span><strong>T/C Compra:</strong> ${compra?.tipoCambio || '6.96'} | <strong>T/C FOB:</strong> ${tipoCambioFob}</span>` : ''}
                 </div>
 
@@ -413,19 +412,19 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                         </tr>
                         ${rowsHtml}
                         <tr style="background-color: #f1f5f9; font-weight: bold;">
-                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 12px;">Costo Total</td>
-                            <td style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 13px;">Bs. ${costoTotalBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td style="border: 1px solid #ddd; padding: 8px 10px;"></td>
+                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 12px;">Costo Total</td>
+                            <td style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 12.5px;">Bs. ${costoTotalBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td style="border: 1px solid #ddd; padding: 7px 10px;"></td>
                         </tr>
                         <tr style="background-color: #e2e8f0; font-weight: bold;">
-                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 13px;">Total Gastos</td>
-                            <td style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 13px; color: #b91c1c;">Bs. ${totalGastosBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td class="highlight" style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 14px; color: #854d0e;">${porcentajeGastosTotal.toFixed(2)}%</td>
+                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 12px;">Total Gastos</td>
+                            <td style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 12.5px; color: #b91c1c;">Bs. ${totalGastosBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td class="highlight" style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 13px; color: #854d0e;">${porcentajeGastosTotal.toFixed(2)}%</td>
                         </tr>
                     </tbody>
                 </table>
 
-                <h4 style="margin: 15px 0 8px 0; font-size: 13px; color: #1e3a8a;">Actualización de Costos por Producto</h4>
+                <h4 style="margin: 12px 0 6px 0; font-size: 12.5px; color: #1e3a8a;">Actualización de Costos por Producto</h4>
                 <table>
                     <thead>
                         <tr>
@@ -446,12 +445,268 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                 </div>
             </body>
             </html>
-        `);
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => {
-            printWindow.print();
-        }, 300);
+        `;
+
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.style.visibility = 'hidden';
+        document.body.appendChild(iframe);
+
+        const doc = iframe.contentWindow?.document || iframe.contentDocument;
+        if (!doc) {
+            iframe.remove();
+            return;
+        }
+
+        doc.open();
+        doc.write(htmlContent);
+        doc.close();
+
+        let hasPrinted = false;
+        const triggerPrint = () => {
+            if (hasPrinted) return;
+            hasPrinted = true;
+            try {
+                iframe.contentWindow?.focus();
+                iframe.contentWindow?.print();
+            } catch (err) {
+                console.error('Error during printing:', err);
+            } finally {
+                setTimeout(() => {
+                    iframe.remove();
+                }, 1000);
+            }
+        };
+
+        const img = doc.querySelector('img');
+        if (img && !img.complete) {
+            img.onload = () => setTimeout(triggerPrint, 50);
+            img.onerror = () => setTimeout(triggerPrint, 50);
+            setTimeout(triggerPrint, 500);
+        } else {
+            setTimeout(triggerPrint, 150);
+        }
+    };
+
+    // Export liquidation sheet as PDF
+    const handleExportPDF = async () => {
+        try {
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            const sucursalName = selectedSucursalObj?.nombre || '';
+            const ciudadName = selectedSucursalObj?.ciudad?.nombre ? ` - ${selectedSucursalObj.ciudad.nombre}` : '';
+
+            // Logo
+            try {
+                const logoBase64 = await getBase64ImageFromURL('/logo.jpeg');
+                doc.addImage(logoBase64, 'JPEG', 14, 10, 36, 15);
+            } catch (e) {
+                console.warn('Logo could not be loaded for PDF', e);
+            }
+
+            // Title & Subtitle
+            doc.setFontSize(13);
+            doc.setTextColor(15, 23, 42); // #0f172a (dark corporate matching other reports)
+            doc.setFont('helvetica', 'bold');
+            doc.text(`COSTO IMPORTACIÓN ${provNombre}`.toUpperCase(), 196, 16, { align: 'right' });
+
+            if (sucursalName) {
+                doc.setFontSize(9.5);
+                doc.setTextColor(71, 85, 105); // #475569
+                doc.setFont('helvetica', 'bold');
+                doc.text(`COSTO ALMACÉN ${sucursalName.toUpperCase()}${ciudadName.toUpperCase()}`, 196, 22, { align: 'right' });
+            }
+
+            // Info bar rectangle & text
+            let currentY = 30;
+            doc.setFillColor(248, 250, 252);
+            doc.setDrawColor(226, 232, 240);
+            doc.roundedRect(14, currentY, 182, 8.5, 1.5, 1.5, 'FD');
+
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(50, 50, 50);
+
+            const fechaFormatted = fecha ? fecha.split('-').reverse().join('/') : '-';
+            const tcInfo = isUSD ? `  |  T/C Compra: ${compra?.tipoCambio || '6.96'}  |  T/C FOB: ${tipoCambioFob}` : '';
+            doc.text(`N° Compra: ${compra?.numero || '-'}   |   Moneda: ${monedaCompra}   |   Fecha Liquidación: ${fechaFormatted}${tcInfo}`, 17, currentY + 5.5);
+
+            currentY += 12;
+
+            // Table 1: Desglose de Gastos
+            const headers1 = isUSD
+                ? ['Concepto / Motivo', 'Dólares ($)', 'T/C (Bs./$)', 'Bolivianos (Bs.)', 'Porcentual']
+                : ['Concepto / Motivo', 'Bolivianos (Bs.)', 'Porcentual'];
+
+            const body1: any[] = [];
+
+            // Costo FOB Row
+            if (isUSD) {
+                body1.push([
+                    `Costo FOB ${provNombre}`,
+                    `$ ${costoFobUsd.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    `${Number(tipoCambioFob).toFixed(2)}`,
+                    `Bs. ${costoFobBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    '100% (Base)'
+                ]);
+            } else {
+                body1.push([
+                    `Costo FOB ${provNombre}`,
+                    `Bs. ${costoFobBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    '100% (Base)'
+                ]);
+            }
+
+            // Expense rows
+            gastos.forEach(g => {
+                const itemTc = g.tipoCambio !== undefined && g.tipoCambio !== '' ? g.tipoCambio : 0;
+                const itemPct = costoFobBob > 0 ? (Number(g.montoBob || 0) * 100) / costoFobBob : 0;
+                if (isUSD) {
+                    body1.push([
+                        g.motivo || '-',
+                        g.montoUsd ? `$ ${Number(g.montoUsd).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-',
+                        itemTc !== undefined && itemTc !== null && Number(itemTc) > 0 ? Number(itemTc).toFixed(2) : '-',
+                        `Bs. ${(Number(g.montoBob) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        `${itemPct.toFixed(2)}%`
+                    ]);
+                } else {
+                    body1.push([
+                        g.motivo || '-',
+                        `Bs. ${(Number(g.montoBob) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        `${itemPct.toFixed(2)}%`
+                    ]);
+                }
+            });
+
+            // Footers
+            const foot1: any[] = [
+                isUSD
+                    ? [
+                        { content: 'Costo Total (FOB + Gastos)', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+                        { content: `Bs. ${costoTotalBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, styles: { halign: 'right', fontStyle: 'bold' } },
+                        { content: '', styles: { halign: 'right' } }
+                    ]
+                    : [
+                        { content: 'Costo Total (FOB + Gastos)', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } },
+                        { content: `Bs. ${costoTotalBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, styles: { halign: 'right', fontStyle: 'bold' } },
+                        { content: '', styles: { halign: 'right' } }
+                    ],
+                isUSD
+                    ? [
+                        { content: 'Total Gastos', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', textColor: [185, 28, 28] } },
+                        { content: `Bs. ${totalGastosBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [185, 28, 28] } },
+                        { content: `${porcentajeGastosTotal.toFixed(2)}%`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [254, 240, 138], textColor: [133, 77, 14] } }
+                    ]
+                    : [
+                        { content: 'Total Gastos', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold', textColor: [185, 28, 28] } },
+                        { content: `Bs. ${totalGastosBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [185, 28, 28] } },
+                        { content: `${porcentajeGastosTotal.toFixed(2)}%`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [254, 240, 138], textColor: [133, 77, 14] } }
+                    ]
+            ];
+
+            autoTable(doc, {
+                startY: currentY,
+                head: [headers1],
+                body: body1,
+                foot: foot1,
+                theme: 'grid',
+                styles: {
+                    font: 'helvetica',
+                    fontSize: 8,
+                    cellPadding: 2,
+                },
+                headStyles: {
+                    fillColor: [41, 128, 185],
+                    textColor: [255, 255, 255],
+                    fontStyle: 'bold',
+                    halign: 'left',
+                },
+                columnStyles: isUSD ? {
+                    0: { halign: 'left' },
+                    1: { halign: 'right' },
+                    2: { halign: 'right' },
+                    3: { halign: 'right' },
+                    4: { halign: 'right' }
+                } : {
+                    0: { halign: 'left' },
+                    1: { halign: 'right' },
+                    2: { halign: 'right' }
+                },
+                footStyles: {
+                    fillColor: [241, 245, 249],
+                    textColor: [30, 41, 59],
+                    fontStyle: 'bold'
+                }
+            });
+
+            currentY = (doc as any).lastAutoTable.finalY + 7;
+
+            // Table 2: Productos
+            doc.setFontSize(9.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 58, 138); // #1e3a8a
+            doc.text('Actualización de Costos por Producto', 14, currentY);
+
+            currentY += 2;
+
+            const headers2 = ['Código', 'Producto', 'Cant.', `Costo FOB Unit. (${monedaCompra})`, 'Nuevo Costo Real (Bs.)'];
+            const body2 = productosPreview.map((p: any) => [
+                p.codigo,
+                p.nombre,
+                p.cantidad.toString(),
+                isUSD ? `$ ${p.precioUnitarioOriginal.toFixed(2)} (Bs. ${p.precioUnitarioFobBob.toFixed(2)})` : `Bs. ${p.precioUnitarioOriginal.toFixed(2)}`,
+                `Bs. ${p.nuevoPrecioCompra.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            ]);
+
+            autoTable(doc, {
+                startY: currentY,
+                head: [headers2],
+                body: body2,
+                theme: 'grid',
+                styles: {
+                    font: 'helvetica',
+                    fontSize: 7.5,
+                    cellPadding: 1.8,
+                },
+                headStyles: {
+                    fillColor: [41, 128, 185],
+                    textColor: [255, 255, 255],
+                    fontStyle: 'bold',
+                },
+                columnStyles: {
+                    0: { halign: 'left', cellWidth: 25 },
+                    1: { halign: 'left' },
+                    2: { halign: 'center', cellWidth: 16 },
+                    3: { halign: 'right', cellWidth: 42 },
+                    4: { halign: 'right', cellWidth: 42, fontStyle: 'bold', textColor: [30, 58, 138] }
+                }
+            });
+
+            const finalY = (doc as any).lastAutoTable.finalY + 5;
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(100, 100, 100);
+            doc.text(
+                `Fórmula aplicada: Total Gastos x 100 / Costo FOB = ${porcentajeGastosTotal.toFixed(2)}% de incremento aplicado al costo de compra de cada producto.`,
+                14,
+                finalY
+            );
+
+            doc.save(`costo_importacion_${compra?.numero || 'liquidacion'}.pdf`);
+            toast.success('Documento PDF exportado correctamente');
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            toast.error('Error al generar el archivo PDF');
+        }
     };
 
     if (!compra) return null;
@@ -921,13 +1176,23 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
 
                     {/* Modal Footer Actions */}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border">
-                        <button
-                            type="button"
-                            onClick={handlePrint}
-                            className="inline-flex items-center gap-2 px-4 py-2 border rounded-lg text-xs font-bold hover:bg-accent text-foreground transition-all shadow-sm cursor-pointer w-full sm:w-auto justify-center"
-                        >
-                            <Printer className="w-4 h-4 text-muted-foreground" /> Imprimir Liquidación
-                        </button>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <button
+                                type="button"
+                                onClick={handlePrint}
+                                className="inline-flex items-center gap-2 px-4 py-2 border rounded-lg text-xs font-bold hover:bg-accent text-foreground transition-all shadow-sm cursor-pointer w-full sm:w-auto justify-center"
+                            >
+                                <Printer className="w-4 h-4 text-muted-foreground" /> Imprimir Liquidación
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleExportPDF}
+                                className="inline-flex items-center gap-2 px-4 py-2 border border-red-200 dark:border-red-900/40 rounded-lg text-xs font-bold hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400 transition-all shadow-sm cursor-pointer w-full sm:w-auto justify-center"
+                                title="Descargar planilla de liquidación en formato PDF"
+                            >
+                                <FileDown className="w-4 h-4" /> Exportar PDF
+                            </button>
+                        </div>
 
                         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                             <button

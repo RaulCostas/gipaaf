@@ -10,7 +10,7 @@ import {
     X, Save, ChevronLeft, ChevronRight, Edit,
     Printer, FileText, FileSpreadsheet, AlertTriangle,
     Building2, Calendar, Eye, Truck, Package, CheckCircle2, XCircle, Filter,
-    MessageCircle, Send, Loader2, ExternalLink
+    MessageCircle, Send, Loader2, ExternalLink, Check
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
@@ -115,6 +115,7 @@ const TraspasosPage: React.FC = () => {
     });
 
     const [itemsList, setItemsList] = useState<ItemForm[]>([]);
+    const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
     const [selectedProdId, setSelectedProdId] = useState<string>('');
     const [selectedNumeroLote, setSelectedNumeroLote] = useState<string>('');
     const [itemCantidad, setItemCantidad] = useState<string>('1');
@@ -174,17 +175,30 @@ const TraspasosPage: React.FC = () => {
 
     const selectedProductStockInOrigen = useMemo(() => {
         if (!selectedProdId || !formData.sucursalOrigenId) return 0;
+        let baseStock = 0;
         if (selectedNumeroLote) {
             const found = availableLotesInOrigen.find(l => l.numeroLote === selectedNumeroLote);
-            return found ? Number(found.cantidadActual) : 0;
+            baseStock = found ? Number(found.cantidadActual) : 0;
+        } else {
+            baseStock = getStockInOrigen(Number(selectedProdId), Number(formData.sucursalOrigenId));
         }
-        return getStockInOrigen(Number(selectedProdId), Number(formData.sucursalOrigenId));
-    }, [selectedProdId, selectedNumeroLote, availableLotesInOrigen, formData.sucursalOrigenId, inventarios]);
+
+        if (editingId && editingItemIndex !== null && itemsList[editingItemIndex]) {
+            const currentItem = itemsList[editingItemIndex];
+            if (currentItem.productoId === Number(selectedProdId) && (currentItem.numeroLote || '') === (selectedNumeroLote || '')) {
+                baseStock += currentItem.cantidad;
+            }
+        }
+        return baseStock;
+    }, [selectedProdId, selectedNumeroLote, availableLotesInOrigen, formData.sucursalOrigenId, inventarios, editingId, editingItemIndex, itemsList]);
 
     const productOptions: SearchableOption[] = useMemo(() => {
         if (!productos) return [];
         return productos.map(p => {
-            const stock = getStockInOrigen(p.id, Number(formData.sucursalOrigenId));
+            let stock = getStockInOrigen(p.id, Number(formData.sucursalOrigenId));
+            if (editingId && editingItemIndex !== null && itemsList[editingItemIndex]?.productoId === p.id) {
+                stock += itemsList[editingItemIndex].cantidad;
+            }
             const isOutOfStock = stock <= 0;
             return {
                 value: p.id,
@@ -196,9 +210,9 @@ const TraspasosPage: React.FC = () => {
                 disabled: isOutOfStock
             };
         });
-    }, [productos, formData.sucursalOrigenId, inventarios]);
+    }, [productos, formData.sucursalOrigenId, inventarios, editingId, editingItemIndex, itemsList]);
 
-    // Handle adding item to the transfer
+    // Handle adding or updating item in the transfer list
     const handleAddItem = () => {
         setError(null);
         if (!selectedProdId) {
@@ -218,40 +232,73 @@ const TraspasosPage: React.FC = () => {
 
         const stockDisponible = getStockInOrigen(prodId, Number(formData.sucursalOrigenId));
         const chosenLot = selectedNumeroLote ? availableLotesInOrigen.find(l => l.numeroLote === selectedNumeroLote) : null;
-        const lotMax = chosenLot ? Number(chosenLot.cantidadActual) : stockDisponible;
+        let lotMax = chosenLot ? Number(chosenLot.cantidadActual) : stockDisponible;
 
-        if (qty > lotMax) {
+        // If editing a traspaso and modifying an item, add back its previously assigned quantity
+        if (editingId && editingItemIndex !== null && itemsList[editingItemIndex]) {
+            const currentItem = itemsList[editingItemIndex];
+            if (currentItem.productoId === prodId && (currentItem.numeroLote || '') === (selectedNumeroLote || '')) {
+                lotMax += currentItem.cantidad;
+            }
+        }
+
+        // Calculate quantity already assigned to other items in the list for same product and lot
+        const otherQtyInList = itemsList
+            .filter((_, idx) => editingItemIndex !== null ? idx !== editingItemIndex : true)
+            .filter(i => i.productoId === prodId && (i.numeroLote || '') === (selectedNumeroLote || ''))
+            .reduce((acc, curr) => acc + curr.cantidad, 0);
+
+        if (qty + otherQtyInList > lotMax) {
+            const remaining = Math.max(0, lotMax - otherQtyInList);
             setError(chosenLot 
-                ? `Stock insuficiente en el lote "${chosenLot.numeroLote}". Disponible en lote: ${lotMax}, Solicitado: ${qty}`
-                : `Stock insuficiente en la sucursal de origen. Disponible: ${stockDisponible}, Solicitado: ${qty}`
+                ? `Stock insuficiente en el lote "${chosenLot.numeroLote}". Disponible: ${remaining}, Solicitado: ${qty}`
+                : `Stock insuficiente en la sucursal de origen. Disponible: ${remaining}, Solicitado: ${qty}`
             );
             return;
         }
 
-        const existingIndex = itemsList.findIndex(i => i.productoId === prodId && (i.numeroLote || '') === (selectedNumeroLote || ''));
-        if (existingIndex >= 0) {
-            const newTotalQty = itemsList[existingIndex].cantidad + qty;
-            if (newTotalQty > lotMax) {
-                setError(`La cantidad total (${newTotalQty}) supera el stock disponible (${lotMax})`);
-                return;
-            }
+        if (editingItemIndex !== null) {
+            // Update existing item in the list
             const updated = [...itemsList];
-            updated[existingIndex].cantidad = newTotalQty;
-            if (itemObservacion) updated[existingIndex].observacion = itemObservacion;
+            updated[editingItemIndex] = {
+                productoId: prodId,
+                producto: prod,
+                cantidad: qty,
+                numeroLote: selectedNumeroLote || undefined,
+                fechaVencimiento: chosenLot?.fechaVencimiento || updated[editingItemIndex]?.fechaVencimiento || undefined,
+                stockDisponible: lotMax,
+                observacion: itemObservacion
+            };
             setItemsList(updated);
+            setEditingItemIndex(null);
+            toast.success(`Producto "${prod.nombre}" actualizado en la lista`);
         } else {
-            setItemsList([
-                ...itemsList,
-                {
-                    productoId: prodId,
-                    producto: prod,
-                    cantidad: qty,
-                    numeroLote: selectedNumeroLote || undefined,
-                    fechaVencimiento: chosenLot?.fechaVencimiento || undefined,
-                    stockDisponible,
-                    observacion: itemObservacion
+            // Add new item to the list
+            const existingIndex = itemsList.findIndex(i => i.productoId === prodId && (i.numeroLote || '') === (selectedNumeroLote || ''));
+            if (existingIndex >= 0) {
+                const newTotalQty = itemsList[existingIndex].cantidad + qty;
+                if (newTotalQty > lotMax) {
+                    setError(`La cantidad total (${newTotalQty}) supera el stock disponible (${lotMax})`);
+                    return;
                 }
-            ]);
+                const updated = [...itemsList];
+                updated[existingIndex].cantidad = newTotalQty;
+                if (itemObservacion) updated[existingIndex].observacion = itemObservacion;
+                setItemsList(updated);
+            } else {
+                setItemsList([
+                    ...itemsList,
+                    {
+                        productoId: prodId,
+                        producto: prod,
+                        cantidad: qty,
+                        numeroLote: selectedNumeroLote || undefined,
+                        fechaVencimiento: chosenLot?.fechaVencimiento || undefined,
+                        stockDisponible: lotMax,
+                        observacion: itemObservacion
+                    }
+                ]);
+            }
         }
 
         setSelectedProdId('');
@@ -260,7 +307,32 @@ const TraspasosPage: React.FC = () => {
         setItemObservacion('');
     };
 
+    const handleEditItem = (index: number) => {
+        const item = itemsList[index];
+        if (!item) return;
+        setEditingItemIndex(index);
+        setSelectedProdId(String(item.productoId));
+        setSelectedNumeroLote(item.numeroLote || '');
+        setItemCantidad(String(item.cantidad));
+        setItemObservacion(item.observacion || '');
+        setError(null);
+    };
+
+    const handleCancelEditItem = () => {
+        setEditingItemIndex(null);
+        setSelectedProdId('');
+        setSelectedNumeroLote('');
+        setItemCantidad('1');
+        setItemObservacion('');
+        setError(null);
+    };
+
     const handleRemoveItem = (index: number) => {
+        if (editingItemIndex === index) {
+            handleCancelEditItem();
+        } else if (editingItemIndex !== null && editingItemIndex > index) {
+            setEditingItemIndex(editingItemIndex - 1);
+        }
         setItemsList(itemsList.filter((_, idx) => idx !== index));
     };
 
@@ -320,6 +392,7 @@ const TraspasosPage: React.FC = () => {
 
     const resetForm = () => {
         setEditingId(null);
+        setEditingItemIndex(null);
         setFormData({
             codigo: '',
             fecha: format(new Date(), 'yyyy-MM-dd'),
@@ -343,6 +416,7 @@ const TraspasosPage: React.FC = () => {
         const destId = (t.sucursalDestino || t.almacenDestino)?.id ? String((t.sucursalDestino || t.almacenDestino)?.id) : '';
 
         setEditingId(t.id);
+        setEditingItemIndex(null);
         setFormData({
             codigo: t.codigo || '',
             fecha: t.fecha ? String(t.fecha).substring(0, 10) : format(new Date(), 'yyyy-MM-dd'),
@@ -1362,6 +1436,22 @@ const TraspasosPage: React.FC = () => {
                                 </p>
                             ) : (
                                 <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/60">
+                                    {editingItemIndex !== null && (
+                                        <div className="flex items-center justify-between p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg text-xs text-blue-700 dark:text-blue-300 shadow-xs">
+                                            <div className="flex items-center gap-1.5 font-bold">
+                                                <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                                <span>Modificando producto en la lista: <span className="underline">{itemsList[editingItemIndex]?.producto?.nombre}</span></span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={handleCancelEditItem}
+                                                className="text-[11px] font-semibold hover:underline flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                                            >
+                                                <X className="w-3.5 h-3.5" /> Cancelar edición
+                                            </button>
+                                        </div>
+                                    )}
+
                                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                                         <div className="sm:col-span-8 space-y-1">
                                             <label className="text-[11px] font-semibold text-muted-foreground">Producto</label>
@@ -1423,7 +1513,7 @@ const TraspasosPage: React.FC = () => {
                                             />
                                         </div>
 
-                                        <div className="sm:col-span-7 space-y-1">
+                                        <div className="sm:col-span-6 space-y-1">
                                             <label className="text-[11px] font-semibold text-muted-foreground">Observación (Opcional)</label>
                                             <input
                                                 type="text"
@@ -1440,16 +1530,35 @@ const TraspasosPage: React.FC = () => {
                                             />
                                         </div>
 
-                                        <div className="sm:col-span-2">
+                                        <div className={`sm:col-span-3 flex items-center gap-1.5`}>
                                             <button
                                                 type="button"
                                                 onClick={handleAddItem}
-                                                className="w-full min-h-[38px] py-2 px-3 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
-                                                title="Agregar a la lista"
+                                                className={`w-full min-h-[38px] py-2 px-3 ${editingItemIndex !== null ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-primary text-primary-foreground hover:opacity-90'} text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer`}
+                                                title={editingItemIndex !== null ? 'Actualizar cambios del producto' : 'Agregar a la lista'}
                                             >
-                                                <Plus className="w-4 h-4 shrink-0" />
-                                                <span>Agregar</span>
+                                                {editingItemIndex !== null ? (
+                                                    <>
+                                                        <Check className="w-4 h-4 shrink-0" />
+                                                        <span>Actualizar</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Plus className="w-4 h-4 shrink-0" />
+                                                        <span>Agregar</span>
+                                                    </>
+                                                )}
                                             </button>
+                                            {editingItemIndex !== null && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCancelEditItem}
+                                                    className="px-2.5 min-h-[38px] border rounded-lg text-xs font-semibold hover:bg-accent text-foreground transition-all cursor-pointer"
+                                                    title="Cancelar edición"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -1466,12 +1575,15 @@ const TraspasosPage: React.FC = () => {
                                                 <th className="p-2.5 font-semibold text-muted-foreground text-center">Stock Origen</th>
                                                 <th className="p-2.5 font-semibold text-muted-foreground text-right">Cant. a Traspasar</th>
                                                 <th className="p-2.5 font-semibold text-muted-foreground">Detalle</th>
-                                                <th className="p-2.5 font-semibold text-muted-foreground text-right w-12"></th>
+                                                <th className="p-2.5 font-semibold text-muted-foreground text-right w-20">Acciones</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
                                             {itemsList.map((item, idx) => (
-                                                <tr key={idx} className="hover:bg-accent/30">
+                                                <tr 
+                                                    key={idx} 
+                                                    className={`hover:bg-accent/30 transition-colors ${editingItemIndex === idx ? 'bg-blue-50/80 dark:bg-blue-950/40 border-l-4 border-l-blue-500' : ''}`}
+                                                >
                                                     <td className="p-2.5 font-medium">
                                                         {item.producto?.nombre}
                                                         {item.producto?.codigo && (
@@ -1504,14 +1616,24 @@ const TraspasosPage: React.FC = () => {
                                                         {item.observacion || '-'}
                                                     </td>
                                                     <td className="p-2.5 text-right">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemoveItem(idx)}
-                                                            className="p-1 text-red-600 hover:bg-red-500/10 rounded transition-colors"
-                                                            title="Eliminar producto"
-                                                        >
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleEditItem(idx)}
+                                                                className={`p-1.5 rounded transition-colors cursor-pointer ${editingItemIndex === idx ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-blue-600 hover:bg-blue-500/10'}`}
+                                                                title="Editar producto"
+                                                            >
+                                                                <Edit className="w-3.5 h-3.5" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveItem(idx)}
+                                                                className="p-1.5 text-red-600 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
+                                                                title="Eliminar producto"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
