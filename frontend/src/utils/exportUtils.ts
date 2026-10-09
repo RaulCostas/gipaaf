@@ -371,6 +371,9 @@ export const printData = (
           th, td { padding: ${thPadding}; border-bottom: 1px solid #e2e8f0; font-size: ${thFontSize}; word-break: break-word; line-height: 1.25; }
           th { background-color: #2980b9 !important; color: #ffffff !important; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; white-space: nowrap; }
           tr:nth-child(even) { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          tfoot {
+            display: table-row-group !important;
+          }
           tfoot tr td { 
             background-color: #f1f5f9 !important; 
             color: #0f172a !important; 

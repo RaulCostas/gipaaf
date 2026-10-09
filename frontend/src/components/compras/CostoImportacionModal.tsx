@@ -73,7 +73,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
     // Form states
     const [fecha, setFecha] = useState<string>(() => getLocalDateString());
     const [selectedSucursalId, setSelectedSucursalId] = useState<string>('');
-    const [tipoCambio, setTipoCambio] = useState<string | number>('6.96');
+    const [tipoCambioFob, setTipoCambioFob] = useState<string | number>('6.96');
     const [monedaGastos, setMonedaGastos] = useState<'BOB' | 'USD'>('BOB');
     const [metodoPago, setMetodoPago] = useState<string>('Transferencia Bancaria');
     const [referencia, setReferencia] = useState<string>('');
@@ -113,7 +113,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                 if (existing) {
                     setFecha(getLocalDateString(existing.fecha || compra.fecha));
                     setSelectedSucursalId(existing.sucursalId ? String(existing.sucursalId) : '');
-                    setTipoCambio(existing.tipoCambio != null ? String(existing.tipoCambio) : (compra.tipoCambio != null ? String(compra.tipoCambio) : '6.96'));
+                    setTipoCambioFob(existing.tipoCambio != null ? String(existing.tipoCambio) : (compra.tipoCambio != null ? String(compra.tipoCambio) : '6.96'));
                     setMonedaGastos(existing.monedaGastos || 'BOB');
                     setMetodoPago(existing.metodoPago || 'Transferencia Bancaria');
                     setReferencia(existing.referencia || '');
@@ -123,7 +123,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                     // Por primera vez (sin registro): iniciar vacío para que el usuario use 'Cargar Plantilla'
                     setFecha(getLocalDateString(compra.fecha));
                     setSelectedSucursalId('');
-                    setTipoCambio(compra.tipoCambio != null ? String(compra.tipoCambio) : '6.96');
+                    setTipoCambioFob(compra.tipoCambio != null ? String(compra.tipoCambio) : '6.96');
                     setMonedaGastos('BOB');
                     setMetodoPago('Transferencia Bancaria');
                     setReferencia('');
@@ -159,23 +159,23 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
         }
     };
 
-    // Numeric value of tipoCambio
-    const tcNum = useMemo(() => {
-        return parseFloat(String(tipoCambio).replace(',', '.')) || 6.96;
-    }, [tipoCambio]);
+    // Numeric value of tipoCambioFob
+    const tcFobNum = useMemo(() => {
+        return parseFloat(String(tipoCambioFob).replace(',', '.')) || (compra?.tipoCambio ? Number(compra.tipoCambio) : 6.96);
+    }, [tipoCambioFob, compra?.tipoCambio]);
 
     // Calculate FOB amounts respecting the purchase's original currency
     const totalCompra = Number(compra?.total) || 0;
 
     const costoFobUsd = useMemo(() => {
         if (isUSD) return totalCompra;
-        return tcNum > 0 ? totalCompra / tcNum : 0;
-    }, [isUSD, totalCompra, tcNum]);
+        return tcFobNum > 0 ? totalCompra / tcFobNum : 0;
+    }, [isUSD, totalCompra, tcFobNum]);
 
     const costoFobBob = useMemo(() => {
         if (!isUSD) return totalCompra;
-        return totalCompra * (tcNum || 1);
-    }, [isUSD, totalCompra, tcNum]);
+        return totalCompra * (tcFobNum || 1);
+    }, [isUSD, totalCompra, tcFobNum]);
 
     // Handle updating expense row
     const handleUpdateGasto = (index: number, field: keyof GastoImportacionItem, value: any) => {
@@ -185,16 +185,24 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
 
             if (field === 'motivo') {
                 current.motivo = String(value);
+            } else if (field === 'tipoCambio') {
+                current.tipoCambio = value;
+                const rowTc = parseFloat(String(value).replace(',', '.')) || tcFobNum || 1;
+                if (current.montoUsd !== undefined && current.montoUsd !== null && current.montoUsd > 0) {
+                    current.montoBob = Number((current.montoUsd * rowTc).toFixed(2));
+                }
             } else if (field === 'montoUsd') {
                 const usd = Number(value) || 0;
                 current.montoUsd = usd;
-                // Auto convert to Bob if USD was entered
-                current.montoBob = Number((usd * (tcNum || 1)).toFixed(2));
+                const rowTc = parseFloat(String(current.tipoCambio !== undefined && current.tipoCambio !== '' ? current.tipoCambio : tipoCambioFob).replace(',', '.')) || tcFobNum || 1;
+                // Auto convert to Bob when USD is entered
+                current.montoBob = Number((usd * rowTc).toFixed(2));
             } else if (field === 'montoBob') {
                 const bob = Number(value) || 0;
                 current.montoBob = bob;
-                if (isUSD && tcNum > 0) {
-                    current.montoUsd = Number((bob / tcNum).toFixed(2));
+                const rowTc = parseFloat(String(current.tipoCambio !== undefined && current.tipoCambio !== '' ? current.tipoCambio : tipoCambioFob).replace(',', '.')) || tcFobNum || 1;
+                if (isUSD && rowTc > 0) {
+                    current.montoUsd = Number((bob / rowTc).toFixed(2));
                 }
             }
 
@@ -211,7 +219,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
     };
 
     const handleAddGastoRow = () => {
-        setGastos(prev => [...prev, { motivo: '', montoUsd: 0, montoBob: 0, porcentaje: 0 }]);
+        setGastos(prev => [...prev, { motivo: '', montoUsd: 0, tipoCambio: tipoCambioFob || '6.96', montoBob: 0, porcentaje: 0 }]);
     };
 
     const handleRemoveGastoRow = (index: number) => {
@@ -224,7 +232,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
 
         for (const preset of DEFAULT_EXPENSE_PRESETS) {
             if (!existingMotivos.has(preset.toLowerCase())) {
-                newItems.push({ motivo: preset, montoUsd: 0, montoBob: 0, porcentaje: 0 });
+                newItems.push({ motivo: preset, montoUsd: 0, tipoCambio: tipoCambioFob || '6.96', montoBob: 0, porcentaje: 0 });
             }
         }
         setGastos(newItems);
@@ -252,7 +260,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
 
         return compra.detalles.map((det: any) => {
             const unitPriceOriginal = Number(det.precioUnitario) || 0;
-            const unitPriceBob = isUSD ? unitPriceOriginal * (tcNum || 1) : unitPriceOriginal;
+            const unitPriceBob = isUSD ? unitPriceOriginal * (tcFobNum || 1) : unitPriceOriginal;
             const landedCost = unitPriceBob * factor;
 
             return {
@@ -266,18 +274,22 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                 incrementoUnitario: Number((landedCost - unitPriceBob).toFixed(2))
             };
         });
-    }, [compra, isUSD, tcNum, porcentajeGastosTotal]);
+    }, [compra, isUSD, tcFobNum, porcentajeGastosTotal]);
 
     // Handle Save
     const handleSave = async () => {
         if (!compra?.id) return;
+        if (!selectedSucursalId || selectedSucursalId === '') {
+            toast.error('Debe seleccionar la Sucursal / Almacén Destino (campo obligatorio)');
+            return;
+        }
         setIsSaving(true);
         try {
             const payload: Partial<CostoImportacionData> = {
                 notaId: compra.id,
-                sucursalId: selectedSucursalId ? Number(selectedSucursalId) : undefined,
+                sucursalId: Number(selectedSucursalId),
                 fecha: fecha ? fecha.substring(0, 10) : getLocalDateString(),
-                tipoCambio: isUSD ? tcNum : 1,
+                tipoCambio: isUSD ? tcFobNum : 1,
                 costoFobUsd: Number(costoFobUsd.toFixed(2)),
                 costoFobBob: Number(costoFobBob.toFixed(2)),
                 totalGastosBob: Number(totalGastosBob.toFixed(2)),
@@ -290,6 +302,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                 gastos: gastos.map(g => ({
                     motivo: g.motivo,
                     montoUsd: isUSD ? (Number(g.montoUsd) || 0) : 0,
+                    tipoCambio: isUSD ? (parseFloat(String(g.tipoCambio !== undefined && g.tipoCambio !== '' ? g.tipoCambio : tipoCambioFob).replace(',', '.')) || tcFobNum) : 1,
                     montoBob: Number(g.montoBob) || 0,
                     porcentaje: costoFobBob > 0 ? Number(((Number(g.montoBob) * 100) / costoFobBob).toFixed(2)) : 0
                 }))
@@ -321,14 +334,18 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
             return;
         }
 
-        const rowsHtml = gastos.map(g => `
+        const rowsHtml = gastos.map(g => {
+            const itemTc = g.tipoCambio !== undefined && g.tipoCambio !== '' ? g.tipoCambio : tipoCambioFob;
+            return `
             <tr>
                 <td style="border: 1px solid #ddd; padding: 6px 10px; font-size: 12px;">${g.motivo || '-'}</td>
                 ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">${g.montoUsd ? g.montoUsd.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</td>` : ''}
+                ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-family: monospace;">${itemTc ? Number(itemTc).toFixed(2) : '-'}</td>` : ''}
                 <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-weight: bold;">${(Number(g.montoBob) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">${costoFobBob > 0 ? ((Number(g.montoBob) * 100) / costoFobBob).toFixed(2) : '0.00'}%</td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
         const prodsHtml = productosPreview.map((p: any) => `
             <tr>
@@ -373,15 +390,16 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                     <span><strong>N° Compra:</strong> ${compra?.numero || '-'}</span>
                     <span><strong>Moneda Compra:</strong> ${monedaCompra}</span>
                     <span><strong>Fecha Liquidación:</strong> ${fecha.split('-').reverse().join('/')}</span>
-                    ${isUSD ? `<span><strong>Tipo de Cambio:</strong> ${tipoCambio}</span>` : ''}
+                    ${isUSD ? `<span><strong>T/C Compra:</strong> ${compra?.tipoCambio || '6.96'} | <strong>T/C FOB:</strong> ${tipoCambioFob}</span>` : ''}
                 </div>
 
                 <table>
                     <thead>
                         <tr>
                             <th style="text-align: left;">Concepto / Motivo</th>
-                            ${isUSD ? '<th style="text-align: right; width: 110px;">Dólares ($)</th>' : ''}
-                            <th style="text-align: right; width: 130px;">Bolivianos (Bs.)</th>
+                            ${isUSD ? '<th style="text-align: right; width: 100px;">Dólares ($)</th>' : ''}
+                            ${isUSD ? '<th style="text-align: right; width: 90px;">T/C (Bs./$)</th>' : ''}
+                            <th style="text-align: right; width: 120px;">Bolivianos (Bs.)</th>
                             <th style="text-align: right; width: 90px;">Porcentual</th>
                         </tr>
                     </thead>
@@ -389,17 +407,18 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                         <tr style="background-color: #f8fafc; font-weight: bold;">
                             <td style="border: 1px solid #ddd; padding: 6px 10px; font-size: 12px;">Costo FOB ${provNombre}</td>
                             ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">$ ${costoFobUsd.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>` : ''}
+                            ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-family: monospace;">${Number(tipoCambioFob).toFixed(2)}</td>` : ''}
                             <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">Bs. ${costoFobBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">-</td>
                         </tr>
                         ${rowsHtml}
                         <tr style="background-color: #f1f5f9; font-weight: bold;">
-                            <td colspan="${isUSD ? 2 : 1}" style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 12px;">Costo Total</td>
+                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 12px;">Costo Total</td>
                             <td style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 13px;">Bs. ${costoTotalBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td style="border: 1px solid #ddd; padding: 8px 10px;"></td>
                         </tr>
                         <tr style="background-color: #e2e8f0; font-weight: bold;">
-                            <td colspan="${isUSD ? 2 : 1}" style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 13px;">Total Gastos</td>
+                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 13px;">Total Gastos</td>
                             <td style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 13px; color: #b91c1c;">Bs. ${totalGastosBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td class="highlight" style="border: 1px solid #ddd; padding: 8px 10px; text-align: right; font-size: 14px; color: #854d0e;">${porcentajeGastosTotal.toFixed(2)}%</td>
                         </tr>
@@ -487,8 +506,8 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                                    <Building2 className="w-3.5 h-3.5 text-primary" /> Sucursal / Almacén Destino
+                                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                    <Building2 className="w-3.5 h-3.5 text-primary" /> Sucursal / Almacén Destino <span className="text-red-500 font-bold">*</span>
                                 </label>
                                 <select
                                     value={selectedSucursalId}
@@ -520,25 +539,12 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                             {isUSD && (
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                                        <DollarSign className="w-3.5 h-3.5 text-green-600" /> Tipo de Cambio (T/C)
+                                        <DollarSign className="w-3.5 h-3.5 text-green-600" /> T/C Compra Original
                                     </label>
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            inputMode="decimal"
-                                            value={tipoCambio !== undefined && tipoCambio !== null ? tipoCambio : ''}
-                                            onChange={(e) => {
-                                                const val = e.target.value.replace(',', '.');
-                                                if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                                    setTipoCambio(val);
-                                                }
-                                            }}
-                                            disabled={!canManage}
-                                            className="w-full px-3 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-2 focus:ring-primary/20 font-bold text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-                                            placeholder="6.96"
-                                        />
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-mono">
-                                            Bs./$
+                                    <div className="px-3 py-1.5 text-sm bg-muted/60 border rounded-lg font-bold text-foreground flex items-center justify-between cursor-not-allowed select-none">
+                                        <span className="font-mono">{compra.tipoCambio != null ? Number(compra.tipoCambio).toFixed(2) : '6.96'} Bs./$</span>
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-background text-muted-foreground font-mono font-bold border">
+                                            Solo Lectura
                                         </span>
                                     </div>
                                 </div>
@@ -677,13 +683,14 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                         </div>
 
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-[600px]">
+                            <table className="w-full text-left border-collapse min-w-[700px]">
                                 <thead>
                                     <tr className="bg-sky-100/70 dark:bg-sky-950/50 border-b text-sky-900 dark:text-sky-200">
                                         <th className="p-3 text-xs font-bold">Concepto / Motivo</th>
-                                        {isUSD && <th className="p-3 text-xs font-bold text-right w-36">Dólares ($)</th>}
-                                        <th className="p-3 text-xs font-bold text-right w-44">Bolivianos (Bs.)</th>
-                                        <th className="p-3 text-xs font-bold text-right w-28">Porcentual (%)</th>
+                                        {isUSD && <th className="p-3 text-xs font-bold text-right w-32">Dólares ($)</th>}
+                                        {isUSD && <th className="p-3 text-xs font-bold text-right w-32">T/C (Bs./$)</th>}
+                                        <th className="p-3 text-xs font-bold text-right w-36">Bolivianos (Bs.)</th>
+                                        <th className="p-3 text-xs font-bold text-right w-24">Porcentual (%)</th>
                                         <th className="p-3 text-xs font-bold text-center w-12"></th>
                                     </tr>
                                 </thead>
@@ -699,11 +706,30 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                                             </div>
                                         </td>
                                         {isUSD && (
-                                            <td className="p-3 text-right font-mono text-muted-foreground">
-                                                {formatCurrency(costoFobUsd, 'USD')}
+                                            <td className="p-3 text-right font-mono text-foreground font-bold">
+                                                $ {costoFobUsd.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </td>
                                         )}
-                                        <td className="p-3 text-right font-mono text-foreground font-bold">
+                                        {isUSD && (
+                                            <td className="p-2 text-right">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={tipoCambioFob !== undefined && tipoCambioFob !== null ? tipoCambioFob : ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(',', '.');
+                                                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                                            setTipoCambioFob(val);
+                                                        }
+                                                    }}
+                                                    disabled={!canManage}
+                                                    className="w-full px-2 py-1.5 text-xs bg-background border-2 border-primary/50 focus:border-primary rounded-md text-right font-mono font-bold text-primary outline-none focus:ring-1 focus:ring-primary disabled:opacity-75 disabled:cursor-not-allowed shadow-2xs"
+                                                    placeholder="6.96"
+                                                    title="Tipo de cambio específico para el Costo FOB"
+                                                />
+                                            </td>
+                                        )}
+                                        <td className="p-3 text-right font-mono text-primary font-black text-sm">
                                             {formatCurrency(costoFobBob, 'BOB')}
                                         </td>
                                         <td className="p-3 text-right font-mono text-muted-foreground text-xs">
@@ -715,7 +741,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                                     {/* Empty state when no expenses */}
                                     {gastos.length === 0 && (
                                         <tr>
-                                            <td colSpan={isUSD ? 5 : 4} className="p-6 text-center text-muted-foreground text-xs italic bg-muted/10">
+                                            <td colSpan={isUSD ? 6 : 4} className="p-6 text-center text-muted-foreground text-xs italic bg-muted/10">
                                                 No hay partidas de gastos agregadas. Haz clic en <strong className="text-foreground font-semibold">"Cargar Plantilla"</strong> para cargar los conceptos habituales o en <strong className="text-foreground font-semibold">"Agregar Gasto"</strong> para añadir uno personalizado.
                                             </td>
                                         </tr>
@@ -749,6 +775,25 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                                                         />
                                                     </td>
                                                 )}
+                                                {isUSD && (
+                                                    <td className="p-2 text-right">
+                                                        <input
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            placeholder={String(tipoCambioFob || '6.96')}
+                                                            value={gasto.tipoCambio !== undefined && gasto.tipoCambio !== null ? gasto.tipoCambio : ''}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value.replace(',', '.');
+                                                                if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                                                    handleUpdateGasto(index, 'tipoCambio', val);
+                                                                }
+                                                            }}
+                                                            disabled={!canManage}
+                                                            className="w-full px-2 py-1.5 text-xs bg-background border rounded-md focus:ring-1 focus:ring-primary outline-none text-right font-mono disabled:opacity-75 disabled:cursor-not-allowed"
+                                                            title="Tipo de cambio de este gasto"
+                                                        />
+                                                    </td>
+                                                )}
                                                 <td className="p-2 text-right">
                                                     <input
                                                         type="number"
@@ -757,7 +802,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                                                         value={gasto.montoBob || ''}
                                                         onChange={(e) => handleUpdateGasto(index, 'montoBob', e.target.value)}
                                                         disabled={!canManage}
-                                                        className="w-full px-2.5 py-1.5 text-xs bg-background border rounded-md focus:ring-1 focus:ring-primary outline-none text-right font-mono font-bold disabled:opacity-75 disabled:cursor-not-allowed"
+                                                        className="w-full px-2.5 py-1.5 text-xs bg-background border rounded-md focus:ring-1 focus:ring-primary outline-none text-right font-mono font-bold text-foreground disabled:opacity-75 disabled:cursor-not-allowed"
                                                     />
                                                 </td>
                                                 <td className="p-2 text-right font-mono text-xs font-semibold text-muted-foreground">
@@ -784,7 +829,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                                 <tfoot className="border-t-2 border-border/80 bg-muted/40 font-bold text-sm">
                                     {/* Costo Total */}
                                     <tr className="border-b">
-                                        <td colSpan={isUSD ? 2 : 1} className="p-3 text-right uppercase text-xs text-muted-foreground">
+                                        <td colSpan={isUSD ? 3 : 1} className="p-3 text-right uppercase text-xs text-muted-foreground">
                                             Costo Total (FOB + Gastos)
                                         </td>
                                         <td className="p-3 text-right font-mono text-foreground font-black text-base">
@@ -795,7 +840,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
 
                                     {/* Total Gastos + Increment % */}
                                     <tr className="bg-amber-50 dark:bg-amber-950/30">
-                                        <td colSpan={isUSD ? 2 : 1} className="p-3 text-right uppercase text-xs text-amber-900 dark:text-amber-300 font-extrabold">
+                                        <td colSpan={isUSD ? 3 : 1} className="p-3 text-right uppercase text-xs text-amber-900 dark:text-amber-300 font-extrabold">
                                             Total Gastos
                                         </td>
                                         <td className="p-3 text-right font-mono text-red-600 dark:text-red-400 font-black text-base">
@@ -848,7 +893,7 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                                         <th className="p-2.5">Código</th>
                                         <th className="p-2.5">Producto</th>
                                         <th className="p-2.5 text-center">Cant.</th>
-                                        <th className="p-2.5 text-right">Costo FOB Unit. ({monedaCompra})</th>
+                                        <th className="p-2.5 text-right">Costo FOB Unit. (${monedaCompra})</th>
                                         <th className="p-2.5 text-right font-bold text-primary">Nuevo Costo Real (Bs.)</th>
                                     </tr>
                                 </thead>

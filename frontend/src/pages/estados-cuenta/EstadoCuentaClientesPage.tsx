@@ -12,7 +12,7 @@ import {
     Printer, FileText, FileSpreadsheet,
     Users, ShoppingCart, DollarSign, Calendar, Receipt,
     CheckCircle2, Clock, AlertTriangle, Eye, Lock,
-    MessageCircle, Send, Loader2, ExternalLink, Building2, User, Store
+    MessageCircle, Send, Loader2, ExternalLink, Building2, User, Store, ArrowLeft
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DetalleVentaModal from '../../components/ventas/DetalleVentaModal';
@@ -45,6 +45,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
     // Modal state for view sale payments history and sale product details
     const [viewingNota, setViewingNota] = useState<any | null>(null);
     const [viewingDetalleVenta, setViewingDetalleVenta] = useState<any | null>(null);
+    const [selectedClientForDetail, setSelectedClientForDetail] = useState<any | null>(null);
 
     // WhatsApp State & Mutations
     const [whatsappCarteraModalData, setWhatsappCarteraModalData] = useState<{
@@ -467,14 +468,132 @@ const EstadoCuentaClientesPage: React.FC = () => {
         };
     }, [filteredVentas]);
 
+    // Client Summary Grouping (for Main View)
+    const clientsSummary = useMemo(() => {
+        const map = new Map<string, {
+            clienteId: number;
+            cliente: any;
+            codigo: string;
+            nombreTienda: string;
+            nombrePersona: string;
+            displayName: string;
+            telefono: string;
+            sucursalNombre: string;
+            ciudadNombre: string;
+            vendedorNombre: string;
+            totalVentas: number;
+            totalCobrado: number;
+            totalSaldo: number;
+            notasCount: number;
+            notasEnMoraCount: number;
+            maxDiasMora: number;
+            tieneMora: boolean;
+            ventas: any[];
+        }>();
+
+        filteredVentas.forEach((v: any) => {
+            const cli = v.cliente;
+            const key = cli?.id ? String(cli.id) : `sin_cliente_${v.id}`;
+            const isUSD = v.moneda === 'USD';
+            const tc = Number(v.tipoCambio) || 6.96;
+            const total = Number(v.total) || 0;
+            const saldo = Number(v.saldo) || 0;
+            const cobrado = Math.max(0, total - saldo);
+            const totalBOB = isUSD ? total * tc : total;
+            const saldoBOB = isUSD ? saldo * tc : saldo;
+            const cobradoBOB = isUSD ? cobrado * tc : cobrado;
+            const mora = getMoraInfo(v);
+
+            if (!map.has(key)) {
+                const storeName = (cli?.nombreTienda || '').trim();
+                const personName = getClientPersonName(cli);
+                const displayName = getClientDisplayName(cli);
+                const codigo = cli?.codigo ? String(cli.codigo) : '-';
+                const telefono = cli?.persona?.telefono || cli?.telefono || '-';
+                const sucursalNombre = cli?.sucursal?.nombre || v.sucursal?.nombre || '-';
+                const ciudadNombre = (cli?.sucursal as any)?.ciudad?.nombre || (v.sucursal as any)?.ciudad?.nombre || '-';
+                const vendedorNombre = v.vendedor ? `${v.vendedor.nombres || ''} ${v.vendedor.apellidos || ''}`.trim() : '-';
+
+                map.set(key, {
+                    clienteId: cli?.id || 0,
+                    cliente: cli || { id: 0, nombreTienda: 'Cliente Final', persona: null },
+                    codigo,
+                    nombreTienda: storeName,
+                    nombrePersona: personName,
+                    displayName,
+                    telefono,
+                    sucursalNombre,
+                    ciudadNombre,
+                    vendedorNombre,
+                    totalVentas: 0,
+                    totalCobrado: 0,
+                    totalSaldo: 0,
+                    notasCount: 0,
+                    notasEnMoraCount: 0,
+                    maxDiasMora: 0,
+                    tieneMora: false,
+                    ventas: []
+                });
+            }
+
+            const item = map.get(key)!;
+            item.totalVentas += totalBOB;
+            item.totalCobrado += cobradoBOB;
+            item.totalSaldo += saldoBOB;
+            item.notasCount += 1;
+            item.ventas.push(v);
+
+            if (mora.estado === 'EN_MORA' && saldoBOB > 0) {
+                item.tieneMora = true;
+                item.notasEnMoraCount += 1;
+                if (mora.dias > item.maxDiasMora) {
+                    item.maxDiasMora = mora.dias;
+                }
+            }
+        });
+
+        const list = Array.from(map.values());
+
+        return list.sort((a, b) => {
+            const nameA = (a.nombreTienda || a.displayName || '').trim();
+            const nameB = (b.nombreTienda || b.displayName || '').trim();
+            return nameA.localeCompare(nameB, 'es', { sensitivity: 'base', numeric: true });
+        });
+    }, [filteredVentas]);
+
+    // Current Sales for Selected Client (for Detail View)
+    const currentClientVentas = useMemo(() => {
+        if (!selectedClientForDetail) return [];
+        const targetId = selectedClientForDetail.clienteId !== undefined ? selectedClientForDetail.clienteId : (selectedClientForDetail.id || 0);
+        const list = filteredVentas.filter(v => 
+            (targetId && v.cliente?.id === targetId) ||
+            (!targetId && !v.cliente?.id)
+        );
+        return list.sort((a, b) => {
+            const numA = a.numero ? String(a.numero).trim() : '';
+            const numB = b.numero ? String(b.numero).trim() : '';
+            return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
+        });
+    }, [filteredVentas, selectedClientForDetail]);
+
     // Pagination
-    const totalPages = Math.ceil(filteredVentas.length / itemsPerPage) || 1;
+    const totalPages = selectedClientForDetail
+        ? Math.ceil(currentClientVentas.length / itemsPerPage) || 1
+        : Math.ceil(clientsSummary.length / itemsPerPage) || 1;
+
+    const paginatedClients = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return clientsSummary.slice(start, start + itemsPerPage);
+    }, [clientsSummary, currentPage]);
+
     const paginatedVentas = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
-        return filteredVentas.slice(start, start + itemsPerPage);
-    }, [filteredVentas, currentPage]);
+        return currentClientVentas.slice(start, start + itemsPerPage);
+    }, [currentClientVentas, currentPage]);
 
-    React.useEffect(() => setCurrentPage(1), [selectedClienteId, selectedVendedores, estadoFiltro, facturaFiltro, fechaDesde, fechaHasta, searchTerm]);
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [selectedClienteId, selectedVendedores, estadoFiltro, facturaFiltro, fechaDesde, fechaHasta, searchTerm, selectedClientForDetail]);
 
     // Export reports
     const exportColumns = [
@@ -769,6 +888,60 @@ const EstadoCuentaClientesPage: React.FC = () => {
     };
 
 
+    const clientSummaryExportColumns = [
+        { header: '#', dataKey: 'index' },
+        { header: 'Código', dataKey: 'codigo' },
+        { header: 'Nombre Tienda / Cliente', dataKey: 'nombreTienda' },
+        { header: 'Notas Pendientes', dataKey: 'notasCount' },
+        { header: 'Saldo Total (Bs.)', dataKey: 'saldoFormateado' },
+    ];
+
+    const getClientSummaryExportData = () => {
+        const fmt = (n: number) => n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return clientsSummary.map((item, idx) => ({
+            index: idx + 1,
+            codigo: item.codigo || '-',
+            nombreTienda: item.nombreTienda 
+                ? (item.nombrePersona && item.nombrePersona !== item.nombreTienda ? `${item.nombreTienda} (${item.nombrePersona})` : item.nombreTienda)
+                : (item.displayName || 'Cliente Final'),
+            notasCount: `${item.notasCount} ${item.notasCount === 1 ? 'nota' : 'notas'}`,
+            saldoFormateado: fmt(item.totalSaldo),
+        }));
+    };
+
+    const getClientSummaryTotalsFooter = (): Record<string, string> => {
+        let totalSaldo = 0;
+        let totalNotas = 0;
+        clientsSummary.forEach(c => {
+            totalSaldo += c.totalSaldo;
+            totalNotas += c.notasCount;
+        });
+        const fmt = (n: number) => n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return {
+            nombreTienda: `TOTAL GENERAL (${clientsSummary.length} clientes)`,
+            notasCount: `${totalNotas} notas`,
+            saldoFormateado: fmt(totalSaldo)
+        };
+    };
+
+    const handlePrintClientes = () => {
+        const data = getClientSummaryExportData();
+        if (!data.length) return;
+        printData('Estado de Cuentas - Resumen por Cliente', clientSummaryExportColumns, data, getFiltersText(), getClientSummaryTotalsFooter(), 'portrait');
+    };
+
+    const handleExportPDFClientes = () => {
+        const data = getClientSummaryExportData();
+        if (!data.length) return;
+        exportToPDF('Estado de Cuentas - Resumen por Cliente', clientSummaryExportColumns, data, 'resumen_cuentas_clientes', getFiltersText(), getClientSummaryTotalsFooter(), 'portrait');
+    };
+
+    const handleExportExcelClientes = () => {
+        const data = getClientSummaryExportData();
+        if (!data.length) return;
+        exportToExcel(clientSummaryExportColumns, data, 'resumen_cuentas_clientes', getClientSummaryTotalsFooter());
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -780,36 +953,70 @@ const EstadoCuentaClientesPage: React.FC = () => {
                     </h1>
                     <p className="text-muted-foreground italic">Historial de créditos, cobros y saldos pendientes con y sin factura por cliente.</p>
                 </div>
-                <div className="flex items-center flex-wrap gap-3">
-                    {selectedClienteId && (
+                <div className="flex flex-col sm:items-end gap-2.5">
+                    <div className="flex items-center flex-wrap gap-2.5">
+                        {selectedClienteId && (
+                            <button
+                                type="button"
+                                onClick={() => handleOpenClienteWhatsAppModal()}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                                title="Enviar Estado de Cuenta Consolidado al Cliente por WhatsApp"
+                            >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                                <span>Estado de Cuenta WhatsApp</span>
+                            </button>
+                        )}
                         <button
                             type="button"
-                            onClick={() => handleOpenClienteWhatsAppModal()}
-                            className="flex items-center gap-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-md hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
-                            title="Enviar Estado de Cuenta Consolidado al Cliente por WhatsApp"
+                            onClick={() => handleOpenCarteraModal()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                            title="Enviar Planilla de Cartera y Saldos Pendientes al Vendedor por WhatsApp"
                         >
-                            <MessageCircle className="w-4 h-4" />
-                            <span>Enviar Estado de Cuenta al Cliente</span>
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>Enviar Cartera WhatsApp</span>
                         </button>
-                    )}
-                    <button
-                        type="button"
-                        onClick={() => handleOpenCarteraModal()}
-                        className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow-md hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
-                        title="Enviar Planilla de Cartera y Saldos Pendientes al Vendedor por WhatsApp"
-                    >
-                        <MessageCircle className="w-4 h-4" />
-                        <span>Enviar Cartera a Vendedor</span>
-                    </button>
-                    <div className="flex items-center gap-2">
-                        <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors shadow-sm" title="Imprimir">
-                            <Printer className="w-4 h-4 text-muted-foreground" /> <span className="hidden sm:inline">Imprimir</span>
+                        <div className="flex items-center gap-1 bg-muted/40 p-1 border rounded-lg" title="Reporte Detallado de Ventas por Cliente">
+                            <span className="text-[11px] font-bold text-muted-foreground px-1.5 hidden md:inline">Detalle:</span>
+                            <button onClick={handlePrint} className="flex items-center gap-1.5 px-2.5 py-1 bg-card border rounded-md text-xs font-semibold hover:bg-accent transition-colors shadow-2xs cursor-pointer" title="Imprimir Detalle de Ventas">
+                                <Printer className="w-3.5 h-3.5 text-muted-foreground" /> <span>Imprimir</span>
+                            </button>
+                            <button onClick={handleExportPDF} className="flex items-center gap-1.5 px-2.5 py-1 bg-card border rounded-md text-xs font-semibold hover:bg-accent transition-colors shadow-2xs cursor-pointer" title="Exportar Detalle a PDF">
+                                <FileText className="w-3.5 h-3.5 text-red-500" /> <span>PDF</span>
+                            </button>
+                            <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-2.5 py-1 bg-card border rounded-md text-xs font-semibold hover:bg-accent transition-colors shadow-2xs cursor-pointer" title="Exportar Detalle a Excel">
+                                <FileSpreadsheet className="w-3.5 h-3.5 text-green-600" /> <span>Excel</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Fila 2: Botones de exportación de la Tabla Principal (Resumen de Clientes) */}
+                    <div className="flex items-center gap-1 bg-primary/5 border border-primary/20 p-1 rounded-lg self-start sm:self-end" title="Reporte de Saldos por Cliente">
+                        <span className="text-[11px] font-bold text-primary px-1.5 flex items-center gap-1">
+                            <Store className="w-3 h-3" /> Saldos Clientes:
+                        </span>
+                        <button 
+                            type="button"
+                            onClick={handlePrintClientes} 
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-background border border-primary/30 rounded-md text-xs font-bold text-foreground hover:bg-primary/10 transition-colors shadow-2xs cursor-pointer" 
+                            title="Imprimir Tabla Principal (Resumen por Cliente)"
+                        >
+                            <Printer className="w-3.5 h-3.5 text-primary" /> <span>Imprimir</span>
                         </button>
-                        <button onClick={handleExportPDF} className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors shadow-sm" title="Exportar a PDF">
-                            <FileText className="w-4 h-4 text-red-500" /> <span className="hidden sm:inline">PDF</span>
+                        <button 
+                            type="button"
+                            onClick={handleExportPDFClientes} 
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-background border border-primary/30 rounded-md text-xs font-bold text-foreground hover:bg-primary/10 transition-colors shadow-2xs cursor-pointer" 
+                            title="Exportar Tabla Principal a PDF"
+                        >
+                            <FileText className="w-3.5 h-3.5 text-red-500" /> <span>PDF</span>
                         </button>
-                        <button onClick={handleExportExcel} className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors shadow-sm" title="Exportar a Excel">
-                            <FileSpreadsheet className="w-4 h-4 text-green-600" /> <span className="hidden sm:inline">Excel</span>
+                        <button 
+                            type="button"
+                            onClick={handleExportExcelClientes} 
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-background border border-primary/30 rounded-md text-xs font-bold text-foreground hover:bg-primary/10 transition-colors shadow-2xs cursor-pointer" 
+                            title="Exportar Tabla Principal a Excel"
+                        >
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-green-600" /> <span>Excel</span>
                         </button>
                     </div>
                 </div>
@@ -1044,210 +1251,328 @@ const EstadoCuentaClientesPage: React.FC = () => {
 
             {/* Tabla de Estados de Cuenta */}
             <div className="bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[1150px]">
-                        <thead>
-                            <tr className="bg-muted/50 border-b">
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-12">#</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fecha</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nro. Venta</th>
-                                {!selectedClienteId && (
-                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cliente</th>
+                {/* Header si estamos en la vista de detalle de un cliente */}
+                {selectedClientForDetail && (
+                    <div className="p-4 bg-muted/40 border-b flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedClientForDetail(null)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-background border hover:bg-accent transition-colors shadow-xs cursor-pointer text-foreground"
+                            >
+                                <ArrowLeft className="w-4 h-4 text-primary" /> Volver a la lista de clientes
+                            </button>
+                            <div className="h-4 w-px bg-border hidden sm:block" />
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                                    <Store className="w-4 h-4 text-primary shrink-0" />
+                                    {selectedClientForDetail.nombreTienda || selectedClientForDetail.displayName || 'Cliente'}
+                                </span>
+                                {selectedClientForDetail.codigo && selectedClientForDetail.codigo !== '-' && (
+                                    <span className="font-mono text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-bold">
+                                        Cód: {selectedClientForDetail.codigo}
+                                    </span>
                                 )}
-                                {selectedVendedores.length !== 1 && (
-                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendedor</th>
-                                )}
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nota de Venta</th>
-                                {facturaFiltro === 'TODOS' && (
-                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Facturación</th>
-                                )}
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Plazo / Venc.</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Venta</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Cobrado</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Saldo Deuda</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-36">Estado</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                            {loadingSales ? (
-                                <tr>
-                                    <td colSpan={10 + (!selectedClienteId ? 1 : 0) + (selectedVendedores.length !== 1 ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
-                                        <div className="flex items-center justify-center gap-2">
-                                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                                            <span>Cargando estado de cuentas de clientes...</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : paginatedVentas.length === 0 ? (
-                                <tr>
-                                    <td colSpan={10 + (!selectedClienteId ? 1 : 0) + (selectedVendedores.length !== 1 ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
-                                        No se encontraron cuentas por cobrar para los filtros seleccionados.
-                                    </td>
-                                </tr>
-                            ) : paginatedVentas.map((v, index) => {
-                                const cliLabel = v.cliente?.persona 
-                                    ? `${v.cliente.persona.nombres} ${v.cliente.persona.apellidos}` 
-                                    : 'Cliente';
-                                const vendedorLabel = v.vendedor 
-                                    ? `${v.vendedor.nombres || ''} ${v.vendedor.apellidos || ''}`.trim() 
-                                    : '---';
-                                const isUSD = v.moneda === 'USD';
-                                const sim = isUSD ? '$us' : 'Bs.';
-                                const total = Number(v.total) || 0;
-                                const saldo = Number(v.saldo) || 0;
-                                const cobrado = Math.max(0, total - saldo);
-                                const mora = getMoraInfo(v);
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-right">
+                                <span className="text-[11px] text-muted-foreground block">Saldo Total Pendiente:</span>
+                                <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                                    Bs. {Number(selectedClientForDetail.totalSaldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                            {selectedClientForDetail.clienteId > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleOpenClienteWhatsAppModal(String(selectedClientForDetail.clienteId))}
+                                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                                    title="Enviar Estado de Cuenta Consolidado por WhatsApp"
+                                >
+                                    <MessageCircle className="w-3.5 h-3.5" /> Enviar Estado WhatsApp
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
 
-                                return (
-                                    <tr key={v.id} className="hover:bg-accent/30 transition-colors group">
-                                        <td className="p-4 text-sm font-mono text-muted-foreground">
-                                            {(currentPage - 1) * itemsPerPage + index + 1}
+                <div className="overflow-x-auto">
+                    {!selectedClientForDetail ? (
+                        /* VISTA 1: TABLA RESUMEN POR CLIENTE */
+                        <table className="w-full text-left border-collapse min-w-[700px]">
+                            <thead>
+                                <tr className="bg-muted/50 border-b">
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-12 text-center">#</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-36">Código</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nombre Tienda / Cliente</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-48">Saldo</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-44">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {loadingSales ? (
+                                    <tr>
+                                        <td colSpan={5} className="p-8 text-center text-muted-foreground text-sm">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                                <span>Cargando estado de cuentas de clientes...</span>
+                                            </div>
                                         </td>
-                                        <td className="p-4 text-sm font-medium">
-                                            {v.fecha ? format(new Date(v.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-'}
+                                    </tr>
+                                ) : paginatedClients.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} className="p-8 text-center text-muted-foreground text-sm">
+                                            No se encontraron clientes con cuentas por cobrar para los filtros seleccionados.
                                         </td>
-                                        <td className="p-4 text-sm">
-                                            <button
-                                                type="button"
-                                                onClick={() => setViewingDetalleVenta(v)}
-                                                className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-all inline-flex items-center gap-1 cursor-pointer"
-                                                title="Ver detalle y productos de la venta"
-                                            >
-                                                <Eye className="w-3 h-3" />
-                                                {v.numero}
-                                            </button>
-                                        </td>
-                                        {!selectedClienteId && (
+                                    </tr>
+                                ) : (
+                                    paginatedClients.map((item, index) => (
+                                        <tr key={item.clienteId ? String(item.clienteId) : `cli_${index}`} className="hover:bg-accent/30 transition-colors group">
+                                            <td className="p-4 text-sm font-mono text-muted-foreground text-center">
+                                                {(currentPage - 1) * itemsPerPage + index + 1}
+                                            </td>
+                                            <td className="p-4 text-sm font-mono">
+                                                <span className="font-semibold text-xs text-primary bg-primary/10 px-2.5 py-1 rounded">
+                                                    {item.codigo || '-'}
+                                                </span>
+                                            </td>
                                             <td className="p-4">
                                                 <div className="flex flex-col">
-                                                    {v.cliente?.nombreTienda ? (
-                                                        <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                                                            <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                            {v.cliente.nombreTienda}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-sm font-semibold text-foreground">
-                                                            {getClientPersonName(v.cliente)}
+                                                    <span className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                        {item.nombreTienda || item.displayName}
+                                                    </span>
+                                                    {item.nombreTienda && item.nombrePersona && item.nombreTienda !== item.nombrePersona && (
+                                                        <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                                            <User className="w-3 h-3 text-muted-foreground" />
+                                                            {item.nombrePersona}
                                                         </span>
                                                     )}
                                                 </div>
                                             </td>
-                                        )}
-                                        {selectedVendedores.length !== 1 && (
-                                            <td className="p-4 text-sm text-muted-foreground">
-                                                {vendedorLabel}
-                                            </td>
-                                        )}
-                                        <td className="p-4 max-w-[180px]">
-                                            {v.observaciones ? (
-                                                <span className="text-xs text-muted-foreground line-clamp-2" title={v.observaciones}>
-                                                    {v.observaciones}
-                                                </span>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground/50 font-mono">-</span>
-                                            )}
-                                        </td>
-                                        {facturaFiltro === 'TODOS' && (
-                                            <td className="p-4 text-sm">
-                                                {v.conFactura ? (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200" title={`Factura Nro: ${v.numeroFactura || 'S/N'}`}>
-                                                        <Receipt className="w-3 h-3 text-blue-600" /> FAC: {v.numeroFactura || 'S/N'}
+                                            <td className="p-4 text-right">
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                                                        Bs. {item.totalSaldo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                                                     </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
-                                                        Sin Factura
-                                                    </span>
-                                                )}
-                                            </td>
-                                        )}
-                                        <td className="p-4 text-xs">
-                                            {mora.fechaVenc ? (
-                                                <div className="flex flex-col">
-                                                    <span className="font-semibold text-foreground">
-                                                        {format(mora.fechaVenc, 'dd/MM/yyyy')}
-                                                    </span>
-                                                    <span className="text-[10px] text-muted-foreground">
-                                                        Plazo: {mora.diasCredito} días
+                                                    <span className="text-[11px] text-muted-foreground">
+                                                        {item.notasCount} {item.notasCount === 1 ? 'venta pendiente' : 'ventas pendientes'}
                                                     </span>
                                                 </div>
-                                            ) : (
-                                                <span className="text-muted-foreground italic">Contado</span>
-                                            )}
-                                        </td>
-                                        <td className="p-4 text-sm font-bold text-right">
-                                            {sim} {total.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                                        </td>
-                                        <td className="p-4 text-sm font-bold text-right text-green-600">
-                                            {sim} {cobrado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                                        </td>
-                                        <td className="p-4 text-sm font-bold text-right">
-                                            <span className={saldo > 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-muted-foreground'}>
-                                                {sim} {saldo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            {mora.estado === 'CANCELADO' && (
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase tracking-wider">
-                                                    Cancelado
-                                                </span>
-                                            )}
-                                            {mora.estado === 'EN_MORA' && (
-                                                <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-[10px] font-extrabold bg-red-600 text-white uppercase tracking-wider shadow-sm border border-red-700">
-                                                    En Mora ({mora.dias} d)
-                                                </span>
-                                            )}
-                                            {mora.estado === 'VENCE_HOY' && (
-                                                <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500 text-white uppercase tracking-wider shadow-sm">
-                                                    Vence Hoy
-                                                </span>
-                                            )}
-                                            {mora.estado === 'AL_DIA' && (
-                                                <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 uppercase tracking-wider">
-                                                    Al Día ({Math.abs(mora.dias)} d)
-                                                </span>
-                                            )}
-                                            {mora.estado === 'PENDIENTE' && (
-                                                <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 uppercase tracking-wider">
-                                                    Por Cobrar
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <div className="flex items-center justify-end gap-1.5">
-                                                <button
-                                                    onClick={() => handleOpenVentaWhatsAppModal(v)}
-                                                    className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-xs cursor-pointer"
-                                                    title="Enviar Estado de Cuenta / Saldo de esta Venta por WhatsApp (PDF)"
-                                                >
-                                                    <MessageCircle className="w-3.5 h-3.5" />
-                                                </button>
-                                                <button
-                                                    onClick={() => setViewingNota(v)}
-                                                    className="px-2.5 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                                                    title="Ver Historial de Pagos"
-                                                >
-                                                    <Receipt className="w-3.5 h-3.5" /> Pagos
-                                                </button>
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSelectedClientForDetail(item)}
+                                                        className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                                    >
+                                                        <Eye className="w-3.5 h-3.5" /> Ver detalle
+                                                    </button>
+                                                    {item.clienteId > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleOpenClienteWhatsAppModal(String(item.clienteId))}
+                                                            className="p-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                                                            title="Enviar Estado de Cuenta Consolidado por WhatsApp"
+                                                        >
+                                                            <MessageCircle className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    ) : (
+                        /* VISTA 2: TABLA DETALLE DE VENTAS DEL CLIENTE */
+                        <table className="w-full text-left border-collapse min-w-[1150px]">
+                            <thead>
+                                <tr className="bg-muted/50 border-b">
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-12">#</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fecha</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nro. Venta</th>
+                                    {selectedVendedores.length !== 1 && (
+                                        <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendedor</th>
+                                    )}
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nota de Venta</th>
+                                    {facturaFiltro === 'TODOS' && (
+                                        <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Facturación</th>
+                                    )}
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Plazo / Venc.</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Venta</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Cobrado</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Saldo Deuda</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-36">Estado</th>
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {loadingSales ? (
+                                    <tr>
+                                        <td colSpan={10 + (selectedVendedores.length !== 1 ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                                <span>Cargando detalle de ventas del cliente...</span>
                                             </div>
                                         </td>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                ) : paginatedVentas.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={10 + (selectedVendedores.length !== 1 ? 1 : 0) + (facturaFiltro === 'TODOS' ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
+                                            No se encontraron ventas para este cliente con los filtros seleccionados.
+                                        </td>
+                                    </tr>
+                                ) : paginatedVentas.map((v, index) => {
+                                    const vendedorLabel = v.vendedor 
+                                        ? `${v.vendedor.nombres || ''} ${v.vendedor.apellidos || ''}`.trim() 
+                                        : '---';
+                                    const isUSD = v.moneda === 'USD';
+                                    const sim = isUSD ? '$us' : 'Bs.';
+                                    const total = Number(v.total) || 0;
+                                    const saldo = Number(v.saldo) || 0;
+                                    const cobrado = Math.max(0, total - saldo);
+                                    const mora = getMoraInfo(v);
+
+                                    return (
+                                        <tr key={v.id} className="hover:bg-accent/30 transition-colors group">
+                                            <td className="p-4 text-sm font-mono text-muted-foreground">
+                                                {(currentPage - 1) * itemsPerPage + index + 1}
+                                            </td>
+                                            <td className="p-4 text-sm font-medium">
+                                                {v.fecha ? format(new Date(v.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-'}
+                                            </td>
+                                            <td className="p-4 text-sm">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setViewingDetalleVenta(v)}
+                                                    className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-all inline-flex items-center gap-1 cursor-pointer"
+                                                    title="Ver detalle y productos de la venta"
+                                                >
+                                                    <Eye className="w-3 h-3" />
+                                                    {v.numero}
+                                                </button>
+                                            </td>
+                                            {selectedVendedores.length !== 1 && (
+                                                <td className="p-4 text-sm text-muted-foreground">
+                                                    {vendedorLabel}
+                                                </td>
+                                            )}
+                                            <td className="p-4 max-w-[180px]">
+                                                {v.observaciones ? (
+                                                    <span className="text-xs text-muted-foreground line-clamp-2" title={v.observaciones}>
+                                                        {v.observaciones}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground/50 font-mono">-</span>
+                                                )}
+                                            </td>
+                                            {facturaFiltro === 'TODOS' && (
+                                                <td className="p-4 text-sm">
+                                                    {v.conFactura ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200" title={`Factura Nro: ${v.numeroFactura || 'S/N'}`}>
+                                                            <Receipt className="w-3 h-3 text-blue-600" /> FAC: {v.numeroFactura || 'S/N'}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                                                            Sin Factura
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            )}
+                                            <td className="p-4 text-xs">
+                                                {mora.fechaVenc ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="font-semibold text-foreground">
+                                                            {format(mora.fechaVenc, 'dd/MM/yyyy')}
+                                                        </span>
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            Plazo: {mora.diasCredito} días
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground italic">Contado</span>
+                                                )}
+                                            </td>
+                                            <td className="p-4 text-sm font-bold text-right">
+                                                {sim} {total.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="p-4 text-sm font-bold text-right text-green-600">
+                                                {sim} {cobrado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="p-4 text-sm font-bold text-right">
+                                                <span className={saldo > 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-muted-foreground'}>
+                                                    {sim} {saldo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                {mora.estado === 'CANCELADO' && (
+                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase tracking-wider">
+                                                        Cancelado
+                                                    </span>
+                                                )}
+                                                {mora.estado === 'EN_MORA' && (
+                                                    <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-[10px] font-extrabold bg-red-600 text-white uppercase tracking-wider shadow-sm border border-red-700">
+                                                        En Mora ({mora.dias} d)
+                                                    </span>
+                                                )}
+                                                {mora.estado === 'VENCE_HOY' && (
+                                                    <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500 text-white uppercase tracking-wider shadow-sm">
+                                                        Vence Hoy
+                                                    </span>
+                                                )}
+                                                {mora.estado === 'AL_DIA' && (
+                                                    <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 uppercase tracking-wider">
+                                                        Al Día ({Math.abs(mora.dias)} d)
+                                                    </span>
+                                                )}
+                                                {mora.estado === 'PENDIENTE' && (
+                                                    <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 uppercase tracking-wider">
+                                                        Por Cobrar
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenVentaWhatsAppModal(v)}
+                                                        className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                                                        title="Enviar Estado de Cuenta / Saldo de esta Venta por WhatsApp (PDF)"
+                                                    >
+                                                        <MessageCircle className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setViewingNota(v)}
+                                                        className="px-2.5 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                        title="Ver Historial de Pagos"
+                                                    >
+                                                        <Receipt className="w-3.5 h-3.5" /> Pagos
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
 
                 {totalPages > 1 && (
                     <div className="flex items-center justify-between p-4 border-t bg-muted/20">
                         <span className="text-sm text-muted-foreground">
-                            Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredVentas.length)} de {filteredVentas.length}
+                            Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, selectedClientForDetail ? currentClientVentas.length : clientsSummary.length)} de {selectedClientForDetail ? currentClientVentas.length : clientsSummary.length} {selectedClientForDetail ? 'ventas' : 'clientes'}
                         </span>
                         <div className="flex items-center gap-2">
                             <button 
+                                type="button"
                                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                 disabled={currentPage === 1}
-                                className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                                className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors cursor-pointer"
                             >
                                 <ChevronLeft className="w-4 h-4" />
                             </button>
@@ -1255,9 +1580,10 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 Página {currentPage} de {totalPages}
                             </span>
                             <button 
+                                type="button"
                                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                 disabled={currentPage === totalPages}
-                                className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                                className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors cursor-pointer"
                             >
                                 <ChevronRight className="w-4 h-4" />
                             </button>

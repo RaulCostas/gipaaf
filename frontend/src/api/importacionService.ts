@@ -3,6 +3,7 @@ import apiClient from './apiClient';
 export interface GastoImportacionItem {
     motivo: string;
     montoUsd?: number;
+    tipoCambio?: number | string;
     montoBob: number;
     porcentaje: number;
 }

@@ -15,6 +15,7 @@ import { Usuario } from '../usuarios/usuario.entity';
 export interface GastoImportacionItem {
     motivo: string;
     montoUsd?: number;
+    tipoCambio?: number | string;
     montoBob: number;
     porcentaje: number;
 }
