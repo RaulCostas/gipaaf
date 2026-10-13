@@ -101,7 +101,7 @@ export class EgresosService {
 
     async remove(id: number): Promise<Egreso> {
         const item = await this.findOne(id);
-        item.activo = false;
-        return this.repo.save(item);
+        await this.repo.delete(id);
+        return item;
     }
 }

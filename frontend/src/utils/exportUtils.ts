@@ -315,9 +315,9 @@ export const printData = (
   orientation?: 'portrait' | 'landscape'
 ) => {
   const dateStr = format(new Date(), "dd 'de' MMMM, yyyy - HH:mm", { locale: es });
-  const isPortrait = orientation === 'portrait';
   const sizeRule = orientation ? orientation : (columns.length >= 7 ? 'landscape' : 'portrait');
-  const pageMargin = isPortrait ? (columns.length >= 9 ? '5mm' : '7mm') : '8mm';
+  const isPortrait = sizeRule === 'portrait';
+  const pageMargin = isPortrait ? '5mm 6mm' : '6mm';
 
   const isNumericCol = (key: string) => {
     const k = (key || '').toLowerCase();
@@ -328,16 +328,16 @@ export const printData = (
     return k === 'id' || k === 'nro' || k === 'tipo' || k === 'docnumero' || k.includes('fecha') || k.includes('estado');
   };
   
-  const isManyColsPortrait = isPortrait && columns.length >= 8;
-  const thPadding = isManyColsPortrait ? '3.5px 2px' : (isPortrait ? '5px 4px' : '7px 6px');
-  const thFontSize = isManyColsPortrait ? '8px' : (isPortrait ? '9.5px' : '11px');
+  const isCompactPortrait = isPortrait && columns.length >= 7;
+  const thPadding = isCompactPortrait ? '3.5px 2.5px' : '4px 5px';
+  const thFontSize = isCompactPortrait ? '8px' : '9.5px';
 
   const html = `
     <!DOCTYPE html>
     <html lang="es">
       <head>
         <meta charset="utf-8">
-        <title>${title}</title>
+        <title>&nbsp;</title>
         <style>
           @page {
             size: ${sizeRule};
@@ -350,37 +350,41 @@ export const printData = (
             }
             html, body {
               width: 100% !important;
+              max-width: 100% !important;
               margin: 0 !important;
-              padding: 0 !important;
+              padding: 2mm 2mm !important;
+              box-sizing: border-box !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-            .header { border-bottom: 1.5px solid #64748b !important; }
+            .header { border-bottom: 1.5px solid #000000 !important; }
           }
           *, *:before, *:after { box-sizing: border-box; }
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: ${isManyColsPortrait ? '4px' : '12px'}; color: #1e293b; background: #fff; }
-          .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: ${subtitle ? '10px' : '16px'}; border-bottom: 2px solid #cbd5e1; padding-bottom: 10px; }
-          .logo { max-height: 44px; object-fit: contain; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 6px 8px; color: #000000; background: #fff; width: 100%; max-width: 100%; }
+          .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: ${subtitle ? '8px' : '12px'}; border-bottom: 2px solid #000000; padding-bottom: 8px; width: 100%; }
+          .logo { max-height: 40px; object-fit: contain; }
           .title-container { text-align: right; }
-          .report-title { font-size: ${isManyColsPortrait ? '13.5px' : '16px'}; font-weight: 800; color: #0f172a; margin: 0 0 3px 0; text-transform: uppercase; letter-spacing: 0.5px; }
-          .date { color: #64748b; font-size: 10.5px; margin: 0; }
+          .report-title { font-size: ${isCompactPortrait ? '13.5px' : '15px'}; font-weight: 800; color: #000000; margin: 0 0 2px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+          .date { color: #333333; font-size: 10px; margin: 0; }
           
-          .subtitle-container { margin-bottom: 12px; font-size: 11.5px; color: #334155; }
+          .subtitle-container { margin-bottom: 10px; font-size: 11px; color: #000000; width: 100%; }
           
-          table { width: 100%; border-collapse: collapse; margin-top: 4px; table-layout: auto; }
-          th, td { padding: ${thPadding}; border-bottom: 1px solid #e2e8f0; font-size: ${thFontSize}; word-break: break-word; line-height: 1.25; }
-          th { background-color: #2980b9 !important; color: #ffffff !important; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; white-space: nowrap; }
-          tr:nth-child(even) { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          table { width: 100% !important; max-width: 100% !important; border-collapse: collapse; margin-top: 3px; table-layout: auto; }
+          thead { display: table-header-group; }
+          tr { page-break-inside: avoid; break-inside: avoid; }
+          th, td { padding: ${thPadding}; border-bottom: 1px solid #cccccc; font-size: ${thFontSize}; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; line-height: 1.2; }
+          th { background-color: #f2f2f2 !important; color: #000000 !important; font-weight: bold; border-top: 1.5px solid #000000 !important; border-bottom: 1.5px solid #000000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; white-space: nowrap; }
+          tr:nth-child(even) { background-color: #fafafa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           tfoot {
             display: table-row-group !important;
           }
           tfoot tr td { 
-            background-color: #f1f5f9 !important; 
-            color: #0f172a !important; 
+            background-color: #f2f2f2 !important; 
+            color: #000000 !important; 
             font-weight: 800; 
-            font-size: ${isManyColsPortrait ? '9px' : '11px'}; 
-            border-top: 2px solid #334155; 
-            border-bottom: 2px solid #334155; 
+            font-size: ${isCompactPortrait ? '9px' : '11px'}; 
+            border-top: 2px solid #000000; 
+            border-bottom: 2px solid #000000; 
             -webkit-print-color-adjust: exact; 
             print-color-adjust: exact; 
           }
@@ -396,9 +400,9 @@ export const printData = (
         </div>
         
         ${subtitle ? `
-          <div class="subtitle-container" style="margin-bottom: 14px; padding: 8px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11.5px; line-height: 1.4;">
-            <strong style="color: #0f172a; display: inline-block; margin-right: 6px;">Detalle:</strong>
-            <span style="color: #334155;">${subtitle}</span>
+          <div class="subtitle-container" style="margin-bottom: 12px; padding: 6px 10px; background-color: #f9f9f9; border: 1px solid #cccccc; border-radius: 4px; font-size: 10.5px; line-height: 1.35;">
+            <strong style="color: #000000; display: inline-block; margin-right: 6px;">Detalle:</strong>
+            <span style="color: #222222;">${subtitle}</span>
           </div>
         ` : ''}
 
@@ -420,7 +424,7 @@ export const printData = (
                     val = val ? 'Activo' : 'Inactivo';
                   }
                   const align = isNumericCol(col.dataKey) ? 'right' : (isCenterCol(col.dataKey) ? 'center' : 'left');
-                  const nowrap = isNumericCol(col.dataKey) || col.dataKey.toLowerCase().includes('fecha') || col.dataKey.toLowerCase().includes('metodo') ? 'white-space: nowrap;' : '';
+                  const nowrap = isNumericCol(col.dataKey) || col.dataKey.toLowerCase().includes('fecha') || col.dataKey.toLowerCase().includes('metodo') || col.dataKey.toLowerCase().includes('numero') ? 'white-space: nowrap;' : '';
                   return `<td style="text-align: ${align}; ${nowrap}">${val ?? '-'}</td>`;
                 }).join('')}
               </tr>
@@ -513,65 +517,68 @@ export const printGroupedData = (
     <!DOCTYPE html>
     <html>
       <head>
-        <title>${title}</title>
+        <title>&nbsp;</title>
         <style>
-          @page { size: auto; margin: 12mm; }
-          body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 12px; color: #1e293b; }
-          .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: ${subtitle ? '12px' : '18px'}; border-bottom: 2px solid #cbd5e1; padding-bottom: 10px; }
+          @page { size: auto; margin: 5mm 6mm; }
+          body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 12px; color: #000000; }
+          .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: ${subtitle ? '12px' : '18px'}; border-bottom: 2px solid #000000; padding-bottom: 10px; }
           .logo { max-height: 48px; object-fit: contain; }
           .title-container { text-align: right; }
-          .report-title { font-size: 17px; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px; }
-          .date { color: #64748b; font-size: 11px; margin: 0; }
+          .report-title { font-size: 17px; font-weight: 800; color: #000000; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+          .date { color: #333333; font-size: 11px; margin: 0; }
           
-          .subtitle-container { margin-bottom: 14px; padding: 8px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11.5px; line-height: 1.4; }
+          .subtitle-container { margin-bottom: 10px; padding: 6px 10px; background-color: #f9f9f9; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; line-height: 1.35; color: #000000; }
           
-          table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-          th, td { padding: 6px 6px; border-bottom: 1px solid #e2e8f0; font-size: 10.5px; }
+          table { width: 100% !important; max-width: 100% !important; border-collapse: collapse; margin-top: 3px; }
+          thead { display: table-header-group; }
+          tr { page-break-inside: avoid; break-inside: avoid; }
+          th, td { padding: 4px 5px; border-bottom: 1px solid #cccccc; font-size: 9.5px; line-height: 1.2; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; }
           th { 
-            background-color: #e0f2fe; 
+            background-color: #f2f2f2; 
             color: #000000; 
             font-weight: 800; 
-            border-top: 1px solid #93c5fd;
-            border-bottom: 2px solid #2563eb; 
+            border-top: 1.5px solid #000000;
+            border-bottom: 2px solid #000000; 
             text-transform: uppercase;
             letter-spacing: 0.3px;
             -webkit-print-color-adjust: exact; 
             print-color-adjust: exact; 
           }
-          tr:nth-child(even) { background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          tr:nth-child(even) { background-color: #fafafa; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           
           .client-header {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 800;
-            color: #0f172a;
-            padding: 6px 10px;
-            background-color: #f1f5f9;
-            border-left: 4px solid #2563eb;
-            border-radius: 4px;
-            margin-bottom: 6px;
+            color: #000000;
+            padding: 4px 8px;
+            background-color: #f2f2f2;
+            border-left: 4px solid #000000;
+            border-radius: 2px;
+            margin-bottom: 4px;
             -webkit-print-color-adjust: exact; 
             print-color-adjust: exact; 
           }
 
           .client-block {
-            margin-bottom: 18px;
+            margin-bottom: 14px;
             page-break-inside: avoid;
           }
 
           .subtotal-row td { 
-            background-color: #f1f5f9; 
+            background-color: #f2f2f2; 
             color: #000000; 
             font-weight: 800; 
-            font-size: 11px; 
-            border-top: 2px solid #334155; 
-            border-bottom: 2px solid #334155; 
+            font-size: 10px; 
+            border-top: 2px solid #000000; 
+            border-bottom: 2px solid #000000; 
             -webkit-print-color-adjust: exact; 
             print-color-adjust: exact; 
           }
           
           @media print {
-            body { padding: 0; }
-            .header { border-bottom: 1px solid #94a3b8; }
+            @page { size: auto; margin: 5mm 6mm; }
+            html, body { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 2mm 2mm !important; box-sizing: border-box !important; }
+            .header { border-bottom: 1.5px solid #000000; }
             .client-block { page-break-inside: avoid; }
           }
         </style>
@@ -587,8 +594,8 @@ export const printGroupedData = (
         
         ${subtitle ? `
           <div class="subtitle-container">
-            <strong style="color: #0f172a; display: inline-block; margin-right: 6px;">Filtros:</strong>
-            <span style="color: #334155;">${subtitle}</span>
+            <strong style="color: #000000; display: inline-block; margin-right: 6px;">Filtros:</strong>
+            <span style="color: #222222;">${subtitle}</span>
           </div>
         ` : ''}
 
@@ -645,7 +652,7 @@ export const printGroupedData = (
             <table style="width: 100%; border-collapse: collapse;">
               <thead>
                 <tr>
-                  <th colspan="${columns.length}" style="text-align: left; background-color: #f1f5f9; color: #0f172a; font-weight: 800; padding: 7px 10px; font-size: 11px; letter-spacing: 0.5px; border-left: 4px solid #2563eb; border-top: 1px solid #cbd5e1; border-bottom: 2px solid #334155; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                  <th colspan="${columns.length}" style="text-align: left; background-color: #f2f2f2; color: #000000; font-weight: 800; padding: 7px 10px; font-size: 11px; letter-spacing: 0.5px; border-left: 4px solid #000000; border-top: 1px solid #000000; border-bottom: 2px solid #000000; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
                     TOTAL GENERAL CONSOLIDADO
                   </th>
                 </tr>
@@ -655,7 +662,7 @@ export const printGroupedData = (
                   ${columns.map(c => {
                     const align = isNumericCol(c.dataKey) ? 'right' : (isCenterCol(c.dataKey) ? 'center' : 'left');
                     const val = grandTotalFooter[c.dataKey] ?? '';
-                    return `<td style="text-align: ${align}; font-weight: 900; padding: 8px 6px; border-top: 2px solid #334155; border-bottom: 2px solid #334155; color: #000000; font-size: 11px;">${val}</td>`;
+                    return `<td style="text-align: ${align}; font-weight: 900; padding: 8px 6px; border-top: 2px solid #000000; border-bottom: 2px solid #000000; color: #000000; font-size: 11px;">${val}</td>`;
                   }).join('')}
                 </tr>
               </tbody>

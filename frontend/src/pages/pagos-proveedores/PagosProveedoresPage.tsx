@@ -6,7 +6,7 @@ import {
     Search, Plus, Trash2, Receipt, 
     X, Save, AlignLeft, ChevronLeft, ChevronRight,
     Printer, FileText, FileSpreadsheet, AlertTriangle,
-    UserCircle, ShoppingBag, CreditCard, DollarSign, Calendar, ArrowRightLeft, Pencil,
+    UserCircle, ShoppingBag, CreditCard, DollarSign, Calendar, ArrowRightLeft, Pencil, Edit,
     Upload, Image as ImageIcon, ExternalLink, Eye, RotateCcw,
     MessageSquare, Send, Loader2, Globe, MessageCircle, Building2
 } from 'lucide-react';
@@ -486,12 +486,9 @@ const PagosProveedoresPage: React.FC = () => {
 
     const mappedExportData = useMemo(() => {
         return filteredPagos.map(p => {
-            const simbolo = p.moneda === 'USD' ? '$us' : 'Bs.';
-            const montoFormateado = `${simbolo} ${Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            const compraMoneda = p.nota?.moneda || 'BOB';
-            const saldoSimbolo = compraMoneda === 'USD' ? '$us' : 'Bs.';
-            const saldoFormateado = p.nota ? `${saldoSimbolo} ${Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
-            const totalCompraFormateado = p.nota ? `${compraMoneda === 'USD' ? '$us' : 'Bs.'} ${Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
+            const montoFormateado = Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const saldoFormateado = p.nota ? Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+            const totalCompraFormateado = p.nota ? Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
             const fechaStr = p.fecha ? p.fecha.split('T')[0].split('-').reverse().join('/') : '-';
             const observaciones = p.observaciones || p.nota?.observaciones || '-';
             return {
@@ -584,24 +581,24 @@ const PagosProveedoresPage: React.FC = () => {
                 moneda: '',
                 metodoPago: '',
                 referencia: '',
-                totalCompraFormateado: `Bs. ${totalCompraBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                montoFormateado: `Bs. ${totalPagadoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                saldoFormateado: `Bs. ${totalSaldoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                totalCompraFormateado: totalCompraBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                montoFormateado: totalPagadoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                saldoFormateado: totalSaldoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 observaciones: ''
             });
         }
 
         if (totalPagadoUSD > 0 || totalCompraUSD > 0) {
             rows.push({
-                fecha: (totalPagadoBOB > 0 || totalCompraBOB > 0) ? 'TOTALES ($us)' : 'TOTALES',
+                fecha: (totalPagadoBOB > 0 || totalCompraBOB > 0) ? 'TOTALES ($us)' : 'TOTALES ($us)',
                 notaNumero: '',
                 proveedorNombre: '',
-                moneda: '',
+                moneda: 'USD',
                 metodoPago: '',
                 referencia: '',
-                totalCompraFormateado: `$us ${totalCompraUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                montoFormateado: `$us ${totalPagadoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                saldoFormateado: `$us ${totalSaldoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                totalCompraFormateado: totalCompraUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                montoFormateado: totalPagadoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                saldoFormateado: totalSaldoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 observaciones: ''
             });
         }
@@ -610,8 +607,30 @@ const PagosProveedoresPage: React.FC = () => {
     };
 
     const getExportColumns = () => {
-        if (filtroProveedor) return exportColumns.filter(c => c.dataKey !== 'proveedorNombre');
-        return exportColumns;
+        const hasBOB = filteredPagos.some(p => p.activo && (!p.moneda || p.moneda === 'BOB' || p.nota?.moneda === 'BOB'));
+        const hasUSD = filteredPagos.some(p => p.activo && (p.moneda === 'USD' || p.nota?.moneda === 'USD'));
+
+        let cols = exportColumns.map(c => {
+            if (c.dataKey === 'totalCompraFormateado') {
+                if (filtroMoneda === 'USD' || (!hasBOB && hasUSD)) return { ...c, header: 'Total Compra ($us)' };
+                if (filtroMoneda === 'BOB' || (hasBOB && !hasUSD)) return { ...c, header: 'Total Compra (Bs.)' };
+                return { ...c, header: 'Total Compra' };
+            }
+            if (c.dataKey === 'montoFormateado') {
+                if (filtroMoneda === 'USD' || (!hasBOB && hasUSD)) return { ...c, header: 'Monto Pagado ($us)' };
+                if (filtroMoneda === 'BOB' || (hasBOB && !hasUSD)) return { ...c, header: 'Monto Pagado (Bs.)' };
+                return { ...c, header: 'Monto Pagado' };
+            }
+            if (c.dataKey === 'saldoFormateado') {
+                if (filtroMoneda === 'USD' || (!hasBOB && hasUSD)) return { ...c, header: 'Saldo Pendiente ($us)' };
+                if (filtroMoneda === 'BOB' || (hasBOB && !hasUSD)) return { ...c, header: 'Saldo Pendiente (Bs.)' };
+                return { ...c, header: 'Saldo Pendiente' };
+            }
+            return c;
+        });
+
+        if (filtroProveedor) return cols.filter(c => c.dataKey !== 'proveedorNombre');
+        return cols;
     };
 
     const handlePrint = () => {
@@ -993,32 +1012,32 @@ const PagosProveedoresPage: React.FC = () => {
                                             )}
                                         </td>
                                         <td className="p-4 text-right">
-                                            <div className="flex justify-end gap-2 flex-wrap">
+                                            <div className="flex justify-end gap-1.5">
                                                 {p.activo && (
                                                     <button
                                                         onClick={() => handleOpenWhatsAppModal(p)}
-                                                        className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                         title="Enviar Comprobante de Pago en PDF por WhatsApp"
                                                     >
-                                                        <MessageCircle className="w-3" /> WhatsApp
+                                                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                                     </button>
                                                 )}
                                                 {p.activo && (
                                                     <button
                                                         onClick={() => openEditModal(p)}
-                                                        className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-all flex items-center gap-1.5"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                         title="Editar Pago"
                                                     >
-                                                        <Pencil className="w-3 h-3" /> Editar
+                                                        <Edit className="w-3.5 h-3.5 text-amber-500" />
                                                     </button>
                                                 )}
                                                 {p.activo && (
                                                     <button
                                                         onClick={() => setAnularConfirmId(p.id)}
-                                                        className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1.5"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                         title="Anular Pago"
                                                     >
-                                                        <Trash2 className="w-3 h-3" /> Anular
+                                                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
                                                     </button>
                                                 )}
                                             </div>

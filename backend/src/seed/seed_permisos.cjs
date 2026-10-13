@@ -64,7 +64,7 @@ const permissions = [
   { nombre: 'Ajustar Stock Manualmente', recurso: 'INVENTARIO', accion: 'AJUSTAR', descripcion: 'Realizar ajustes de inventario de entrada/salida' },
   { nombre: 'Gestionar Límites de Stock', recurso: 'INVENTARIO', accion: 'LIMITES', descripcion: 'Configurar niveles mínimos y máximos de stock para alertas' },
   { nombre: 'Ver Kardex / Historial', recurso: 'KARDEX', accion: 'VER', descripcion: 'Consultar movimientos y trazabilidad de inventario' },
-  { nombre: 'Ver Movimientos de Inventario', recurso: 'MOVIMIENTOS', accion: 'VER', descripcion: 'Consultar trazabilidad y movimientos de Kardex' },
+  { nombre: 'Ver Kardex de Producto', recurso: 'MOVIMIENTOS', accion: 'VER', descripcion: 'Consultar trazabilidad y movimientos de Kardex' },
   { nombre: 'Ver Traspasos de Almacén', recurso: 'TRASPASOS', accion: 'VER', descripcion: 'Consultar transferencias de mercadería entre almacenes' },
   { nombre: 'Crear Traspasos de Almacén', recurso: 'TRASPASOS', accion: 'CREAR', descripcion: 'Registrar nuevos traspasos entre almacenes con flete' },
   { nombre: 'Anular Traspasos de Almacén', recurso: 'TRASPASOS', accion: 'ANULAR', descripcion: 'Anular traspasos y revertir stock' },

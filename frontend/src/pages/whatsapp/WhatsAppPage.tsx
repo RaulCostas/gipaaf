@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { whatsappService, type WhatsAppConfig, type BranchStatusSummary } from '../../api/whatsappService';
+import { whatsappService, type WhatsAppConfig, type BranchStatusSummary, type VendorStatusSummary } from '../../api/whatsappService';
 import { sucursalService, type Sucursal } from '../../api/sucursalService';
 import { useAuth } from '../../context/AuthContext';
 import { useFilters } from '../../context/FilterContext';
@@ -29,6 +29,20 @@ const WhatsAppPage: React.FC = () => {
         queryKey: ['whatsappBranchesStatus'],
         queryFn: whatsappService.getBranchesStatus,
         refetchInterval: 4000,
+    });
+
+    const { data: vendorsStatus, refetch: refetchVendors } = useQuery({
+        queryKey: ['whatsappVendorsStatus'],
+        queryFn: whatsappService.getVendorsStatus,
+        refetchInterval: 4000,
+    });
+
+    const [activeVendorQrId, setActiveVendorQrId] = useState<number | null>(null);
+    const { data: activeVendorStatus } = useQuery({
+        queryKey: ['whatsappVendorStatus', activeVendorQrId],
+        queryFn: () => whatsappService.getVendorStatus(activeVendorQrId!),
+        enabled: !!activeVendorQrId,
+        refetchInterval: 2500,
     });
 
     // Active branch selection
@@ -71,7 +85,7 @@ const WhatsAppPage: React.FC = () => {
     }, [sucursales, activeSucursalId]);
 
     // Tab state
-    const [activeTab, setActiveTab] = useState<'estado' | 'configuracion' | 'mensajes' | 'comandos'>('estado');
+    const [activeTab, setActiveTab] = useState<'estado' | 'vendedores' | 'configuracion' | 'mensajes' | 'comandos'>('estado');
 
     // Test Message Form
     const [testPhone, setTestPhone] = useState('');
@@ -223,6 +237,28 @@ const WhatsAppPage: React.FC = () => {
             toast.success(`Configuración del Bot guardada correctamente para ${currentSucursal?.nombre || 'la sucursal'}`);
         },
         onError: (err: any) => toast.error('Error al guardar configuración: ' + (err.response?.data?.message || err.message || 'Desconocido'))
+    });
+
+    const connectVendorMutation = useMutation({
+        mutationFn: (vendedorId: number) => whatsappService.connectVendor(vendedorId),
+        onSuccess: (_, vendedorId) => {
+            setActiveVendorQrId(vendedorId);
+            queryClient.invalidateQueries({ queryKey: ['whatsappVendorsStatus'] });
+            queryClient.invalidateQueries({ queryKey: ['whatsappVendorStatus', vendedorId] });
+            toast.success('Generando código QR para vincular WhatsApp del vendedor...');
+        },
+        onError: (err: any) => toast.error('Error al conectar WhatsApp del vendedor: ' + (err.message || 'Desconocido'))
+    });
+
+    const disconnectVendorMutation = useMutation({
+        mutationFn: (vendedorId: number) => whatsappService.disconnectVendor(vendedorId),
+        onSuccess: (_, vendedorId) => {
+            if (activeVendorQrId === vendedorId) setActiveVendorQrId(null);
+            queryClient.invalidateQueries({ queryKey: ['whatsappVendorsStatus'] });
+            queryClient.invalidateQueries({ queryKey: ['whatsappVendorStatus', vendedorId] });
+            toast.success('WhatsApp del vendedor desvinculado correctamente');
+        },
+        onError: (err: any) => toast.error('Error al desvincular WhatsApp del vendedor: ' + (err.message || 'Desconocido'))
     });
 
     const defaultBankAccounts = [
@@ -438,6 +474,16 @@ const WhatsAppPage: React.FC = () => {
                         }`}
                     >
                         <Smartphone className="w-4 h-4 shrink-0" /> Estado & Conexión
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('vendedores')}
+                        className={`px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 cursor-pointer shrink-0 ${
+                            activeTab === 'vendedores'
+                                ? 'border-primary text-primary'
+                                : 'border-transparent text-muted-foreground hover:text-foreground'
+                        }`}
+                    >
+                        <Users className="w-4 h-4 shrink-0" /> WhatsApp Vendedores ({vendorsStatus?.filter(v => v.sucursalId === activeSucursalId && v.status === 'CONNECTED').length || 0}/{vendorsStatus?.filter(v => v.sucursalId === activeSucursalId).length || 0})
                     </button>
                     <button
                         onClick={() => setActiveTab('configuracion')}
@@ -1105,6 +1151,193 @@ const WhatsAppPage: React.FC = () => {
                                 No hay actividad reciente registrada en el bot de {currentSucursal?.nombre}.
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* TAB 5: WHATSAPP VENDEDORES (MODO SOLO ENVÍO) */}
+            {activeTab === 'vendedores' && (
+                <div className="space-y-4">
+                    <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                            <h2 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
+                                <Users className="w-5 h-5 text-emerald-600 shrink-0" />
+                                Vinculación de WhatsApp de Vendedores (Modo Solo Envío)
+                            </h2>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                Cada vendedor puede vincular su propio WhatsApp escaneando su código QR. El sistema <strong>solo lo utilizará para enviar PDFs de Proformas y Ventas</strong> directamente desde su número al cliente, <strong>sin activar respuestas automáticas de chatbot</strong> en sus conversaciones personales.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => refetchVendors()}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-card border rounded-lg text-xs font-semibold hover:bg-accent transition-colors shrink-0 self-start sm:self-center cursor-pointer"
+                        >
+                            <RefreshCw className="w-3.5 h-3.5" /> Actualizar Vendedores
+                        </button>
+                    </div>
+
+                    {(!vendorsStatus || vendorsStatus.filter(v => v.sucursalId === activeSucursalId).length === 0) ? (
+                        <div className="bg-card border rounded-xl p-8 text-center text-muted-foreground text-xs">
+                            No hay vendedores activos asignados a <strong>{currentSucursal?.nombre || 'esta sucursal'}</strong>.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {vendorsStatus
+                                .filter(v => v.sucursalId === activeSucursalId)
+                                .map((vendor: VendorStatusSummary) => {
+                                    const isVendorConn = vendor.status === 'CONNECTED';
+                                    const isVendorQr = vendor.status === 'QR_READY';
+                                    const isVendorConnecting = vendor.status === 'CONNECTING';
+                                    const displayName = vendor.vendedorNombre || vendor.nombre || `Vendedor #${vendor.vendedorId}`;
+
+                                    return (
+                                        <div
+                                            key={vendor.vendedorId}
+                                            className={`bg-card border rounded-xl p-4 shadow-sm flex flex-col justify-between gap-4 transition-all ${
+                                                isVendorConn ? 'border-emerald-500/40 ring-1 ring-emerald-500/15' : 'border-border'
+                                            }`}
+                                        >
+                                            <div className="space-y-2">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-primary/10 text-primary rounded shrink-0">
+                                                                #{vendor.vendedorId}
+                                                            </span>
+                                                            <h3 className="text-sm font-bold text-foreground truncate">
+                                                                {displayName}
+                                                            </h3>
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                                            Sucursal: <span className="font-medium text-foreground">{vendor.sucursalNombre || 'General'}</span>
+                                                        </p>
+                                                    </div>
+
+                                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold shrink-0 ${
+                                                        isVendorConn
+                                                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                                            : isVendorQr
+                                                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse'
+                                                                : isVendorConnecting
+                                                                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 animate-pulse'
+                                                                    : 'bg-muted text-muted-foreground border border-border'
+                                                    }`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${
+                                                            isVendorConn ? 'bg-emerald-500' : isVendorQr ? 'bg-amber-500' : isVendorConnecting ? 'bg-blue-500' : 'bg-muted-foreground'
+                                                        }`} />
+                                                        {isVendorConn ? 'Vinculado' : isVendorQr ? 'QR Listo' : isVendorConnecting ? 'Conectando...' : 'Sin vincular'}
+                                                    </span>
+                                                </div>
+
+                                                <div className="text-xs bg-muted/40 rounded-lg p-2.5 space-y-1 border border-border/50">
+                                                    {vendor.ci && (
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-muted-foreground">CI:</span>
+                                                            <span className="font-mono font-semibold text-foreground">{vendor.ci}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-muted-foreground">Celular registrado:</span>
+                                                        <span className="font-mono font-semibold text-foreground">{vendor.telefono || 'No registrado'}</span>
+                                                    </div>
+                                                    {isVendorConn && vendor.user && (
+                                                        <div className="flex items-center justify-between pt-1 border-t border-border/50">
+                                                            <span className="text-muted-foreground">Sesión activa:</span>
+                                                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                                                +{vendor.user.id} {vendor.user.name ? `(${vendor.user.name})` : ''}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+                                                {isVendorConn ? (
+                                                    <button
+                                                        onClick={() => disconnectVendorMutation.mutate(vendor.vendedorId)}
+                                                        disabled={disconnectVendorMutation.isPending}
+                                                        className="w-full py-2 px-3 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                                    >
+                                                        <Power className="w-3.5 h-3.5" /> Desvincular WhatsApp
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => {
+                                                            setActiveVendorQrId(vendor.vendedorId);
+                                                            connectVendorMutation.mutate(vendor.vendedorId);
+                                                        }}
+                                                        disabled={connectVendorMutation.isPending}
+                                                        className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                                                    >
+                                                        <QrCode className="w-3.5 h-3.5" />
+                                                        {isVendorQr ? 'Ver Código QR' : 'Vincular con QR'}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Modal QR de Vendedor */}
+            {activeVendorQrId !== null && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
+                    onClick={() => setActiveVendorQrId(null)}
+                >
+                    <div
+                        className="bg-card border rounded-2xl p-5 sm:p-6 max-w-sm w-full space-y-4 shadow-2xl text-center animate-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="space-y-1">
+                            <h3 className="text-base font-bold text-foreground flex items-center justify-center gap-2">
+                                <QrCode className="w-5 h-5 text-emerald-600" />
+                                Vincular WhatsApp de Vendedor
+                            </h3>
+                            <p className="text-xs text-muted-foreground font-medium">
+                                {activeVendorStatus?.vendedorNombre || activeVendorStatus?.nombre || vendorsStatus?.find(v => v.vendedorId === activeVendorQrId)?.vendedorNombre || 'Vendedor'}
+                            </p>
+                        </div>
+
+                        {activeVendorStatus?.status === 'CONNECTED' ? (
+                            <div className="p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-2">
+                                <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
+                                <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                                    ¡WhatsApp Vinculado Exitosamente!
+                                </p>
+                                <p className="text-xs text-muted-foreground font-mono">
+                                    +{activeVendorStatus.user?.id} {activeVendorStatus.user?.name ? `(${activeVendorStatus.user.name})` : ''}
+                                </p>
+                            </div>
+                        ) : activeVendorStatus?.qrCode ? (
+                            <div className="space-y-3">
+                                <div className="p-3 bg-white rounded-xl border shadow-inner inline-block mx-auto">
+                                    <img
+                                        src={activeVendorStatus.qrCode}
+                                        alt="QR Vendedor"
+                                        className="w-56 h-56 object-contain mx-auto"
+                                    />
+                                </div>
+                                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                    Abre WhatsApp en el celular del vendedor → <strong>Dispositivos vinculados</strong> → <strong>Vincular un dispositivo</strong> y escanea este código.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="py-10 space-y-3">
+                                <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto" />
+                                <p className="text-xs text-muted-foreground">Generando código QR seguro...</p>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => setActiveVendorQrId(null)}
+                            className="w-full py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                        >
+                            Cerrar
+                        </button>
                     </div>
                 </div>
             )}

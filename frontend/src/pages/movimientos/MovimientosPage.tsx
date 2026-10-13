@@ -22,7 +22,6 @@ const MovimientosPage: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProductId, setSelectedProductId] = useState<string>('');
     const [tipoFilter, setTipoFilter] = useState<string>('TODOS');
-    const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 15;
@@ -126,9 +125,10 @@ const MovimientosPage: React.FC = () => {
 
         // Sort chronologically ascending to calculate cumulative running stock
         const sorted = [...movimientos].sort((a, b) => {
-            const timeA = new Date(a.creadoEn).getTime();
-            const timeB = new Date(b.creadoEn).getTime();
-            return timeA - timeB;
+            const timeA = a.creadoEn ? new Date(a.creadoEn).getTime() : 0;
+            const timeB = b.creadoEn ? new Date(b.creadoEn).getTime() : 0;
+            if (timeA !== timeB) return timeA - timeB;
+            return (a.id || 0) - (b.id || 0);
         });
 
         // Track running saldo per inventory / product
@@ -215,21 +215,15 @@ const MovimientosPage: React.FC = () => {
                 }
             }
 
-            // Date range filter
-            if (m.creadoEn) {
+            // Date filter (only fechaHasta)
+            if (m.creadoEn && fechaHasta) {
                 const fechaStr = format(new Date(m.creadoEn), 'yyyy-MM-dd');
-                if (fechaDesde && fechaHasta) {
-                    if (fechaStr < fechaDesde || fechaStr > fechaHasta) return false;
-                } else if (fechaDesde) {
-                    if (fechaStr < fechaDesde) return false;
-                } else if (fechaHasta) {
-                    if (fechaStr > fechaHasta) return false;
-                }
+                if (fechaStr > fechaHasta) return false;
             }
 
             return true;
         });
-    }, [allMovimientosWithSaldo, selectedProductId, searchTerm, selectedCiudad, selectedSucursal, tipoFilter, fechaDesde, fechaHasta]);
+    }, [allMovimientosWithSaldo, selectedProductId, searchTerm, selectedCiudad, selectedSucursal, tipoFilter, fechaHasta]);
 
     // Financial & Quantity Totals of current filtered list
     const totals = useMemo(() => {
@@ -265,25 +259,32 @@ const MovimientosPage: React.FC = () => {
             cols.push({ header: 'Producto', dataKey: 'producto' });
         }
 
-        if (!selectedSucursal) {
+        if (!selectedSucursal && !selectedCiudad) {
             cols.push({ header: 'Sucursal', dataKey: 'sucursal' });
         }
 
         cols.push(
             { header: 'Observación', dataKey: 'observacionText' },
             { header: 'Usuario', dataKey: 'usuarioText' },
-            { header: 'P. Compra', dataKey: 'precioCompraFmt' },
-            { header: 'P. Venta', dataKey: 'precioVentaFmt' },
+            { header: 'P. Compra (Bs.)', dataKey: 'precioCompraFmt' },
+            { header: 'P. Venta (Bs.)', dataKey: 'precioVentaFmt' },
             { header: 'Ingreso', dataKey: 'ingresoFmt' },
             { header: 'Salida', dataKey: 'salidaFmt' },
             { header: 'Saldo', dataKey: 'saldoFmt' }
         );
 
         return cols;
-    }, [selectedProductId, selectedSucursal]);
+    }, [selectedProductId, selectedSucursal, selectedCiudad]);
 
     const mappedExportData = useMemo(() => {
-        return filteredMovimientos.map((m, idx) => {
+        const sortedAsc = [...filteredMovimientos].sort((a, b) => {
+            const timeA = a.creadoEn ? new Date(a.creadoEn).getTime() : 0;
+            const timeB = b.creadoEn ? new Date(b.creadoEn).getTime() : 0;
+            if (timeA !== timeB) return timeA - timeB;
+            return (a.id || 0) - (b.id || 0);
+        });
+
+        return sortedAsc.map((m, idx) => {
             const suc = m.inventario?.sucursal as any;
             const sucursalNombre = suc?.nombre || '-';
             const ciudadNombre = suc?.ciudad?.nombre || (suc?.ciudadId ? ciudades?.find(c => c.id === suc.ciudadId)?.nombre : '');
@@ -294,15 +295,15 @@ const MovimientosPage: React.FC = () => {
             return {
                 id: m.id,
                 nro: idx + 1,
-                fecha: format(new Date(m.creadoEn), 'dd/MM/yyyy HH:mm'),
+                fecha: m.creadoEn ? format(new Date(m.creadoEn), 'dd/MM/yyyy') : '-',
                 tipo: m.tipo.replace(/_/g, ' '),
                 docNumero: m.docNumero,
                 producto: prodDisplay,
                 sucursal: sucursalDisplay,
                 observacionText: m.observacionText,
                 usuarioText: m.usuarioText,
-                precioCompraFmt: `Bs. ${m.precioCompraVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                precioVentaFmt: `Bs. ${m.precioVentaVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                precioCompraFmt: m.precioCompraVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                precioVentaFmt: m.precioVentaVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 ingresoFmt: m.ingreso > 0 ? formatQuantity(m.ingreso) : '',
                 salidaFmt: m.salida > 0 ? formatQuantity(m.salida) : '',
                 saldoFmt: formatQuantity(m.saldoCalculado),
@@ -351,11 +352,7 @@ const MovimientosPage: React.FC = () => {
             texts.push(`Tipo: ${tipoMap[tipoFilter] || tipoFilter}`);
         }
 
-        if (fechaDesde && fechaHasta) {
-            texts.push(`Rango: ${fechaDesde.split('-').reverse().join('/')} al ${fechaHasta.split('-').reverse().join('/')}`);
-        } else if (fechaDesde) {
-            texts.push(`Desde: ${fechaDesde.split('-').reverse().join('/')}`);
-        } else if (fechaHasta) {
+        if (fechaHasta) {
             texts.push(`Hasta: ${fechaHasta.split('-').reverse().join('/')}`);
         }
 
@@ -380,12 +377,12 @@ const MovimientosPage: React.FC = () => {
 
     const handlePrint = () => {
         if (!filteredMovimientos.length) return;
-        printData(getReportTitle(), exportColumns, mappedExportData, getFiltersText(), totalsFooter);
+        printData(getReportTitle(), exportColumns, mappedExportData, getFiltersText(), totalsFooter, 'portrait');
     };
 
     const handleExportPDF = () => {
         if (!filteredMovimientos.length) return;
-        exportToPDF(getReportTitle(), exportColumns, mappedExportData, 'kardex_movimientos', getFiltersText(), totalsFooter);
+        exportToPDF(getReportTitle(), exportColumns, mappedExportData, 'kardex_movimientos', getFiltersText(), totalsFooter, 'portrait');
     };
 
     const handleExportExcel = () => {
@@ -402,7 +399,7 @@ const MovimientosPage: React.FC = () => {
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedProductId, selectedCiudad, selectedSucursal, tipoFilter, fechaDesde, fechaHasta]);
+    }, [searchTerm, selectedProductId, selectedCiudad, selectedSucursal, tipoFilter, fechaHasta]);
 
     const getTipoIcon = (tipo: string, cantidad: number) => {
         if (tipo === 'ENTRADA' || tipo === 'COMPRA' || tipo === 'TRASPASO_ENTRADA' || tipo === 'DEVOLUCION' || tipo === 'ANULACION_VENTA' || cantidad > 0) return <ArrowUpRight className="w-3 h-3" />;
@@ -556,18 +553,6 @@ const MovimientosPage: React.FC = () => {
                     </select>
                 </div>
 
-                {/* Filtro Fecha Desde */}
-                <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
-                    <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span className="text-xs text-muted-foreground font-medium">Desde:</span>
-                    <input
-                        type="date"
-                        value={fechaDesde}
-                        onChange={(e) => setFechaDesde(e.target.value)}
-                        className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm"
-                    />
-                </div>
-
                 {/* Filtro Fecha Hasta */}
                 <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm text-sm">
                     <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -581,13 +566,12 @@ const MovimientosPage: React.FC = () => {
                 </div>
 
                 {/* Botón Limpiar */}
-                {(selectedProductId || tipoFilter !== 'TODOS' || !!searchTerm || !!fechaDesde || !!fechaHasta) && (
+                {(selectedProductId || tipoFilter !== 'TODOS' || !!searchTerm || !!fechaHasta) && (
                     <button
                         type="button"
                         onClick={() => {
                             setSelectedProductId('');
                             setTipoFilter('TODOS');
-                            setFechaDesde('');
                             setFechaHasta('');
                             setSearchTerm('');
                         }}
@@ -613,13 +597,13 @@ const MovimientosPage: React.FC = () => {
                                 {!selectedProductId && (
                                     <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>
                                 )}
-                                {!selectedSucursal && (
+                                {!selectedSucursal && !selectedCiudad && (
                                     <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sucursal</th>
                                 )}
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Observación</th>
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-36">Usuario</th>
-                                <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">P. Compra</th>
-                                <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">P. Venta</th>
+                                <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">P. Compra (Bs.)</th>
+                                <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">P. Venta (Bs.)</th>
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-green-700 dark:text-green-400 text-right w-24">Ingreso</th>
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-400 text-right w-24">Salida</th>
                                 <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right w-24">Saldo</th>
@@ -628,7 +612,7 @@ const MovimientosPage: React.FC = () => {
                         <tbody className="divide-y">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={10 + (!selectedProductId ? 1 : 0) + (!selectedSucursal ? 1 : 0)} className="p-12 text-center text-muted-foreground">
+                                    <td colSpan={10 + (!selectedProductId ? 1 : 0) + (!selectedSucursal && !selectedCiudad ? 1 : 0)} className="p-12 text-center text-muted-foreground">
                                         <div className="flex flex-col items-center justify-center gap-2.5">
                                             <Loader2 className="w-6 h-6 animate-spin text-primary" />
                                             <span className="text-sm font-medium">Cargando movimientos de inventario...</span>
@@ -637,7 +621,7 @@ const MovimientosPage: React.FC = () => {
                                 </tr>
                             ) : paginatedMovimientos.length === 0 ? (
                                 <tr>
-                                    <td colSpan={10 + (!selectedProductId ? 1 : 0) + (!selectedSucursal ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
+                                    <td colSpan={10 + (!selectedProductId ? 1 : 0) + (!selectedSucursal && !selectedCiudad ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         No se encontraron movimientos de inventario con los filtros seleccionados.
                                     </td>
                                 </tr>
@@ -682,7 +666,7 @@ const MovimientosPage: React.FC = () => {
                                                 </div>
                                             </td>
                                         )}
-                                        {!selectedSucursal && (
+                                        {!selectedSucursal && !selectedCiudad && (
                                             <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
                                                 {suc?.nombre || 'Principal'} {suc?.ciudad?.nombre ? `(${suc.ciudad.nombre})` : ''}
                                             </td>
@@ -696,10 +680,10 @@ const MovimientosPage: React.FC = () => {
                                             {m.usuarioText}
                                         </td>
                                         <td className="p-3 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">
-                                            Bs. {m.precioCompraVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            {m.precioCompraVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
                                         <td className="p-3 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">
-                                            Bs. {m.precioVentaVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            {m.precioVentaVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
                                         <td className="p-3 text-xs font-mono font-bold text-right text-green-600 dark:text-green-400 whitespace-nowrap">
                                             {m.ingreso > 0 ? formatQuantity(m.ingreso) : '-'}
@@ -718,7 +702,7 @@ const MovimientosPage: React.FC = () => {
                             <tfoot className="bg-muted/70 font-bold border-t-2 border-border">
                                 <tr>
                                     <td 
-                                        colSpan={4 + (!selectedProductId ? 1 : 0) + (!selectedSucursal ? 1 : 0) + 4} 
+                                        colSpan={4 + (!selectedProductId ? 1 : 0) + (!selectedSucursal && !selectedCiudad ? 1 : 0) + 4} 
                                         className="p-3 text-xs text-right uppercase tracking-wider text-foreground font-black"
                                     >
                                         TOTALES:

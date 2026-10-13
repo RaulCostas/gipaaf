@@ -98,10 +98,42 @@ export interface BranchStatusSummary {
     logsCount: number;
 }
 
+export interface VendorSession {
+    vendedorId: number;
+    vendedorNombre: string;
+    ci?: string;
+    telefono?: string;
+    sucursalId?: number;
+    sucursalNombre?: string;
+    ciudadNombre?: string;
+    sock: WASocket | null;
+    connectionStatus: 'DISCONNECTED' | 'CONNECTING' | 'QR_READY' | 'CONNECTED';
+    currentQrCode: string | null;
+    connectedUser: { id: string; name: string } | null;
+    isManualDisconnect: boolean;
+    authDir: string;
+}
+
+export interface VendorStatusSummary {
+    vendedorId: number;
+    vendedorNombre: string;
+    nombre: string;
+    ci?: string;
+    telefono?: string;
+    sucursalId?: number;
+    sucursalNombre?: string;
+    ciudadNombre?: string;
+    status: 'DISCONNECTED' | 'CONNECTING' | 'QR_READY' | 'CONNECTED';
+    hasQr: boolean;
+    qrCode: string | null;
+    user: { id: string; name: string } | null;
+}
+
 @Injectable()
 export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(WhatsAppService.name);
     private sessions: Map<number, BranchSession> = new Map();
+    private vendorSessions: Map<number, VendorSession> = new Map();
     private baseAuthDir = path.join(process.cwd(), 'whatsapp_auth');
     private processedMsgIds = new Set<string>();
     private recentSenderActivity = new Map<string, { lastMsgAt: number; count: number; lastFallbackAt: number; blockedUntil?: number }>();
@@ -202,13 +234,43 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         } catch (initErr) {
             this.logger.error('Error al inicializar sesiones de sucursales en WhatsAppService:', initErr);
         }
+
+        // Initialize sessions for all active vendedores that have saved credentials
+        try {
+            const vendedores = await this.personalRepo.find({
+                where: { activo: true },
+                relations: ['sucursal', 'sucursal.ciudad'],
+                order: { id: 'ASC' }
+            });
+
+            for (const v of vendedores) {
+                const vDir = path.join(this.baseAuthDir, `vendedor_${v.id}`);
+                const credsFile = path.join(vDir, 'creds.json');
+                if (fs.existsSync(credsFile)) {
+                    const vSession = await this.getOrCreateVendorSession(v.id);
+                    this.logger.log(`Credenciales encontradas para vendedor "${vSession.vendedorNombre}" (ID: ${v.id}). Autoconectando WhatsApp...`);
+                    this.connectVendorWhatsApp(v.id).catch(err => {
+                        this.logger.error(`Error al autoconectar WhatsApp de vendedor ${vSession.vendedorNombre}:`, err);
+                    });
+                }
+            }
+        } catch (vInitErr) {
+            this.logger.error('Error al inicializar sesiones de vendedores en WhatsAppService:', vInitErr);
+        }
     }
 
     async onModuleDestroy() {
-        for (const [sucursalId, session] of this.sessions.entries()) {
+        for (const [, session] of this.sessions.entries()) {
             if (session.sock) {
                 try {
                     session.sock.end(undefined);
+                } catch (e) {}
+            }
+        }
+        for (const [, vSession] of this.vendorSessions.entries()) {
+            if (vSession.sock) {
+                try {
+                    vSession.sock.end(undefined);
                 } catch (e) {}
             }
         }
@@ -757,6 +819,207 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    // ==========================================
+    // GESTIÓN DE SESIONES POR VENDEDOR (SOLO ENVÍO, SIN BOT DE AUTO-RESPUESTA)
+    // ==========================================
+    private async getOrCreateVendorSession(vendedorId: number): Promise<VendorSession> {
+        const personal = await this.personalRepo.findOne({
+            where: { id: vendedorId },
+            relations: ['sucursal', 'sucursal.ciudad']
+        });
+
+        const vendedorNombre = personal
+            ? `${personal.nombres || ''} ${personal.apellidos || ''}`.trim()
+            : `Vendedor #${vendedorId}`;
+        const ci = personal?.ci || '';
+        const telefono = personal?.telefono || '';
+        const sucursalId = personal?.sucursal?.id;
+        const sucursalNombre = personal?.sucursal?.nombre;
+        const ciudadNombre = personal?.sucursal?.ciudad?.nombre;
+
+        if (this.vendorSessions.has(vendedorId)) {
+            const existing = this.vendorSessions.get(vendedorId)!;
+            existing.vendedorNombre = vendedorNombre;
+            existing.ci = ci;
+            existing.telefono = telefono;
+            existing.sucursalId = sucursalId;
+            existing.sucursalNombre = sucursalNombre;
+            existing.ciudadNombre = ciudadNombre;
+            return existing;
+        }
+
+        const authDir = path.join(this.baseAuthDir, `vendedor_${vendedorId}`);
+        if (!fs.existsSync(authDir)) {
+            fs.mkdirSync(authDir, { recursive: true });
+        }
+
+        const newVendorSession: VendorSession = {
+            vendedorId,
+            vendedorNombre,
+            ci,
+            telefono,
+            sucursalId,
+            sucursalNombre,
+            ciudadNombre,
+            sock: null,
+            connectionStatus: 'DISCONNECTED',
+            currentQrCode: null,
+            connectedUser: null,
+            isManualDisconnect: false,
+            authDir
+        };
+
+        this.vendorSessions.set(vendedorId, newVendorSession);
+        return newVendorSession;
+    }
+
+    async getVendorsStatus(): Promise<VendorStatusSummary[]> {
+        const vendedores = await this.personalRepo.find({
+            where: { activo: true },
+            relations: ['sucursal', 'sucursal.ciudad'],
+            order: { nombres: 'ASC' }
+        });
+
+        const list: VendorStatusSummary[] = [];
+        for (const v of vendedores) {
+            // Mostrar vendedores activos o cualquier personal que ya tenga sesión creada
+            if (v.cargo !== Cargo.VENDEDOR && v.cargo !== Cargo.JEFE_VENTAS && !this.vendorSessions.has(v.id)) {
+                continue;
+            }
+            const vSession = await this.getOrCreateVendorSession(v.id);
+            list.push({
+                vendedorId: vSession.vendedorId,
+                vendedorNombre: vSession.vendedorNombre,
+                nombre: vSession.vendedorNombre,
+                ci: vSession.ci,
+                telefono: vSession.telefono,
+                sucursalId: vSession.sucursalId,
+                sucursalNombre: vSession.sucursalNombre,
+                ciudadNombre: vSession.ciudadNombre,
+                status: vSession.connectionStatus,
+                hasQr: !!vSession.currentQrCode,
+                qrCode: vSession.currentQrCode,
+                user: vSession.connectedUser
+            });
+        }
+        return list;
+    }
+
+    async getVendorStatus(vendedorId: number): Promise<VendorStatusSummary> {
+        const vSession = await this.getOrCreateVendorSession(vendedorId);
+        return {
+            vendedorId: vSession.vendedorId,
+            vendedorNombre: vSession.vendedorNombre,
+            nombre: vSession.vendedorNombre,
+            ci: vSession.ci,
+            telefono: vSession.telefono,
+            sucursalId: vSession.sucursalId,
+            sucursalNombre: vSession.sucursalNombre,
+            ciudadNombre: vSession.ciudadNombre,
+            status: vSession.connectionStatus,
+            hasQr: !!vSession.currentQrCode,
+            qrCode: vSession.currentQrCode,
+            user: vSession.connectedUser
+        };
+    }
+
+    async connectVendorWhatsApp(vendedorId: number): Promise<void> {
+        const vSession = await this.getOrCreateVendorSession(vendedorId);
+
+        if (vSession.connectionStatus === 'CONNECTED' || vSession.connectionStatus === 'CONNECTING') {
+            return;
+        }
+
+        vSession.isManualDisconnect = false;
+        vSession.connectionStatus = 'CONNECTING';
+
+        try {
+            const { state, saveCreds } = await useMultiFileAuthState(vSession.authDir);
+
+            vSession.sock = makeWASocket({
+                auth: state,
+                printQRInTerminal: false,
+                logger: pino({ level: 'silent' }) as any,
+                browser: [`GIPAAF Asesor (${vSession.vendedorNombre})`, 'Chrome', '1.0.0'],
+                generateHighQualityLinkPreview: true,
+                syncFullHistory: false,
+            });
+
+            vSession.sock.ev.on('creds.update', saveCreds);
+
+            vSession.sock.ev.on('connection.update', async (update) => {
+                const { connection, lastDisconnect, qr } = update;
+
+                if (qr) {
+                    try {
+                        vSession.currentQrCode = await QRCode.toDataURL(qr);
+                        vSession.connectionStatus = 'QR_READY';
+                        this.logger.log(`Nuevo código QR generado para vendedor "${vSession.vendedorNombre}" (ID: ${vSession.vendedorId})`);
+                    } catch (qrErr) {
+                        this.logger.error(`Error al generar código QR para vendedor ${vSession.vendedorId}:`, qrErr);
+                    }
+                }
+
+                if (connection === 'close') {
+                    const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut && !vSession.isManualDisconnect;
+
+                    this.logger.warn(`Conexión de WhatsApp cerrada para vendedor ${vSession.vendedorNombre}. Razón: ${statusCode}, Reconectar: ${shouldReconnect}`);
+                    vSession.connectionStatus = 'DISCONNECTED';
+                    vSession.currentQrCode = null;
+                    vSession.connectedUser = null;
+
+                    if (statusCode === DisconnectReason.loggedOut) {
+                        this.logger.log(`Sesión cerrada desde el teléfono del vendedor ${vSession.vendedorNombre}. Limpiando credenciales...`);
+                        this.clearVendorAuthDir(vSession);
+                    } else if (shouldReconnect) {
+                        setTimeout(() => this.connectVendorWhatsApp(vSession.vendedorId), 4000);
+                    }
+                } else if (connection === 'open') {
+                    vSession.connectionStatus = 'CONNECTED';
+                    vSession.currentQrCode = null;
+                    const userPhone = vSession.sock?.user?.id ? vSession.sock.user.id.split(':')[0] : 'Desconocido';
+                    vSession.connectedUser = {
+                        id: userPhone,
+                        name: vSession.sock?.user?.name || `${vSession.vendedorNombre} (+${userPhone})`,
+                    };
+                    this.logger.log(`¡WhatsApp de Vendedor "${vSession.vendedorNombre}" conectado exitosamente (+${userPhone})!`);
+                }
+            });
+            // IMPORTANTE: No se registra listener de 'messages.upsert' para no interferir
+            // con los chats personales ni con las respuestas manuales del vendedor.
+        } catch (error) {
+            this.logger.error(`Error al inicializar Baileys para vendedor ${vSession.vendedorNombre}:`, error);
+            vSession.connectionStatus = 'DISCONNECTED';
+        }
+    }
+
+    async disconnectVendorWhatsApp(vendedorId: number): Promise<void> {
+        const vSession = await this.getOrCreateVendorSession(vendedorId);
+        vSession.isManualDisconnect = true;
+        if (vSession.sock) {
+            try {
+                vSession.sock.end(undefined);
+            } catch (e) {}
+            vSession.sock = null;
+        }
+        vSession.connectionStatus = 'DISCONNECTED';
+        vSession.currentQrCode = null;
+        vSession.connectedUser = null;
+        this.clearVendorAuthDir(vSession);
+    }
+
+    private clearVendorAuthDir(vSession: VendorSession) {
+        try {
+            if (fs.existsSync(vSession.authDir)) {
+                fs.rmSync(vSession.authDir, { recursive: true, force: true });
+                fs.mkdirSync(vSession.authDir, { recursive: true });
+            }
+        } catch (e) {
+            this.logger.error(`Error al limpiar directorio de autenticación para vendedor ${vSession.vendedorId}:`, e);
+        }
+    }
+
     private isBotMessage(text: string): boolean {
         if (!text || typeof text !== 'string') return false;
         const lower = text.toLowerCase();
@@ -901,8 +1164,10 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         proformaId: number,
         targetPhone?: string,
         sucursalId?: number,
-        customMessage?: string
-    ): Promise<{ success: boolean; message: string; phone: string }> {
+        customMessage?: string,
+        senderType?: 'VENDEDOR' | 'SUCURSAL',
+        vendedorId?: number
+    ): Promise<{ success: boolean; message: string; phone: string; sentVia?: 'VENDEDOR' | 'SUCURSAL' }> {
         const proforma = await this.notaRepo.findOne({
             where: { id: proformaId, tipo: TipoNota.PROFORMA },
             relations: [
@@ -937,7 +1202,60 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         }
         const jid = `${cleanedPhone}@s.whatsapp.net`;
 
-        // Determinar sesión de WhatsApp de la sucursal correspondiente o fallback
+        const branchDisplay = this.formatSucursalDisplay(proforma.sucursal);
+        const pdfBuffer = await this.generateProformaPdfInMemory(proforma, branchDisplay);
+
+        const clienteNombre = this.formatClienteDisplay(proforma.cliente);
+        const totalFormatted = Number(proforma.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fechaFormatted = proforma.fecha ? String(proforma.fecha).split('T')[0].split('-').reverse().join('/') : '-';
+
+        const targetVendedorId = vendedorId || proforma.vendedor?.id;
+        const effectiveSenderType = senderType || (targetVendedorId && this.vendorSessions.get(targetVendedorId)?.connectionStatus === 'CONNECTED' ? 'VENDEDOR' : 'SUCURSAL');
+
+        // MODO 1: Enviar desde el WhatsApp vinculado del Vendedor
+        if (effectiveSenderType === 'VENDEDOR') {
+            if (!targetVendedorId) {
+                throw new BadRequestException('Esta proforma no tiene un vendedor asignado para enviar desde su WhatsApp.');
+            }
+            const vSession = await this.getOrCreateVendorSession(targetVendedorId);
+            if (!vSession || vSession.connectionStatus !== 'CONNECTED' || !vSession.sock) {
+                throw new BadRequestException(`El WhatsApp del vendedor (${vSession?.vendedorNombre || 'Asesor'}) no está vinculado. Por favor escanee su código QR en el modal o seleccione el envío por Bot de Sucursal.`);
+            }
+
+            const vendedorNombreCompleto = proforma.vendedor
+                ? `${proforma.vendedor.nombres || ''} ${proforma.vendedor.apellidos || ''}`.trim()
+                : vSession.vendedorNombre;
+
+            const caption = customMessage?.trim() ||
+                `📄 *PROFORMA / COTIZACIÓN - ${proforma.numero || 'S/N'}*\n\n` +
+                `Hola *${clienteNombre}*, te saluda *${vendedorNombreCompleto}* de *GIPAAF (${branchDisplay})*.\n` +
+                `Te adjunto la proforma/cotización solicitada por un monto total de *Bs. ${totalFormatted}*.\n\n` +
+                `📅 *Fecha:* ${fechaFormatted}\n` +
+                `🏢 *Sucursal:* ${branchDisplay}\n` +
+                `👤 *Asesor Comercial:* ${vendedorNombreCompleto}\n` +
+                `\n_En el documento PDF adjunto encontrarás el detalle de ítems y precios. Quedo atento por este mismo chat para confirmar tu pedido o realizar cualquier ajuste._`;
+
+            try {
+                await vSession.sock.sendPresenceUpdate('composing', jid);
+                await new Promise(r => setTimeout(r, 1200));
+            } catch (e) {}
+
+            await vSession.sock.sendMessage(jid, {
+                document: pdfBuffer,
+                mimetype: 'application/pdf',
+                fileName: `Proforma_${proforma.numero || proforma.id}.pdf`,
+                caption
+            });
+
+            return {
+                success: true,
+                message: `Proforma ${proforma.numero || ''} enviada desde el WhatsApp de ${vendedorNombreCompleto} a +${cleanedPhone}`,
+                phone: cleanedPhone,
+                sentVia: 'VENDEDOR'
+            };
+        }
+
+        // MODO 2: Enviar desde el Bot de la Sucursal (con enlace directo al vendedor)
         let targetSucursalId = sucursalId || proforma.sucursal?.id;
         let session = targetSucursalId ? await this.getOrCreateSession(targetSucursalId) : null;
 
@@ -953,15 +1271,14 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
         if (!session || session.connectionStatus !== 'CONNECTED' || !session.sock) {
             const branchName = proforma.sucursal?.nombre || 'la sucursal';
-            throw new BadRequestException(`El bot de WhatsApp no está conectado en ${branchName}. Por favor vincule el bot en la sección de WhatsApp para enviar el PDF.`);
+            throw new BadRequestException(`El bot de WhatsApp no está conectado en ${branchName}. Por favor vincule el WhatsApp del vendedor o el bot de la sucursal.`);
         }
 
-        const branchDisplay = this.formatSucursalDisplay(proforma.sucursal);
-        const pdfBuffer = await this.generateProformaPdfInMemory(proforma, branchDisplay);
-
-        const clienteNombre = this.formatClienteDisplay(proforma.cliente);
-        const totalFormatted = Number(proforma.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const fechaFormatted = proforma.fecha ? String(proforma.fecha).split('T')[0].split('-').reverse().join('/') : '-';
+        const vendPhoneRaw = proforma.vendedor?.telefono ? proforma.vendedor.telefono.replace(/\D/g, '') : '';
+        const vendPhoneFull = vendPhoneRaw.length === 8 ? `591${vendPhoneRaw}` : vendPhoneRaw;
+        const vendDirectLink = (proforma.vendedor && vendPhoneFull)
+            ? `\n📲 *Coordinar directamente con tu asesor (${proforma.vendedor.nombres} ${proforma.vendedor.apellidos}):*\nhttps://wa.me/${vendPhoneFull}\n`
+            : '';
 
         const caption = customMessage?.trim() || 
             `📄 *PROFORMA / COTIZACIÓN - ${proforma.numero || 'S/N'}*\n\n` +
@@ -970,7 +1287,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             `📅 *Fecha:* ${fechaFormatted}\n` +
             `🏢 *Sucursal:* ${branchDisplay}\n` +
             (proforma.vendedor ? `👤 *Asesor Comercial:* ${proforma.vendedor.nombres} ${proforma.vendedor.apellidos}\n` : '') +
-            `\n_En el documento PDF adjunto encontrará el detalle de ítems y precios. Si desea confirmar su pedido o requiere alguna modificación, por favor responda a este mensaje._`;
+            vendDirectLink +
+            `\n_En el documento PDF adjunto encontrará el detalle de ítems y precios._`;
 
         try {
             await session.sock.sendPresenceUpdate('composing', jid);
@@ -996,7 +1314,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         return {
             success: true,
             message: `Proforma ${proforma.numero || ''} enviada exitosamente por WhatsApp a +${cleanedPhone}`,
-            phone: cleanedPhone
+            phone: cleanedPhone,
+            sentVia: 'SUCURSAL'
         };
     }
 
@@ -1007,8 +1326,10 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         ventaId: number,
         targetPhone?: string,
         sucursalId?: number,
-        customMessage?: string
-    ): Promise<{ success: boolean; message: string; phone: string }> {
+        customMessage?: string,
+        senderType?: 'VENDEDOR' | 'SUCURSAL',
+        vendedorId?: number
+    ): Promise<{ success: boolean; message: string; phone: string; sentVia?: 'VENDEDOR' | 'SUCURSAL' }> {
         const venta = await this.notaRepo.findOne({
             where: { id: ventaId, tipo: TipoNota.VENTA },
             relations: [
@@ -1044,7 +1365,61 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         }
         const jid = `${cleanedPhone}@s.whatsapp.net`;
 
-        // Determinar sesión de WhatsApp de la sucursal correspondiente o fallback
+        const branchDisplay = this.formatSucursalDisplay(venta.sucursal);
+        const pdfBuffer = await this.generateVentaPdfInMemory(venta, branchDisplay);
+
+        const clienteNombre = this.formatClienteDisplay(venta.cliente);
+        const totalFormatted = Number(venta.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fechaFormatted = venta.fecha ? String(venta.fecha).split('T')[0].split('-').reverse().join('/') : '-';
+
+        const targetVendedorId = vendedorId || venta.vendedor?.id;
+        const effectiveSenderType = senderType || (targetVendedorId && this.vendorSessions.get(targetVendedorId)?.connectionStatus === 'CONNECTED' ? 'VENDEDOR' : 'SUCURSAL');
+
+        // MODO 1: Enviar desde el WhatsApp vinculado del Vendedor
+        if (effectiveSenderType === 'VENDEDOR') {
+            if (!targetVendedorId) {
+                throw new BadRequestException('Esta venta no tiene un vendedor asignado para enviar desde su WhatsApp.');
+            }
+            const vSession = await this.getOrCreateVendorSession(targetVendedorId);
+            if (!vSession || vSession.connectionStatus !== 'CONNECTED' || !vSession.sock) {
+                throw new BadRequestException(`El WhatsApp del vendedor (${vSession?.vendedorNombre || 'Asesor'}) no está vinculado. Por favor escanee su código QR en el modal o seleccione el envío por Bot de Sucursal.`);
+            }
+
+            const vendedorNombreCompleto = venta.vendedor
+                ? `${venta.vendedor.nombres || ''} ${venta.vendedor.apellidos || ''}`.trim()
+                : vSession.vendedorNombre;
+
+            const caption = customMessage?.trim() ||
+                `📄 *NOTA DE VENTA - ${venta.numero || venta.id}*\n\n` +
+                `Hola *${clienteNombre}*, te saluda *${vendedorNombreCompleto}* de *GIPAAF (${branchDisplay})*.\n` +
+                `Te adjunto el comprobante de tu Nota de Venta por un monto total de *Bs. ${totalFormatted}*.\n\n` +
+                `📅 *Fecha:* ${fechaFormatted}\n` +
+                `🏢 *Sucursal:* ${branchDisplay}\n` +
+                `👤 *Asesor Comercial:* ${vendedorNombreCompleto}\n` +
+                (venta.conFactura ? `📑 *Documento:* CF:${venta.numeroFactura || 'S/N'}\n` : `📑 *Documento:* XF\n`) +
+                `\n_En el documento PDF adjunto encontrarás el desglose detallado de tu compra. Quedo atento por este mismo chat para coordinar la entrega o cualquier consulta. ¡Gracias por tu preferencia!_`;
+
+            try {
+                await vSession.sock.sendPresenceUpdate('composing', jid);
+                await new Promise(r => setTimeout(r, 1200));
+            } catch (e) {}
+
+            await vSession.sock.sendMessage(jid, {
+                document: pdfBuffer,
+                mimetype: 'application/pdf',
+                fileName: `Nota_Venta_${venta.numero || venta.id}.pdf`,
+                caption
+            });
+
+            return {
+                success: true,
+                message: `Nota de Venta ${venta.numero || ''} enviada desde el WhatsApp de ${vendedorNombreCompleto} a +${cleanedPhone}`,
+                phone: cleanedPhone,
+                sentVia: 'VENDEDOR'
+            };
+        }
+
+        // MODO 2: Enviar desde el Bot de la Sucursal (con enlace directo al vendedor)
         let targetSucursalId = sucursalId || venta.sucursal?.id;
         let session = targetSucursalId ? await this.getOrCreateSession(targetSucursalId) : null;
 
@@ -1060,15 +1435,14 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
         if (!session || session.connectionStatus !== 'CONNECTED' || !session.sock) {
             const branchName = venta.sucursal?.nombre || 'la sucursal';
-            throw new BadRequestException(`El bot de WhatsApp no está conectado en ${branchName}. Por favor vincule el bot en la sección de WhatsApp para enviar el PDF.`);
+            throw new BadRequestException(`El bot de WhatsApp no está conectado en ${branchName}. Por favor vincule el WhatsApp del vendedor o el bot de la sucursal.`);
         }
 
-        const branchDisplay = this.formatSucursalDisplay(venta.sucursal);
-        const pdfBuffer = await this.generateVentaPdfInMemory(venta, branchDisplay);
-
-        const clienteNombre = this.formatClienteDisplay(venta.cliente);
-        const totalFormatted = Number(venta.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const fechaFormatted = venta.fecha ? String(venta.fecha).split('T')[0].split('-').reverse().join('/') : '-';
+        const vendPhoneRaw = venta.vendedor?.telefono ? venta.vendedor.telefono.replace(/\D/g, '') : '';
+        const vendPhoneFull = vendPhoneRaw.length === 8 ? `591${vendPhoneRaw}` : vendPhoneRaw;
+        const vendDirectLink = (venta.vendedor && vendPhoneFull)
+            ? `\n📲 *Coordinar directamente con tu asesor (${venta.vendedor.nombres} ${venta.vendedor.apellidos}):*\nhttps://wa.me/${vendPhoneFull}\n`
+            : '';
 
         const caption = customMessage?.trim() || 
             `📄 *NOTA DE VENTA - ${venta.numero || venta.id}*\n\n` +
@@ -1078,6 +1452,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             `🏢 *Sucursal:* ${branchDisplay}\n` +
             (venta.vendedor ? `👤 *Atendido por:* ${venta.vendedor.nombres} ${venta.vendedor.apellidos}\n` : '') +
             (venta.conFactura ? `📑 *Documento:* CF:${venta.numeroFactura || 'S/N'}\n` : `📑 *Documento:* XF\n`) +
+            vendDirectLink +
             `\n_En el documento PDF adjunto encontrará el desglose detallado de su compra. ¡Agradecemos su preferencia!_`;
 
         try {
@@ -1104,7 +1479,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         return {
             success: true,
             message: `Nota de Venta ${venta.numero || ''} enviada exitosamente por WhatsApp a +${cleanedPhone}`,
-            phone: cleanedPhone
+            phone: cleanedPhone,
+            sentVia: 'SUCURSAL'
         };
     }
 

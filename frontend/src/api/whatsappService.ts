@@ -24,6 +24,21 @@ export interface BranchStatusSummary {
     logsCount: number;
 }
 
+export interface VendorStatusSummary {
+    vendedorId: number;
+    vendedorNombre: string;
+    nombre?: string;
+    ci?: string;
+    telefono?: string;
+    sucursalId?: number;
+    sucursalNombre?: string;
+    ciudadNombre?: string;
+    status: 'DISCONNECTED' | 'CONNECTING' | 'QR_READY' | 'CONNECTED';
+    hasQr: boolean;
+    qrCode: string | null;
+    user: { id: string; name: string } | null;
+}
+
 export interface BankAccountItem {
     id: string;
     banco: string;
@@ -63,6 +78,22 @@ export interface WhatsAppMessageLog {
 export const whatsappService = {
     getBranchesStatus: async () => {
         const response = await apiClient.get<BranchStatusSummary[]>('/whatsapp/branches-status');
+        return response.data;
+    },
+    getVendorsStatus: async () => {
+        const response = await apiClient.get<VendorStatusSummary[]>('/whatsapp/vendors-status');
+        return response.data;
+    },
+    getVendorStatus: async (vendedorId: number) => {
+        const response = await apiClient.get<VendorStatusSummary>(`/whatsapp/vendor-status?vendedorId=${vendedorId}`);
+        return response.data;
+    },
+    connectVendor: async (vendedorId: number) => {
+        const response = await apiClient.post<{ message: string; status: string; vendedorId: number }>('/whatsapp/vendor-connect', { vendedorId });
+        return response.data;
+    },
+    disconnectVendor: async (vendedorId: number) => {
+        const response = await apiClient.post<{ message: string; status: string; vendedorId: number }>('/whatsapp/vendor-disconnect', { vendedorId });
         return response.data;
     },
     getStatus: async (sucursalId?: number) => {
@@ -105,12 +136,12 @@ export const whatsappService = {
         });
         return response.data;
     },
-    sendProformaPdf: async (payload: { proformaId: number; phone?: string; sucursalId?: number; message?: string }) => {
-        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-proforma', payload);
+    sendProformaPdf: async (payload: { proformaId: number; phone?: string; sucursalId?: number; message?: string; senderType?: 'VENDEDOR' | 'SUCURSAL'; vendedorId?: number }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string; sentVia?: 'VENDEDOR' | 'SUCURSAL' }>('/whatsapp/send-proforma', payload);
         return response.data;
     },
-    sendVentaPdf: async (payload: { ventaId: number; phone?: string; sucursalId?: number; message?: string }) => {
-        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-venta', payload);
+    sendVentaPdf: async (payload: { ventaId: number; phone?: string; sucursalId?: number; message?: string; senderType?: 'VENDEDOR' | 'SUCURSAL'; vendedorId?: number }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string; sentVia?: 'VENDEDOR' | 'SUCURSAL' }>('/whatsapp/send-venta', payload);
         return response.data;
     },
     sendCobranzaPdf: async (payload: { pagoId: number; phone?: string; sucursalId?: number; message?: string }) => {

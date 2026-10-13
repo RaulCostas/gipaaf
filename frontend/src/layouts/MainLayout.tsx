@@ -132,7 +132,7 @@ const MainLayout: React.FC = () => {
                 { path: "/productos", icon: Package, label: "Productos", perm: "PRODUCTOS" },
                 { path: "/inventario", icon: Boxes, label: "Existencias (Stock)", perm: "INVENTARIO" },
                 { path: "/traspasos", icon: ArrowLeftRight, label: "Traspasos entre Sucursales", perm: "TRASPASOS" },
-                { path: "/movimientos", icon: History, label: "Movimientos (Historial)", perm: "MOVIMIENTOS" },
+                { path: "/movimientos", icon: History, label: "Kardex de Producto", perm: "MOVIMIENTOS" },
                 { path: "/mermas", icon: AlertOctagon, label: "Inventario de Mermas", perm: "INVENTARIO" },
             ]
         },

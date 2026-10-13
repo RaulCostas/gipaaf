@@ -1,4 +1,4 @@
-import { formatCurrency } from '../../utils/currencyUtils';
+import { formatCurrency, formatCurrencyAmount } from '../../utils/currencyUtils';
 import { toast } from 'sonner';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -344,6 +344,8 @@ const ComprasPage: React.FC = () => {
             doc.text(`Tipo de Cambio: ${newNota.tipoCambio}`, 14, currentY);
         }
 
+        const monedaSimbolo = newNota.moneda === 'USD' ? '$us' : 'Bs.';
+
         const tableData = newNota.detalles.map((d: any) => {
             const prod = products?.find(p => p.id === Number(d.productoId || d.producto?.id)) || d.producto;
             return [
@@ -351,14 +353,14 @@ const ComprasPage: React.FC = () => {
                 d.numeroLote || '-',
                 d.fechaVencimiento ? d.fechaVencimiento.split('T')[0].split('-').reverse().join('/') : '-',
                 d.cantidad,
-                formatCurrency(d.precioUnitario, newNota.moneda),
-                formatCurrency(d.subtotal, newNota.moneda)
+                formatCurrencyAmount(d.precioUnitario),
+                formatCurrencyAmount(d.subtotal)
             ];
         });
 
         autoTable(doc, {
             startY: currentY + 4,
-            head: [['Producto', 'Lote', 'Venc.', 'Cant.', 'P. Unit', 'Subtotal']],
+            head: [['Producto', 'Lote', 'Venc.', 'Cant.', `P. Unit (${monedaSimbolo})`, `Subtotal (${monedaSimbolo})`]],
             body: tableData,
             theme: 'grid',
             headStyles: {
@@ -367,15 +369,15 @@ const ComprasPage: React.FC = () => {
                 fontStyle: 'bold',
                 lineColor: [180, 180, 180],
                 lineWidth: 0.1,
-                cellPadding: 2.5,
+                cellPadding: { top: 1.4, right: 2, bottom: 1.4, left: 2 },
             },
             alternateRowStyles: {
                 fillColor: [252, 252, 252]
             },
             styles: {
                 font: 'helvetica',
-                fontSize: 8.5,
-                cellPadding: 2.5,
+                fontSize: 8,
+                cellPadding: { top: 1, right: 2, bottom: 1, left: 2 },
                 valign: 'middle',
                 textColor: [30, 30, 30],
                 lineColor: [200, 200, 200],
@@ -388,12 +390,12 @@ const ComprasPage: React.FC = () => {
             }
         });
 
-        let finalY = (doc as any).lastAutoTable.finalY + 8;
-        if (finalY > 275) {
+        let finalY = (doc as any).lastAutoTable.finalY + 5;
+        if (finalY > 280) {
             doc.addPage();
-            finalY = 25;
+            finalY = 20;
         }
-        doc.setFontSize(11);
+        doc.setFontSize(10.5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(30, 30, 30);
         doc.text(`Total: ${formatCurrency(calculateTotals().total, newNota.moneda)}`, 196, finalY, { align: 'right' });
@@ -550,20 +552,32 @@ const ComprasPage: React.FC = () => {
         return filtered;
     }, [purchases, search, selectedSucursal, selectedCiudad, selectedSupplier, fechaDesde, fechaHasta]);
 
-    const exportColumns = [
-        { header: 'N° Compra', dataKey: 'numero' },
-        { header: 'Fecha', dataKey: 'fechaFormatted' },
-        { header: 'Proveedor', dataKey: 'proveedorNombre' },
-        { header: 'Sucursal', dataKey: 'sucursalNombre' },
-        { header: 'Moneda', dataKey: 'moneda' },
-        { header: 'SubTotal', dataKey: 'subtotalFormatted' },
-        { header: 'Descuento', dataKey: 'descuentoFormatted' },
-        { header: 'Total', dataKey: 'totalFormatted' },
-        { header: 'Estado', dataKey: 'estado' }
-    ];
+    const getExportColumns = () => {
+        let cols = [
+            { header: 'Fecha', dataKey: 'fechaFormatted' },
+            { header: 'N° Compra', dataKey: 'numero' },
+            { header: 'Proveedor', dataKey: 'proveedorNombre' },
+            { header: 'Sucursal', dataKey: 'sucursalNombre' },
+            { header: 'Moneda', dataKey: 'moneda' },
+            { header: 'Total', dataKey: 'totalFormatted' }
+        ];
+
+        if (selectedSucursal || selectedCiudad) {
+            cols = cols.filter(c => c.dataKey !== 'sucursalNombre');
+        }
+
+        return cols;
+    };
 
     const getFormattedData = () => {
-        return filteredPurchases.map(s => {
+        const sortedAsc = [...filteredPurchases].sort((a, b) => {
+            const dateA = a.fecha ? a.fecha.split('T')[0] : '';
+            const dateB = b.fecha ? b.fecha.split('T')[0] : '';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (a.id || 0) - (b.id || 0);
+        });
+
+        return sortedAsc.map(s => {
             const subTotalCalc = (Number(s.total) || 0) + (Number(s.descuento) || 0);
             const descCalc = Number(s.descuento) || 0;
             const provPersona = s.proveedor?.persona ? `${s.proveedor.persona.nombres} ${s.proveedor.persona.apellidos}`.trim() : '';
@@ -575,9 +589,9 @@ const ComprasPage: React.FC = () => {
                 proveedorNombre: provNombre,
                 sucursalNombre: s.sucursal?.nombre || (s.almacen as any)?.nombre || '-',
                 moneda: s.moneda || 'BOB',
-                subtotalFormatted: formatCurrency(subTotalCalc, s.moneda || 'BOB'),
-                descuentoFormatted: formatCurrency(descCalc, s.moneda || 'BOB'),
-                totalFormatted: formatCurrency(s.total || 0, s.moneda || 'BOB'),
+                subtotalFormatted: formatCurrencyAmount(subTotalCalc),
+                descuentoFormatted: formatCurrencyAmount(descCalc),
+                totalFormatted: formatCurrencyAmount(s.total || 0),
                 estado: s.estado
             };
         });
@@ -622,7 +636,7 @@ const ComprasPage: React.FC = () => {
             toast.error('No hay compras para imprimir');
             return;
         }
-        printData('Reporte de Compras', exportColumns, getFormattedData(), getFiltersText());
+        printData('Reporte de Compras', getExportColumns(), getFormattedData(), getFiltersText(), undefined, 'portrait');
     };
 
     const handleExportPDF = () => {
@@ -630,7 +644,7 @@ const ComprasPage: React.FC = () => {
             toast.error('No hay compras para exportar');
             return;
         }
-        exportToPDF('Reporte de Compras', exportColumns, getFormattedData(), 'compras_reporte', getFiltersText());
+        exportToPDF('Reporte de Compras', getExportColumns(), getFormattedData(), 'compras_reporte', getFiltersText(), undefined, 'portrait');
     };
 
     const handleExportExcel = () => {
@@ -638,7 +652,7 @@ const ComprasPage: React.FC = () => {
             toast.error('No hay compras para exportar');
             return;
         }
-        exportToExcel(exportColumns, getFormattedData(), 'compras_reporte');
+        exportToExcel(getExportColumns(), getFormattedData(), 'compras_reporte');
     };
 
     const hasActiveFilters = selectedSupplier !== 'all' || !!fechaDesde || !!fechaHasta || !!search;
@@ -841,20 +855,29 @@ const ComprasPage: React.FC = () => {
                                     </div>
                                 </td>
                                 <td className="p-4 text-right">
-                                    <div className="flex justify-end gap-2 flex-wrap">
+                                    <div className="flex justify-end gap-1.5">
                                         <button
                                             onClick={() => openViewModal(p)}
-                                            className="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-xs font-bold hover:bg-gray-700 transition-all flex items-center gap-1.5"
+                                            className="px-2.5 py-1.5 bg-card border hover:border-primary/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                             title="Ver Compra"
                                         >
-                                            <Eye className="w-3" /> Ver
+                                            <Eye className="w-3.5 h-3.5 text-primary" />
                                         </button>
+                                        {p.estado !== EstadoNota.ANULADA && (
+                                            <button
+                                                onClick={() => openEditModal(p)}
+                                                className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                title="Editar Compra"
+                                            >
+                                                <Edit className="w-3.5 h-3.5 text-amber-500" />
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => handleOpenWhatsAppModal(p)}
-                                            className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
+                                            className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                             title="Enviar Orden de Compra en PDF por WhatsApp"
                                         >
-                                            <MessageCircle className="w-3" /> WhatsApp
+                                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                         </button>
                                         {canCostosImportacion && p.estado === EstadoNota.CONFIRMADA && (() => {
                                             const hasImportCost = Boolean(
@@ -871,43 +894,28 @@ const ComprasPage: React.FC = () => {
                                                         setSelectedCompraForImportacion(p);
                                                         setIsCostoImportacionOpen(true);
                                                     }}
-                                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer ${
+                                                    className={`px-2.5 py-1.5 bg-card border text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer ${
                                                         hasImportCost
-                                                            ? 'bg-emerald-700 text-white hover:bg-emerald-800'
-                                                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                            ? 'hover:border-emerald-500/50 border-emerald-500/30'
+                                                            : 'hover:border-indigo-500/50'
                                                     }`}
                                                     title={hasImportCost ? "Costo de Importación Aplicado (Ver / Modificar)" : "Calcular Costo de Importación y actualizar precios de compra"}
                                                 >
                                                     {hasImportCost ? (
-                                                        <>
-                                                            <Check className="w-3.5 h-3.5 text-emerald-200 stroke-[3]" />
-                                                            <span>Costo de Import.</span>
-                                                        </>
+                                                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
                                                     ) : (
-                                                        <>
-                                                            <Calculator className="w-3.5 h-3.5" />
-                                                            <span>Costo de Importación</span>
-                                                        </>
+                                                        <Calculator className="w-3.5 h-3.5 text-indigo-600" />
                                                     )}
                                                 </button>
                                             );
                                         })()}
-                                        {p.estado !== EstadoNota.ANULADA && (
-                                            <button
-                                                onClick={() => openEditModal(p)}
-                                                className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
-                                                title="Editar Compra"
-                                            >
-                                                <Edit className="w-3" /> Editar
-                                            </button>
-                                        )}
                                         {canConfirm && p.estado === EstadoNota.PENDIENTE && (
                                             <button
                                                 onClick={() => confirmMutation.mutate(p.id)}
-                                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all flex items-center gap-1.5"
+                                                className="px-2.5 py-1.5 bg-card border hover:border-green-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                 title="Confirmar Compra (Ingresar stock)"
                                             >
-                                                <CheckCircle className="w-3" /> Confirmar
+                                                <CheckCircle className="w-3.5 h-3.5 text-green-600" />
                                             </button>
                                         )}
                                         {canAnular && p.estado !== EstadoNota.ANULADA && (
@@ -915,20 +923,20 @@ const ComprasPage: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     disabled
-                                                    className="px-3 py-1.5 bg-muted text-muted-foreground border rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-not-allowed opacity-60"
+                                                    className="px-2.5 py-1.5 bg-muted text-muted-foreground border rounded-lg text-xs font-semibold transition-all flex items-center gap-1 cursor-not-allowed opacity-60"
                                                     title={Number(p.saldo) <= 0.001 
                                                         ? "Compra 100% Pagada: Está protegida contra anulación. Debe anular sus pagos en Pagos a Proveedores primero." 
                                                         : "Compra con Pagos Registrados: Debe anular sus pagos en Pagos a Proveedores antes de anular la compra."}
                                                 >
-                                                    <Lock className="w-3 h-3" /> Anular
+                                                    <Lock className="w-3.5 h-3.5" />
                                                 </button>
                                             ) : (
                                                 <button
                                                     onClick={() => setAnularConfirmId(p.id)}
-                                                    className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1.5 cursor-pointer"
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                     title="Anular Compra"
                                                 >
-                                                    <Trash2 className="w-3" /> Anular
+                                                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
                                                 </button>
                                             )
                                         )}

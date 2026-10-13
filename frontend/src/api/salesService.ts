@@ -29,8 +29,8 @@ export const salesService = {
         const response = await apiClient.put<Nota>(`/notas/${id}/anular`);
         return response.data;
     },
-    sendWhatsApp: async (payload: { ventaId: number; phone?: string; sucursalId?: number; message?: string }) => {
-        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-venta', payload);
+    sendWhatsApp: async (payload: { ventaId: number; phone?: string; sucursalId?: number; message?: string; senderType?: 'VENDEDOR' | 'SUCURSAL'; vendedorId?: number }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string; sentVia?: 'VENDEDOR' | 'SUCURSAL' }>('/whatsapp/send-venta', payload);
         return response.data;
     },
 };

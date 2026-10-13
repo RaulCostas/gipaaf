@@ -602,16 +602,14 @@ const EstadoCuentaClientesPage: React.FC = () => {
         { header: 'Cliente', dataKey: 'clienteNombre' },
         { header: 'Vendedor', dataKey: 'vendedorNombre' },
         { header: 'Nota de Venta', dataKey: 'observaciones' },
-        { header: 'Total', dataKey: 'totalFormateado' },
-        { header: 'A Cuenta', dataKey: 'cobradoFormateado' },
-        { header: 'Saldo', dataKey: 'saldoFormateado' },
+        { header: 'Total (Bs.)', dataKey: 'totalFormateado' },
+        { header: 'A Cuenta (Bs.)', dataKey: 'cobradoFormateado' },
+        { header: 'Saldo (Bs.)', dataKey: 'saldoFormateado' },
         { header: 'Estado / Mora', dataKey: 'estadoSaldo' }
     ];
 
     const mappedExportData = useMemo(() => {
         return filteredVentas.map(v => {
-            const isUSD = v.moneda === 'USD';
-            const sim = isUSD ? '$us' : 'Bs.';
             const total = Number(v.total) || 0;
             const saldo = Number(v.saldo) || 0;
             const cobrado = Math.max(0, total - saldo);
@@ -630,9 +628,9 @@ const EstadoCuentaClientesPage: React.FC = () => {
                 observaciones: v.observaciones || '-',
                 facturaInfo: v.conFactura ? `Con Factura (#${v.numeroFactura || 'S/N'})` : 'Sin Factura',
                 vencimientoInfo: vencStr,
-                totalFormateado: `${sim} ${total.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`,
-                cobradoFormateado: `${sim} ${cobrado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`,
-                saldoFormateado: `${sim} ${saldo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`,
+                totalFormateado: total.toLocaleString('es-BO', { minimumFractionDigits: 2 }),
+                cobradoFormateado: cobrado.toLocaleString('es-BO', { minimumFractionDigits: 2 }),
+                saldoFormateado: saldo.toLocaleString('es-BO', { minimumFractionDigits: 2 }),
                 estadoSaldo: mora.texto
             };
         });
@@ -1361,22 +1359,23 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                                 </div>
                                             </td>
                                             <td className="p-4 text-right">
-                                                <div className="flex items-center justify-end gap-2">
+                                                <div className="flex justify-end gap-1.5">
                                                     <button
                                                         type="button"
                                                         onClick={() => setSelectedClientForDetail(item)}
-                                                        className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-primary/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                        title="Ver Detalle de Cuentas del Cliente"
                                                     >
-                                                        <Eye className="w-3.5 h-3.5" /> Ver detalle
+                                                        <Eye className="w-3.5 h-3.5 text-primary" />
                                                     </button>
                                                     {item.clienteId > 0 && (
                                                         <button
                                                             type="button"
                                                             onClick={() => handleOpenClienteWhatsAppModal(String(item.clienteId))}
-                                                            className="p-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                                                            className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                             title="Enviar Estado de Cuenta Consolidado por WhatsApp"
                                                         >
-                                                            <MessageCircle className="w-3.5 h-3.5" />
+                                                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                                         </button>
                                                     )}
                                                 </div>
@@ -1535,22 +1534,22 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                                 )}
                                             </td>
                                             <td className="p-4 text-right">
-                                                <div className="flex items-center justify-end gap-1.5">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleOpenVentaWhatsAppModal(v)}
-                                                        className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-xs cursor-pointer"
-                                                        title="Enviar Estado de Cuenta / Saldo de esta Venta por WhatsApp (PDF)"
-                                                    >
-                                                        <MessageCircle className="w-3.5 h-3.5" />
-                                                    </button>
+                                                <div className="flex justify-end gap-1.5">
                                                     <button
                                                         type="button"
                                                         onClick={() => setViewingNota(v)}
-                                                        className="px-2.5 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-primary/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                         title="Ver Historial de Pagos"
                                                     >
-                                                        <Receipt className="w-3.5 h-3.5" /> Pagos
+                                                        <Receipt className="w-3.5 h-3.5 text-primary" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenVentaWhatsAppModal(v)}
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                        title="Enviar Estado de Cuenta / Saldo de esta Venta por WhatsApp (PDF)"
+                                                    >
+                                                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                                     </button>
                                                 </div>
                                             </td>

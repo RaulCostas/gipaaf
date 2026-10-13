@@ -39,9 +39,9 @@ const InventarioPage: React.FC = () => {
     const [isAdjusting, setIsAdjusting] = useState(false);
     const [isEditingLimits, setIsEditingLimits] = useState(false);
     const [isMermaOpen, setIsMermaOpen] = useState(false);
-    const [limits, setLimits] = useState({ id: 0, productName: '', stockMinimo: 0, stockMaximo: 0 });
-    const [adjustment, setAdjustment] = useState({ id: 0, cantidadStr: '', currentStock: 0, productName: '', observaciones: '' });
-    const [mermaData, setMermaData] = useState({ id: 0, productName: '', codigo: '', currentStock: 0, cantidadStr: '', motivo: 'Vencimiento / Caducidad', observaciones: '' });
+    const [limits, setLimits] = useState<{ id: number; productName: string; stockMinimo: number; stockMaximo: number; branchRecords?: any[] }>({ id: 0, productName: '', stockMinimo: 0, stockMaximo: 0 });
+    const [adjustment, setAdjustment] = useState<{ id: number; cantidadStr: string; currentStock: number; productName: string; observaciones: string; branchRecords?: any[] }>({ id: 0, cantidadStr: '', currentStock: 0, productName: '', observaciones: '' });
+    const [mermaData, setMermaData] = useState<{ id: number; productName: string; codigo: string; currentStock: number; cantidadStr: string; motivo: string; observaciones: string; branchRecords?: any[] }>({ id: 0, productName: '', codigo: '', currentStock: 0, cantidadStr: '', motivo: 'Vencimiento / Caducidad', observaciones: '' });
 
     const cantidad = parseFloat(adjustment.cantidadStr) || 0;
     const cantidadMerma = parseFloat(mermaData.cantidadStr) || 0;
@@ -92,21 +92,97 @@ const InventarioPage: React.FC = () => {
         }
     });
 
-    const exportColumns = [
-        { header: 'Código', dataKey: 'codigo' },
-        { header: 'Marca', dataKey: 'marca' },
-        { header: 'Producto', dataKey: 'producto' },
-        { header: 'Sucursal', dataKey: 'sucursal' },
-        { header: 'Stock Actual', dataKey: 'stock' },
-        { header: 'Stock Mínimo', dataKey: 'stockMinimo' },
-        { header: 'Precio Venta (Bs.)', dataKey: 'precioVenta' },
-        { header: 'Lote(s) / Vencimiento', dataKey: 'lotesInfo' },
-        { header: 'Estado', dataKey: 'estado' }
-    ];
+    const getCiudadAbrev = (nombre?: string) => {
+        if (!nombre) return '';
+        const n = nombre.toUpperCase();
+        if (n.includes('SANTA CRUZ')) return 'SCZ';
+        if (n.includes('COCHABAMBA')) return 'CBBA';
+        if (n.includes('LA PAZ')) return 'LPZ';
+        if (n.includes('EL ALTO')) return 'EAL';
+        if (n.includes('SUCRE')) return 'SUC';
+        if (n.includes('TARIJA')) return 'TJA';
+        if (n.includes('ORURO')) return 'ORU';
+        if (n.includes('POTOS')) return 'POT';
+        if (n.includes('BENI')) return 'BEN';
+        if (n.includes('PANDO')) return 'PAN';
+        return nombre.substring(0, 4).toUpperCase();
+    };
+
+    const activeSucursales = useMemo(() => {
+        if (!sucursales || sucursales.length === 0) {
+            return (ciudades || [])
+                .filter(c => c.activo !== false)
+                .map(c => ({
+                    id: c.id,
+                    nombre: c.nombre,
+                    ciudadId: c.id,
+                    ciudadNombre: c.nombre,
+                    ciudadAbrev: getCiudadAbrev(c.nombre),
+                    key: `stock_suc_${c.id}`
+                }));
+        }
+        return sucursales
+            .filter(s => s.activo !== false)
+            .map(s => {
+                const ciudadObj = (s as any).ciudad || ciudades?.find(c => c.id === ((s as any).ciudadId || (s as any).ciudad?.id));
+                const ciudadNombre = ciudadObj?.nombre || '';
+                const ciudadAbrev = ciudadNombre ? getCiudadAbrev(ciudadNombre) : '';
+                return {
+                    id: s.id,
+                    nombre: s.nombre,
+                    ciudadId: ciudadObj?.id || (s as any).ciudadId,
+                    ciudadNombre,
+                    ciudadAbrev,
+                    key: `stock_suc_${s.id}`
+                };
+            })
+            .sort((a, b) => {
+                if (a.ciudadAbrev !== b.ciudadAbrev) {
+                    return a.ciudadAbrev.localeCompare(b.ciudadAbrev);
+                }
+                return a.nombre.localeCompare(b.nombre);
+            });
+    }, [sucursales, ciudades]);
+
+    // Lookup table for stock by product and branch
+    const productBranchStockMap = useMemo(() => {
+        if (!inventory) return new Map<string, number>();
+        const map = new Map<string, number>();
+        inventory.forEach(inv => {
+            if (!inv.producto?.id) return;
+            const sId = (inv.sucursal as any)?.id || (inv as any)?.sucursalId;
+            if (sId) {
+                const key = `${inv.producto.id}_${sId}`;
+                map.set(key, (map.get(key) || 0) + Number(inv.stockActual || 0));
+            }
+        });
+        return map;
+    }, [inventory]);
 
     const getExportColumns = () => {
-        let cols = [...exportColumns];
-        if (selectedSucursal) cols = cols.filter(c => c.dataKey !== 'sucursal');
+        const cols: { header: string; dataKey: string }[] = [
+            { header: 'Cód.', dataKey: 'codigo' },
+            { header: 'Marca', dataKey: 'marca' },
+            { header: 'Producto', dataKey: 'producto' },
+        ];
+
+        // Column per active sucursal (abbreviated)
+        activeSucursales.forEach(s => {
+            const sameCityCount = activeSucursales.filter(x => x.ciudadAbrev && x.ciudadAbrev === s.ciudadAbrev).length;
+            let headerLabel = s.ciudadAbrev || getCiudadAbrev(s.nombre);
+            if (sameCityCount > 1) {
+                const cleanSuc = s.nombre.replace(/^(sucursal|almac[eé]n|agencia)\s*/i, '').trim();
+                const sucAbrev = cleanSuc ? cleanSuc.substring(0, 4).toUpperCase() : String(s.id);
+                headerLabel = `${headerLabel}-${sucAbrev}`;
+            }
+            cols.push({ header: headerLabel.toUpperCase(), dataKey: `stock_suc_${s.id}` });
+        });
+
+        cols.push(
+            { header: 'Stock Act.', dataKey: 'stock' },
+            { header: 'P. Venta (Bs.)', dataKey: 'precioVenta' }
+        );
+
         return cols;
     };
 
@@ -170,6 +246,43 @@ const InventarioPage: React.FC = () => {
             return matchesSearch && matchesCiudad && matchesSucursal && matchesLinea && matchesMarca && matchesGrupo;
         });
         
+        // Group by product if no specific branch is selected
+        if (!selectedSucursal) {
+            const groupedMap = new Map<number, any>();
+            filtered.forEach(inv => {
+                if (!inv.producto?.id) return;
+                const pId = inv.producto.id;
+                if (!groupedMap.has(pId)) {
+                    groupedMap.set(pId, {
+                        ...inv,
+                        totalStock: Number(inv.stockActual || 0),
+                        allLotes: [...((inv as any).lotes || [])],
+                        branchRecords: [inv]
+                    });
+                } else {
+                    const existing = groupedMap.get(pId);
+                    existing.totalStock += Number(inv.stockActual || 0);
+                    const existingLoteIds = new Set(existing.allLotes.map((l: any) => l.id || l.numeroLote));
+                    ((inv as any).lotes || []).forEach((l: any) => {
+                        const lKey = l.id || l.numeroLote;
+                        if (!existingLoteIds.has(lKey)) {
+                            existing.allLotes.push(l);
+                            existingLoteIds.add(lKey);
+                        }
+                    });
+                    existing.branchRecords.push(inv);
+                }
+            });
+
+            const consolidated = Array.from(groupedMap.values()).map(item => ({
+                ...item,
+                stockActual: item.totalStock,
+                lotes: item.allLotes
+            }));
+
+            return consolidated.sort((a, b) => (a.producto?.nombre || '').localeCompare(b.producto?.nombre || ''));
+        }
+
         return filtered.sort((a, b) => (a.producto?.nombre || '').localeCompare(b.producto?.nombre || ''));
     }, [inventory, searchTerm, selectedCiudad, selectedSucursal, selectedLinea, selectedMarca, selectedGrupo, marcas]);
 
@@ -182,18 +295,26 @@ const InventarioPage: React.FC = () => {
                 }).join('; ')
                 : '-';
 
-            return {
+            const row: any = {
                 id: inv.id,
                 producto: inv.producto?.nombre || '-',
                 marca: getMarcaNombre(inv.producto),
                 codigo: inv.producto?.codigo || '-',
-                sucursal: `${(inv.sucursal as any)?.nombre || '-'} (${(inv.sucursal as any)?.ciudad?.nombre || '-'})`,
                 stock: formatQuantity(inv.stockActual),
                 stockMinimo: formatQuantity(inv.stockMinimo || 0),
                 precioVenta: formatCurrencyAmount(inv.producto?.precioVenta || 0),
                 lotesInfo,
                 estado: Number(inv.stockActual) <= Number(inv.stockMinimo) ? 'Stock Bajo' : 'Normal'
             };
+
+            // Fill existence per active branch
+            activeSucursales.forEach(s => {
+                const pId = inv.producto?.id;
+                const qty = pId ? (productBranchStockMap.get(`${pId}_${s.id}`) || 0) : 0;
+                row[`stock_suc_${s.id}`] = qty > 0 ? formatQuantity(qty) : '0';
+            });
+
+            return row;
         });
     };
 
@@ -239,12 +360,12 @@ const InventarioPage: React.FC = () => {
 
     const handlePrint = () => {
         if (!inventory) return;
-        printData('Reporte de Inventario', getExportColumns(), getFormattedData(), getFiltersText());
+        printData('Reporte de Inventario', getExportColumns(), getFormattedData(), getFiltersText(), undefined, 'portrait');
     };
 
     const handleExportPDF = () => {
         if (!inventory) return;
-        exportToPDF('Reporte de Inventario', getExportColumns(), getFormattedData(), 'inventario_reporte', getFiltersText());
+        exportToPDF('Reporte de Inventario', getExportColumns(), getFormattedData(), 'inventario_reporte', getFiltersText(), undefined, 'portrait');
     };
 
     const handleExportExcel = () => {
@@ -387,7 +508,14 @@ const InventarioPage: React.FC = () => {
                                 <th className="p-4 text-sm font-semibold text-muted-foreground w-16">#</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Producto</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Marca</th>
-                                {!selectedSucursal && <th className="p-4 text-sm font-semibold text-muted-foreground">Sucursal / Ciudad</th>}
+                                {activeSucursales.map(s => (
+                                    <th key={s.id} className="p-4 text-sm font-semibold text-muted-foreground text-center whitespace-nowrap bg-muted/30 border-l border-r border-border/40">
+                                        <div className="flex flex-col items-center">
+                                            <span className="font-bold text-foreground text-xs uppercase">{s.ciudadAbrev || s.nombre}</span>
+                                            {s.ciudadAbrev && <span className="text-[10px] text-muted-foreground font-normal lowercase truncate max-w-[90px]">{s.nombre}</span>}
+                                        </div>
+                                    </th>
+                                ))}
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Lotes / Vencimiento</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Stock Actual</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Stock Mínimo</th>
@@ -400,9 +528,9 @@ const InventarioPage: React.FC = () => {
                         </thead>
                         <tbody className="divide-y">
                             {isLoading ? (
-                                <tr><td colSpan={8 + (!selectedSucursal ? 1 : 0) + (canAjustar || canModificarLimites || canMerma ? 1 : 0)} className="p-8 text-center text-muted-foreground animate-pulse">Cargando existencias...</td></tr>
+                                <tr><td colSpan={8 + activeSucursales.length + (canAjustar || canModificarLimites || canMerma ? 1 : 0)} className="p-8 text-center text-muted-foreground animate-pulse">Cargando existencias...</td></tr>
                             ) : paginatedInventory.length === 0 ? (
-                                <tr><td colSpan={8 + (!selectedSucursal ? 1 : 0) + (canAjustar || canModificarLimites || canMerma ? 1 : 0)} className="p-8 text-center text-muted-foreground">No se encontraron productos en inventario.</td></tr>
+                                <tr><td colSpan={8 + activeSucursales.length + (canAjustar || canModificarLimites || canMerma ? 1 : 0)} className="p-8 text-center text-muted-foreground">No se encontraron productos en inventario.</td></tr>
                             ) : paginatedInventory.map((inv, index) => {
                                 const isLowStock = Number(inv.stockActual) <= Number(inv.stockMinimo);
                                 const itemLotes = (inv as any).lotes || [];
@@ -420,16 +548,18 @@ const InventarioPage: React.FC = () => {
                                                 {getMarcaNombre(inv.producto)}
                                             </span>
                                         </td>
-                                        {!selectedSucursal && (
-                                            <td className="p-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-medium">{(inv.sucursal as any)?.nombre || 'Sucursal Principal'}</span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {(inv.sucursal as any)?.ciudad?.nombre || '-'}
+                                        {/* Existencia por cada Sucursal */}
+                                        {activeSucursales.map(s => {
+                                            const pId = inv.producto?.id;
+                                            const branchStock = pId ? (productBranchStockMap.get(`${pId}_${s.id}`) || 0) : 0;
+                                            return (
+                                                <td key={s.id} className="p-4 text-center whitespace-nowrap bg-muted/10 border-l border-r border-border/30">
+                                                    <span className={`text-xs font-mono ${branchStock > 0 ? 'font-bold text-foreground' : 'text-muted-foreground/40'}`}>
+                                                        {formatQuantity(branchStock)}
                                                     </span>
-                                                </div>
-                                            </td>
-                                        )}
+                                                </td>
+                                            );
+                                        })}
                                         <td className="p-4">
                                             {itemLotes.length > 0 ? (
                                                 <div className="flex flex-col gap-1 max-w-[240px]">
@@ -512,14 +642,17 @@ const InventarioPage: React.FC = () => {
                                                     {canMerma && (
                                                         <button
                                                             onClick={() => {
+                                                                const bRecords = (inv as any).branchRecords || [inv];
+                                                                const firstBranch = bRecords[0];
                                                                 setMermaData({
-                                                                    id: inv.id,
+                                                                    id: firstBranch.id,
                                                                     productName: inv.producto?.nombre || 'Producto',
                                                                     codigo: inv.producto?.codigo || '',
-                                                                    currentStock: Number(inv.stockActual),
+                                                                    currentStock: Number(firstBranch.stockActual),
                                                                     cantidadStr: '',
                                                                     motivo: 'Vencimiento / Caducidad',
-                                                                    observaciones: ''
+                                                                    observaciones: '',
+                                                                    branchRecords: bRecords
                                                                 });
                                                                 setIsMermaOpen(true);
                                                             }}
@@ -532,12 +665,15 @@ const InventarioPage: React.FC = () => {
                                                     {canAjustar && (
                                                         <button
                                                             onClick={() => {
+                                                                const bRecords = (inv as any).branchRecords || [inv];
+                                                                const firstBranch = bRecords[0];
                                                                 setAdjustment({
-                                                                    id: inv.id,
+                                                                    id: firstBranch.id,
                                                                     cantidadStr: '',
-                                                                    currentStock: Number(inv.stockActual),
+                                                                    currentStock: Number(firstBranch.stockActual),
                                                                     productName: inv.producto?.nombre || 'Producto',
-                                                                    observaciones: ''
+                                                                    observaciones: '',
+                                                                    branchRecords: bRecords
                                                                 });
                                                                 setIsAdjusting(true);
                                                             }}
@@ -549,11 +685,14 @@ const InventarioPage: React.FC = () => {
                                                     {canModificarLimites && (
                                                         <button
                                                             onClick={() => {
+                                                                const bRecords = (inv as any).branchRecords || [inv];
+                                                                const firstBranch = bRecords[0];
                                                                 setLimits({
-                                                                    id: inv.id,
+                                                                    id: firstBranch.id,
                                                                     productName: inv.producto?.nombre || 'Producto',
-                                                                    stockMinimo: Number(inv.stockMinimo || 0),
-                                                                    stockMaximo: Number(inv.stockMaximo || 0)
+                                                                    stockMinimo: Number(firstBranch.stockMinimo || 0),
+                                                                    stockMaximo: Number(firstBranch.stockMaximo || 0),
+                                                                    branchRecords: bRecords
                                                                 });
                                                                 setIsEditingLimits(true);
                                                             }}
@@ -592,6 +731,32 @@ const InventarioPage: React.FC = () => {
                     <div className="p-4 bg-muted/50 rounded-xl space-y-2 border">
                         <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Producto Seleccionado</div>
                         <div className="text-lg font-bold">{adjustment.productName}</div>
+                        {adjustment.branchRecords && adjustment.branchRecords.length > 1 && (
+                            <div className="pt-2">
+                                <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1">Sucursal a Ajustar</label>
+                                <select
+                                    value={adjustment.id}
+                                    onChange={(e) => {
+                                        const selId = Number(e.target.value);
+                                        const b = adjustment.branchRecords?.find((r: any) => r.id === selId);
+                                        if (b) {
+                                            setAdjustment(prev => ({
+                                                ...prev,
+                                                id: b.id,
+                                                currentStock: Number(b.stockActual)
+                                            }));
+                                        }
+                                    }}
+                                    className="w-full p-2.5 bg-background border rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20"
+                                >
+                                    {adjustment.branchRecords.map((b: any) => (
+                                        <option key={b.id} value={b.id}>
+                                            {b.sucursal?.nombre || 'Sucursal'} (Stock: {formatQuantity(b.stockActual)})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div className="flex justify-between items-center pt-2 border-t mt-2">
                             <span className="text-sm text-muted-foreground">Stock Actual:</span>
                             <span className="text-sm font-bold text-primary">{formatQuantity(adjustment.currentStock)}</span>
@@ -680,6 +845,33 @@ const InventarioPage: React.FC = () => {
                     <div className="p-4 bg-muted/50 rounded-xl space-y-2 border">
                         <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Producto Seleccionado</div>
                         <div className="text-lg font-bold">{limits.productName}</div>
+                        {limits.branchRecords && limits.branchRecords.length > 1 && (
+                            <div className="pt-2">
+                                <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1">Sucursal para Límites</label>
+                                <select
+                                    value={limits.id}
+                                    onChange={(e) => {
+                                        const selId = Number(e.target.value);
+                                        const b = limits.branchRecords?.find((r: any) => r.id === selId);
+                                        if (b) {
+                                            setLimits(prev => ({
+                                                ...prev,
+                                                id: b.id,
+                                                stockMinimo: Number(b.stockMinimo || 0),
+                                                stockMaximo: Number(b.stockMaximo || 0)
+                                            }));
+                                        }
+                                    }}
+                                    className="w-full p-2.5 bg-background border rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-secondary/20"
+                                >
+                                    {limits.branchRecords.map((b: any) => (
+                                        <option key={b.id} value={b.id}>
+                                            {b.sucursal?.nombre || 'Sucursal'}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -739,6 +931,32 @@ const InventarioPage: React.FC = () => {
                         <div className="text-lg font-bold">{mermaData.productName}</div>
                         {mermaData.codigo && (
                             <div className="text-xs font-mono text-muted-foreground">Código: {mermaData.codigo}</div>
+                        )}
+                        {mermaData.branchRecords && mermaData.branchRecords.length > 1 && (
+                            <div className="pt-2">
+                                <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1">Sucursal para Merma</label>
+                                <select
+                                    value={mermaData.id}
+                                    onChange={(e) => {
+                                        const selId = Number(e.target.value);
+                                        const b = mermaData.branchRecords?.find((r: any) => r.id === selId);
+                                        if (b) {
+                                            setMermaData(prev => ({
+                                                ...prev,
+                                                id: b.id,
+                                                currentStock: Number(b.stockActual)
+                                            }));
+                                        }
+                                    }}
+                                    className="w-full p-2.5 bg-background border rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-destructive/20"
+                                >
+                                    {mermaData.branchRecords.map((b: any) => (
+                                        <option key={b.id} value={b.id}>
+                                            {b.sucursal?.nombre || 'Sucursal'} (Stock disponible: {formatQuantity(b.stockActual)})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         )}
                         <div className="flex justify-between items-center pt-2 border-t mt-2">
                             <span className="text-sm text-muted-foreground">Stock Actual Disponible:</span>

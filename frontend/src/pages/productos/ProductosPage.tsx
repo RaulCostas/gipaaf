@@ -1,4 +1,4 @@
-import { formatCurrency } from '../../utils/currencyUtils';
+import { formatCurrency, formatCurrencyAmount } from '../../utils/currencyUtils';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productService } from '../../api/productService';
@@ -64,9 +64,8 @@ const ProductosPage: React.FC = () => {
         { header: 'Marca', dataKey: 'marcaNombre' },
         { header: 'Línea', dataKey: 'lineaNombre' },
         { header: 'Grupo', dataKey: 'grupoNombre' },
-        { header: 'Precio Compra', dataKey: 'precioCompra' },
-        { header: 'Última Compra', dataKey: 'fechaUltimaCompraFormatted' },
-        { header: 'Precio Venta', dataKey: 'precioVenta' },
+        { header: 'P. Compra (Bs.)', dataKey: 'precioCompra' },
+        { header: 'P. Venta (Bs.)', dataKey: 'precioVenta' },
         { header: 'Estado', dataKey: 'activo' }
     ];
 
@@ -79,6 +78,8 @@ const ProductosPage: React.FC = () => {
     const getFormattedData = () => {
         return filteredProducts.map(p => ({
             ...p,
+            precioCompra: formatCurrencyAmount(p.precioCompra || 0),
+            precioVenta: formatCurrencyAmount(p.precioVenta || 0),
             marcaNombre: p.marca?.nombre || 'Sin marca',
             lineaNombre: p.linea?.nombre || p.categoria?.nombre || 'Sin línea',
             grupoNombre: p.grupo?.nombre || 'Sin grupo',
@@ -111,12 +112,12 @@ const ProductosPage: React.FC = () => {
 
     const handlePrint = () => {
         if (!products) return;
-        printData('Reporte de Productos', exportColumns, getFormattedData(), getFiltersText());
+        printData('Reporte de Productos', exportColumns, getFormattedData(), getFiltersText(), undefined, 'portrait');
     };
 
     const handleExportPDF = () => {
         if (!products) return;
-        exportToPDF('Reporte de Productos', exportColumns, getFormattedData(), 'productos_reporte', getFiltersText());
+        exportToPDF('Reporte de Productos', exportColumns, getFormattedData(), 'productos_reporte', getFiltersText(), undefined, 'portrait');
     };
 
     const handleExportExcel = () => {

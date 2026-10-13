@@ -15,7 +15,7 @@ import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { MultiSelectVendedores } from '../../components/ui/MultiSelectVendedores';
-import { Search, Plus, Trash2, CheckCircle, Calculator, User, Package, Calendar, X, ShoppingCart, Eye, Edit, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, Receipt, CreditCard, Clock } from 'lucide-react';
+import { Search, Plus, Trash2, CheckCircle, Check, Calculator, User, Package, Calendar, X, ShoppingCart, Eye, Edit, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, Receipt, CreditCard, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useFilters } from '../../context/FilterContext';
@@ -205,24 +205,37 @@ const ProformasPage: React.FC = () => {
         proforma: any | null;
         phone: string;
         sucursalId: string;
+        vendedorId: string;
+        senderType: 'VENDEDOR' | 'SUCURSAL';
         customMessage: string;
     }>({
         isOpen: false,
         proforma: null,
         phone: '',
         sucursalId: '',
-        customMessage: ''
+        vendedorId: '',
+        senderType: 'VENDEDOR',
+        customMessage: '',
     });
 
     const { data: whatsappBranches } = useQuery({
         queryKey: ['whatsapp-branches-status'],
         queryFn: () => whatsappService.getBranchesStatus(),
-        staleTime: 1000 * 60 * 5,
+        staleTime: 1000 * 30,
         enabled: whatsappModalData.isOpen,
     });
 
+    const activeModalVendorId = whatsappModalData.vendedorId ? Number(whatsappModalData.vendedorId) : null;
+
+    const { data: vendorStatusData } = useQuery({
+        queryKey: ['whatsapp-vendor-status', activeModalVendorId],
+        queryFn: () => whatsappService.getVendorStatus(activeModalVendorId!),
+        enabled: whatsappModalData.isOpen && !!activeModalVendorId,
+        staleTime: 1000 * 10,
+    });
+
     const sendWhatsAppMutation = useMutation({
-        mutationFn: (payload: { proformaId: number; phone?: string; sucursalId?: number; message?: string }) =>
+        mutationFn: (payload: { proformaId: number; phone?: string; sucursalId?: number; message?: string; senderType?: 'VENDEDOR' | 'SUCURSAL'; vendedorId?: number }) =>
             proformaService.sendWhatsApp(payload),
         onSuccess: (data) => {
             toast.success(data.message || 'Proforma enviada exitosamente por WhatsApp');
@@ -238,13 +251,16 @@ const ProformasPage: React.FC = () => {
         const initialSucursalId = proforma.sucursal?.id 
             ? String(proforma.sucursal.id) 
             : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : (sucursales && sucursales[0] ? String(sucursales[0].id) : ''));
+        const initialVendedorId = proforma.vendedor?.id ? String(proforma.vendedor.id) : '';
 
         setWhatsappModalData({
             isOpen: true,
             proforma,
             phone: clientPhone,
             sucursalId: initialSucursalId,
-            customMessage: ''
+            vendedorId: initialVendedorId,
+            senderType: initialVendedorId ? 'VENDEDOR' : 'SUCURSAL',
+            customMessage: '',
         });
     };
 
@@ -410,8 +426,8 @@ const ProformasPage: React.FC = () => {
         const hasItemDiscount = newProforma.detalles.some((det: any) => Number(det.descuentoPorcentaje) > 0 || Boolean(det.aplicaDescuentoFijo));
 
         const tableColumn = hasItemDiscount
-            ? ["Código", "Producto", "Cant.", "P.Unit", "Desc. %", "Subtotal"]
-            : ["Código", "Producto", "Cant.", "P.Unit", "Subtotal"];
+            ? ["Código", "Producto", "Cant.", "P.Unit (Bs.)", "Desc. %", "Subtotal (Bs.)"]
+            : ["Código", "Producto", "Cant.", "P.Unit (Bs.)", "Subtotal (Bs.)"];
 
         const tableRows = newProforma.detalles.map((det: any) => {
             const descPct = Number(det.descuentoPorcentaje) || 0;
@@ -420,7 +436,7 @@ const ProformasPage: React.FC = () => {
                 det.producto?.codigo || '-',
                 det.producto?.nombre || '-',
                 det.cantidad.toString(),
-                formatCurrency(det.precioUnitario)
+                formatCurrencyAmount(det.precioUnitario)
             ];
 
             if (hasItemDiscount) {
@@ -430,7 +446,7 @@ const ProformasPage: React.FC = () => {
                 row.push(parts.length > 0 ? parts.join(' + ') : '0%');
             }
 
-            row.push(formatCurrency(det.subtotal));
+            row.push(formatCurrencyAmount(det.subtotal));
             return row;
         });
 
@@ -441,8 +457,8 @@ const ProformasPage: React.FC = () => {
             theme: 'grid',
             styles: {
                 font: 'helvetica',
-                fontSize: 8.5,
-                cellPadding: 2.5,
+                fontSize: 8,
+                cellPadding: { top: 1, right: 2, bottom: 1, left: 2 },
                 valign: 'middle',
                 textColor: [30, 30, 30],
                 lineColor: [200, 200, 200],
@@ -454,7 +470,7 @@ const ProformasPage: React.FC = () => {
                 fontStyle: 'bold',
                 lineColor: [180, 180, 180],
                 lineWidth: 0.1,
-                cellPadding: 2.5,
+                cellPadding: { top: 1.4, right: 2, bottom: 1.4, left: 2 },
             },
             alternateRowStyles: {
                 fillColor: [252, 252, 252]
@@ -471,58 +487,58 @@ const ProformasPage: React.FC = () => {
             }
         });
 
-        let finalY = (doc as any).lastAutoTable.finalY || currentY + 8;
+        let finalY = (doc as any).lastAutoTable.finalY || currentY + 6;
         const totals = calculateTotals();
 
         // Calculate required vertical height for footer (totals + notes)
         const sonText = `Son: ${numeroALetras(totals.total)}`;
         const sonLines = doc.splitTextToSize(sonText, 110);
-        const sonHeight = sonLines.length * 4.5;
+        const sonHeight = Math.max(0, (sonLines.length - 1) * 4);
 
         let obsHeight = 0;
         let obsLines: string[] = [];
         if (newProforma.observaciones) {
             obsLines = doc.splitTextToSize(newProforma.observaciones, 110);
-            obsHeight = 6 + (obsLines.length * 4.5);
+            obsHeight = 4 + (obsLines.length * 4);
         }
         const leftContentHeight = sonHeight + obsHeight;
 
         let rightLinesCount = 2; // Subtotal and Total
         if (totals.desc1 > 0) rightLinesCount++;
         if (totals.desc2 > 0) rightLinesCount++;
-        const rightHeight = rightLinesCount * 5 + 4;
+        const rightHeight = (rightLinesCount - 1) * 4.2;
 
-        const summaryContentHeight = Math.max(leftContentHeight, rightHeight) + 8;
+        const summaryContentHeight = Math.max(leftContentHeight, rightHeight) + 5;
 
         // If footer doesn't fit on the current page, move it to a new page
-        if (finalY + summaryContentHeight > 275) {
+        if (finalY + summaryContentHeight > 280) {
             doc.addPage();
             finalY = 20;
         }
 
-        let currentTotalY = finalY + 8;
+        let currentTotalY = finalY + 5;
         
-        doc.setFontSize(9.5);
+        doc.setFontSize(9);
         doc.setTextColor(40, 40, 40);
         doc.setFont("helvetica", "normal");
         
         doc.text(`Subtotal: ${formatCurrency(totals.subtotal)}`, 196, currentTotalY, { align: 'right' });
-        currentTotalY += 5;
+        currentTotalY += 4.2;
         if (totals.desc1 > 0) {
             doc.text(`Descuento (${newProforma.descuentoPorcentaje}%): -${formatCurrency(totals.desc1)}`, 196, currentTotalY, { align: 'right' });
-            currentTotalY += 5;
+            currentTotalY += 4.2;
         }
         if (totals.desc2 > 0) {
             doc.text(`Promoción (${newProforma.descuentoPromocionPorcentaje}%): -${formatCurrency(totals.desc2)}`, 196, currentTotalY, { align: 'right' });
-            currentTotalY += 5;
+            currentTotalY += 4.2;
         }
 
-        doc.setFontSize(11);
+        doc.setFontSize(10.5);
         doc.setFont("helvetica", "bold");
         doc.text(`Total: ${formatCurrency(totals.total)}`, 196, currentTotalY, { align: 'right' });
         
-        const startSonY = finalY + 8;
-        doc.setFontSize(9.5);
+        const startSonY = finalY + 5;
+        doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
         doc.text(sonLines, 14, startSonY);
         
@@ -530,12 +546,12 @@ const ProformasPage: React.FC = () => {
 
         if (newProforma.observaciones) {
             const obsStartY = leftEndY + 4;
-            doc.setFontSize(9);
+            doc.setFontSize(8.5);
             doc.setTextColor(80, 80, 80);
             doc.setFont("helvetica", "normal");
             doc.text('Notas:', 14, obsStartY);
             doc.setFont("helvetica", "italic");
-            doc.text(obsLines, 14, obsStartY + 4.5);
+            doc.text(obsLines, 14, obsStartY + 3.8);
         }
 
         printJsPdf(doc);
@@ -704,23 +720,16 @@ const ProformasPage: React.FC = () => {
 
     const getExportColumns = () => {
         let cols = [
-            { header: 'N° Proforma', dataKey: 'numero' },
             { header: 'Fecha', dataKey: 'fechaFormatted' },
-            { header: 'Documento', dataKey: 'documentoFormatted' },
-            { header: 'Condición', dataKey: 'pagoFormatted' },
-            { header: 'Cliente', dataKey: 'clienteNombre' },
+            { header: 'Nro Proforma', dataKey: 'numero' },
             { header: 'Vendedor', dataKey: 'vendedorNombre' },
+            { header: 'Cliente', dataKey: 'clienteNombre' },
+            { header: 'Nota de Proforma', dataKey: 'observaciones' },
             { header: 'Sucursal', dataKey: 'sucursalNombre' },
-            { header: 'SubTotal', dataKey: 'subtotalFormatted' },
-            { header: 'Descuento', dataKey: 'descuentoFormatted' },
-            { header: 'Total', dataKey: 'totalFormatted' },
-            { header: 'Estado', dataKey: 'estado' }
+            { header: 'Total Bs.', dataKey: 'totalFormatted' }
         ];
 
-        if (selectedVendedores.length === 1) {
-            cols = cols.filter(c => c.dataKey !== 'vendedorNombre');
-        }
-        if (selectedSucursal) {
+        if (selectedSucursal || selectedCiudad) {
             cols = cols.filter(c => c.dataKey !== 'sucursalNombre');
         }
 
@@ -746,10 +755,14 @@ const ProformasPage: React.FC = () => {
                 pctLabel = ` (${Number(totalPct.toFixed(2))}%)`;
             }
 
-            const ciudadNombre = (s.sucursal?.ciudad as any)?.nombre;
-            const sucursalTexto = s.sucursal ? `${s.sucursal.nombre}${ciudadNombre ? ` (${ciudadNombre})` : ''}`.trim() : '-';
+            const sucursalTexto = s.sucursal?.nombre || '-';
             const docTexto = s.conFactura ? `Factura ${s.numeroFactura || 'S/N'}` : 'Sin Factura';
             const pagoTexto = s.tipoPago === 'CREDITO' ? `Crédito (${s.diasCredito || 0} días)` : 'Contado';
+
+            const cliObj = s.cliente?.id ? (clients?.find(c => c.id === s.cliente?.id) || s.cliente) : s.cliente;
+            const cliCodigo = (s.cliente?.codigo || cliObj?.codigo || '').trim();
+            const cliTienda = (s.cliente?.nombreTienda || cliObj?.nombreTienda || '').trim() || getClientDisplayName(cliObj);
+            const clienteTexto = cliCodigo ? `(${cliCodigo}) ${cliTienda}` : cliTienda;
 
             return {
                 id: s.id,
@@ -757,15 +770,29 @@ const ProformasPage: React.FC = () => {
                 fechaFormatted: s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '-',
                 documentoFormatted: docTexto,
                 pagoFormatted: pagoTexto,
-                clienteNombre: getClientDisplayName(s.cliente),
+                clienteNombre: clienteTexto,
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : 'Sin asignar',
+                observaciones: s.observaciones || '-',
                 sucursalNombre: sucursalTexto,
-                subtotalFormatted: formatCurrency(subTotalCalc),
-                descuentoFormatted: `${formatCurrency(descCalc)}${pctLabel}`,
-                totalFormatted: formatCurrency(s.total || 0),
+                subtotalFormatted: formatCurrencyAmount(subTotalCalc),
+                descuentoFormatted: `${formatCurrencyAmount(descCalc)}${pctLabel}`,
+                totalFormatted: formatCurrencyAmount(s.total || 0),
                 estado: s.estado
             };
         });
+    };
+
+    const getTotalsFooter = () => {
+        const totalSum = filteredProformas.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+        return {
+            fechaFormatted: 'TOTALES (Bs.)',
+            numero: '',
+            vendedorNombre: '',
+            clienteNombre: '',
+            observaciones: '',
+            sucursalNombre: '',
+            totalFormatted: formatCurrencyAmount(totalSum)
+        };
     };
 
     const getFiltersText = () => {
@@ -809,7 +836,7 @@ const ProformasPage: React.FC = () => {
             toast.error('No hay proformas para imprimir');
             return;
         }
-        printData('Reporte de Proformas / Presupuestos', getExportColumns(), getFormattedData(), getFiltersText());
+        printData('Reporte de Proformas / Presupuestos', getExportColumns(), getFormattedData(), getFiltersText(), getTotalsFooter(), 'portrait');
     };
 
     const handleExportPDF = () => {
@@ -817,7 +844,7 @@ const ProformasPage: React.FC = () => {
             toast.error('No hay proformas para exportar');
             return;
         }
-        exportToPDF('Reporte de Proformas / Presupuestos', getExportColumns(), getFormattedData(), 'proformas_reporte', getFiltersText());
+        exportToPDF('Reporte de Proformas / Presupuestos', getExportColumns(), getFormattedData(), 'proformas_reporte', getFiltersText(), getTotalsFooter(), 'portrait');
     };
 
     const handleExportExcel = () => {
@@ -825,7 +852,7 @@ const ProformasPage: React.FC = () => {
             toast.error('No hay proformas para exportar');
             return;
         }
-        exportToExcel(getExportColumns(), getFormattedData(), 'proformas_reporte');
+        exportToExcel(getExportColumns(), getFormattedData(), 'proformas_reporte', getTotalsFooter());
     };
 
     const hasActiveFilters = selectedVendedores.length > 0 || !!fechaDesde || !!fechaHasta || !!search;
@@ -1069,47 +1096,47 @@ const ProformasPage: React.FC = () => {
                                     </div>
                                 </td>
                                 <td className="p-4 text-right">
-                                    <div className="flex justify-end gap-2 flex-wrap">
+                                    <div className="flex justify-end gap-1.5">
                                         <button
                                             onClick={() => handleView(s)}
-                                            className="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-xs font-bold hover:bg-gray-700 transition-all flex items-center gap-1.5"
+                                            className="px-2.5 py-1.5 bg-card border hover:border-primary/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                             title="Ver Proforma"
                                         >
-                                            <Eye className="w-3" /> Ver
-                                        </button>
-                                        <button
-                                            onClick={() => handleOpenWhatsAppModal(s)}
-                                            className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
-                                            title="Enviar Proforma en PDF por WhatsApp"
-                                        >
-                                            <MessageCircle className="w-3" /> WhatsApp
+                                            <Eye className="w-3.5 h-3.5 text-primary" />
                                         </button>
                                         {s.estado === EstadoNota.PENDIENTE && (
                                             <button
                                                 onClick={() => handleEdit(s)}
-                                                className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-all flex items-center gap-1.5"
+                                                className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                 title="Editar Proforma"
                                             >
-                                                <Edit className="w-3" /> Editar
+                                                <Edit className="w-3.5 h-3.5 text-amber-500" />
                                             </button>
                                         )}
+                                        <button
+                                            onClick={() => handleOpenWhatsAppModal(s)}
+                                            className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                            title="Enviar Proforma en PDF por WhatsApp"
+                                        >
+                                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                        </button>
                                         {s.estado !== EstadoNota.ANULADA && s.estado !== EstadoNota.CONVERTIDA && (
                                             <button
                                                 onClick={() => convertMutation.mutate(s.id)}
                                                 disabled={convertMutation.isPending}
-                                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                                                className="px-2.5 py-1.5 bg-card border hover:border-green-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer disabled:opacity-50"
                                                 title="Convertir a Venta Confirmada"
                                             >
-                                                <Calculator className="w-3" /> A Venta
+                                                <Calculator className="w-3.5 h-3.5 text-green-600" />
                                             </button>
                                         )}
                                         {s.estado !== EstadoNota.ANULADA && s.estado !== EstadoNota.CONVERTIDA && (
                                             <button
                                                 onClick={() => setAnularConfirmId(s.id)}
-                                                className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1.5"
+                                                className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                 title="Anular Proforma"
                                             >
-                                                <Trash2 className="w-3" /> Anular
+                                                <Trash2 className="w-3.5 h-3.5 text-red-500" />
                                             </button>
                                         )}
                                     </div>
@@ -1194,11 +1221,13 @@ const ProformasPage: React.FC = () => {
                                 className={`w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none ${isRestrictedVendor ? 'opacity-80 bg-muted/50 cursor-not-allowed' : 'disabled:opacity-50'}`}
                             >
                                 <option value="">Seleccione vendedor...</option>
-                                {availableVendedores?.map(v => (
-                                    <option key={v.id} value={v.id}>
-                                        {v.nombres} {v.apellidos}
-                                    </option>
-                                ))}
+                                {availableVendedores
+                                    ?.filter(v => !newProforma.sucursalId || v.sucursal?.id === Number(newProforma.sucursalId) || v.id.toString() === newProforma.vendedorId?.toString())
+                                    .map(v => (
+                                        <option key={v.id} value={v.id}>
+                                            {v.nombres} {v.apellidos}
+                                        </option>
+                                    ))}
                             </select>
                         </div>
 
@@ -1209,8 +1238,16 @@ const ProformasPage: React.FC = () => {
                             <select
                                 value={newProforma.sucursalId || ''}
                                 onChange={(e) => {
-                                    const found = sucursales?.find((s: any) => s.id.toString() === e.target.value);
-                                    setNewProforma({ ...newProforma, sucursalId: e.target.value, sucursal: found?.nombre || '' });
+                                    const val = e.target.value;
+                                    const found = sucursales?.find((s: any) => s.id.toString() === val);
+                                    const currentVend = vendedores?.find(v => v.id.toString() === newProforma.vendedorId);
+                                    const shouldClearVendor = !isRestrictedVendor && val && currentVend?.sucursal?.id && currentVend.sucursal.id.toString() !== val;
+                                    setNewProforma({
+                                        ...newProforma,
+                                        sucursalId: val,
+                                        sucursal: found?.nombre || '',
+                                        vendedorId: shouldClearVendor ? '' : newProforma.vendedorId
+                                    });
                                 }}
                                 disabled={isViewing || isRestrictedToBranch}
                                 className={`w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none ${isRestrictedToBranch ? 'opacity-80 bg-muted/50 cursor-not-allowed' : 'disabled:opacity-50'}`}
@@ -1641,176 +1678,268 @@ const ProformasPage: React.FC = () => {
                 }
                 className="max-w-lg"
             >
-                {whatsappModalData.proforma && (
-                    <div className="space-y-4">
-                        {/* Card resumen de proforma */}
-                        <div className="p-3.5 bg-muted/40 border rounded-xl space-y-1 text-sm">
-                            <div className="flex justify-between items-center font-bold">
-                                <span className="text-foreground">Proforma N° {whatsappModalData.proforma.numero || whatsappModalData.proforma.id}</span>
-                                <span className="text-primary text-base">{formatCurrency(whatsappModalData.proforma.total)}</span>
-                            </div>
-                            <div className="text-xs text-muted-foreground flex justify-between items-center">
-                                <span>Cliente: {whatsappModalData.proforma.cliente?.persona ? `${whatsappModalData.proforma.cliente.persona.nombres} ${whatsappModalData.proforma.cliente.persona.apellidos}` : 'Cliente Final'}</span>
-                                <span>{whatsappModalData.proforma.fecha ? String(whatsappModalData.proforma.fecha).split('T')[0].split('-').reverse().join('/') : '-'}</span>
-                            </div>
-                        </div>
+                {whatsappModalData.proforma && (() => {
+                    const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(whatsappModalData.sucursalId));
+                    const foundSucursal = sucursales?.find(s => String(s.id) === String(whatsappModalData.sucursalId));
+                    const ciudadNombre = curBranch?.ciudadNombre || (foundSucursal?.ciudad as any)?.nombre;
+                    const branchName = curBranch?.sucursalNombre || foundSucursal?.nombre || 'Sucursal Central';
+                    const branchDisplay = ciudadNombre ? `${branchName} (${ciudadNombre})` : branchName;
+                    const isBranchConn = curBranch?.status === 'CONNECTED';
 
-                        {/* Input de Teléfono */}
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                                <span>Número de WhatsApp Destinatario</span>
-                                <span className="text-[10px] text-muted-foreground font-normal">Prefijo: +591 (Bolivia)</span>
-                            </label>
-                            <div className="flex rounded-lg border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary/20">
-                                <span className="px-3 py-2 bg-muted text-xs font-semibold text-muted-foreground flex items-center border-r">
-                                    🇧🇴 +591
-                                </span>
-                                <input
-                                    type="text"
-                                    placeholder="Ej: 71234567"
-                                    value={whatsappModalData.phone}
-                                    onChange={(e) => setWhatsappModalData(prev => ({ ...prev, phone: e.target.value }))}
-                                    className="flex-1 px-3 py-2 text-sm bg-transparent outline-none font-medium"
+                    const vendedorObj = vendedores?.find(v => String(v.id) === String(whatsappModalData.vendedorId)) || whatsappModalData.proforma.vendedor;
+                    const vendedorNombre = vendedorObj
+                        ? `${vendedorObj.nombres || ''} ${vendedorObj.apellidos || ''}`.trim()
+                        : (vendorStatusData?.vendedorNombre || 'Sin Vendedor Asignado');
+                    const isVendorConn = vendorStatusData?.status === 'CONNECTED';
+
+                    const isSelectedChannelReady = whatsappModalData.senderType === 'VENDEDOR' ? isVendorConn : isBranchConn;
+
+                    return (
+                        <div className="space-y-4">
+                            {/* Card resumen de proforma */}
+                            <div className="p-3.5 bg-muted/40 border rounded-xl space-y-1 text-sm">
+                                <div className="flex justify-between items-center font-bold">
+                                    <span className="text-foreground">Proforma N° {whatsappModalData.proforma.numero || whatsappModalData.proforma.id}</span>
+                                    <span className="text-primary text-base">{formatCurrency(whatsappModalData.proforma.total)}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground flex justify-between items-center">
+                                    <span>Cliente: {getClientDisplayName(whatsappModalData.proforma.cliente)}</span>
+                                    <span>{whatsappModalData.proforma.fecha ? String(whatsappModalData.proforma.fecha).split('T')[0].split('-').reverse().join('/') : '-'}</span>
+                                </div>
+                            </div>
+
+                            {/* Input de Teléfono Destinatario */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                    <span>Número de WhatsApp del Cliente</span>
+                                    <span className="text-[10px] text-muted-foreground font-normal">Prefijo: +591 (Bolivia)</span>
+                                </label>
+                                <div className="flex rounded-lg border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary/20">
+                                    <span className="px-3 py-2 bg-muted text-xs font-semibold text-muted-foreground flex items-center border-r">
+                                        🇧🇴 +591
+                                    </span>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: 71234567"
+                                        value={whatsappModalData.phone}
+                                        onChange={(e) => setWhatsappModalData(prev => ({ ...prev, phone: e.target.value }))}
+                                        className="flex-1 px-3 py-2 text-sm bg-transparent outline-none font-medium"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Selector de Canal Emisor (Vendedor vs Sucursal) */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold text-foreground block">
+                                    ¿Desde qué número deseas enviar la Proforma?
+                                </label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                    {/* Opción 1: WhatsApp del Vendedor */}
+                                    <button
+                                        type="button"
+                                        disabled={!whatsappModalData.vendedorId}
+                                        onClick={() => setWhatsappModalData(prev => ({ ...prev, senderType: 'VENDEDOR' }))}
+                                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 cursor-pointer ${
+                                            whatsappModalData.senderType === 'VENDEDOR'
+                                                ? 'border-emerald-500 bg-emerald-500/5 ring-2 ring-emerald-500/20'
+                                                : 'border-border bg-card hover:bg-accent/40'
+                                        } ${!whatsappModalData.vendedorId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        <div className="flex items-start justify-between gap-2 w-full">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <div className={`p-1.5 rounded-lg shrink-0 ${whatsappModalData.senderType === 'VENDEDOR' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+                                                    <User className="w-4 h-4" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">
+                                                        WhatsApp Vendedor
+                                                    </span>
+                                                    <span className="text-xs font-bold text-foreground truncate block" title={vendedorNombre}>
+                                                        {vendedorNombre}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {whatsappModalData.senderType === 'VENDEDOR' && (
+                                                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                                            )}
+                                        </div>
+                                        <div className="flex items-center justify-between text-[10px] pt-1 border-t border-border/60">
+                                            <span className="text-muted-foreground truncate">
+                                                {vendorStatusData?.user?.id ? `+${vendorStatusData.user.id}` : (vendedorObj?.telefono || 'Sin vincular')}
+                                            </span>
+                                            <span className={`font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
+                                                isVendorConn
+                                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                            }`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${isVendorConn ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                                                {isVendorConn ? 'Vinculado' : 'No vinculado'}
+                                            </span>
+                                        </div>
+                                    </button>
+
+                                    {/* Opción 2: Bot de la Sucursal */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setWhatsappModalData(prev => ({ ...prev, senderType: 'SUCURSAL' }))}
+                                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 cursor-pointer ${
+                                            whatsappModalData.senderType === 'SUCURSAL'
+                                                ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                                                : 'border-border bg-card hover:bg-accent/40'
+                                        }`}
+                                    >
+                                        <div className="flex items-start justify-between gap-2 w-full">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <div className={`p-1.5 rounded-lg shrink-0 ${whatsappModalData.senderType === 'SUCURSAL' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                                                    <Building2 className="w-4 h-4" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-primary block">
+                                                        Bot de Sucursal
+                                                    </span>
+                                                    <span className="text-xs font-bold text-foreground truncate block" title={branchDisplay}>
+                                                        {branchDisplay}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {whatsappModalData.senderType === 'SUCURSAL' && (
+                                                <Check className="w-4 h-4 text-primary shrink-0" />
+                                            )}
+                                        </div>
+                                        <div className="flex items-center justify-between text-[10px] pt-1 border-t border-border/60">
+                                            <span className="text-muted-foreground truncate">Incluye link al vendedor</span>
+                                            <span className={`font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
+                                                isBranchConn
+                                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                                    : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                                            }`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${isBranchConn ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                                                {isBranchConn ? 'Conectado' : 'Desconectado'}
+                                            </span>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Panel informativo del Vendedor cuando está seleccionado */}
+                            {whatsappModalData.senderType === 'VENDEDOR' && (
+                                <div className={`p-3 border rounded-xl space-y-1.5 ${
+                                    isVendorConn
+                                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
+                                        : 'bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-300'
+                                }`}>
+                                    {isVendorConn ? (
+                                        <div className="text-xs">
+                                            ✅ El PDF se enviará directamente desde el WhatsApp de <strong className="text-foreground">{vendedorNombre}</strong> ({vendorStatusData?.user?.id ? `+${vendorStatusData.user.id}` : 'Conectado'}). El cliente responderá directamente a su chat.
+                                        </div>
+                                    ) : (
+                                        <div className="text-xs space-y-1">
+                                            <p className="font-semibold flex items-center gap-1.5">
+                                                ⚠️ WhatsApp de {vendedorNombre} no vinculado
+                                            </p>
+                                            <p className="text-[11px] opacity-90">
+                                                Para enviar desde este número, el vendedor debe vincular su WhatsApp exclusivamente desde la sección <strong>WhatsApp</strong> (pestaña <em>WhatsApp Vendedores</em>), o seleccione <strong>Bot de Sucursal</strong> para enviar la proforma ahora.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {whatsappModalData.senderType === 'SUCURSAL' && (
+                                <div className="p-2.5 bg-muted/30 border rounded-xl text-[11px] text-muted-foreground">
+                                    ℹ️ Se enviará desde el Bot de <strong>{branchDisplay}</strong> incluyendo en el mensaje el enlace directo (<code className="text-foreground">wa.me</code>) al WhatsApp de <strong>{vendedorNombre}</strong> para que el cliente coordine con el vendedor.
+                                </div>
+                            )}
+
+                            {/* Mensaje adicional opcional */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-muted-foreground">Mensaje o Nota Opcional (Pie del PDF)</label>
+                                <textarea
+                                    rows={2}
+                                    value={whatsappModalData.customMessage}
+                                    onChange={(e) => setWhatsappModalData(prev => ({ ...prev, customMessage: e.target.value }))}
+                                    placeholder="Escribe una nota personalizada si deseas acompañar el PDF con un mensaje específico..."
+                                    className="w-full p-2.5 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/60"
                                 />
                             </div>
-                            <p className="text-[11px] text-muted-foreground">
-                                El cliente recibirá el documento PDF oficial generado por el sistema junto con los detalles de la cotización.
-                            </p>
-                        </div>
 
-                        {/* Canal de WhatsApp Automático de la Sucursal */}
-                        <div className="p-3 bg-muted/30 border rounded-xl flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                                    <Building2 className="w-4 h-4 text-primary" />
-                                </div>
-                                <div className="flex flex-col min-w-0">
-                                    <span className="text-[11px] text-muted-foreground font-medium">Canal de Envío (Sucursal):</span>
-                                    {(() => {
-                                        const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(whatsappModalData.sucursalId));
-                                        const foundSucursal = sucursales?.find(s => String(s.id) === String(whatsappModalData.sucursalId));
-                                        const ciudadNombre = curBranch?.ciudadNombre || (foundSucursal?.ciudad as any)?.nombre;
-                                        const branchName = curBranch?.sucursalNombre || foundSucursal?.nombre || 'Sucursal Central';
-                                        const branchDisplay = ciudadNombre ? `${branchName} (${ciudadNombre})` : branchName;
-                                        return (
-                                            <span className="text-xs font-bold text-foreground truncate">{branchDisplay}</span>
-                                        );
-                                    })()}
+                            {/* Botones de acción */}
+                            <div className="pt-3 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                                {/* Fallback WhatsApp Web */}
+                                {(() => {
+                                    const cleanPhone = (whatsappModalData.phone || '').replace(/\D/g, '');
+                                    const phoneWithCountry = cleanPhone.length === 8 ? `591${cleanPhone}` : cleanPhone;
+                                    const clienteNombre = getClientDisplayName(whatsappModalData.proforma.cliente);
+                                    const webText = encodeURIComponent(
+                                        `Hola ${clienteNombre}, te saluda ${vendedorNombre} de GIPAAF. Te comparto el resumen de tu Proforma N° ${whatsappModalData.proforma.numero || whatsappModalData.proforma.id} por un total de Bs. ${Number(whatsappModalData.proforma.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}. ¡Quedo atento a tus comentarios!`
+                                    );
+                                    const waLink = `https://wa.me/${phoneWithCountry}?text=${webText}`;
+
+                                    return (
+                                        <a
+                                            href={phoneWithCountry ? waLink : '#'}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => {
+                                                if (!phoneWithCountry) {
+                                                    e.preventDefault();
+                                                    toast.error('Ingrese un número de teléfono para abrir WhatsApp Web');
+                                                }
+                                            }}
+                                            className={`px-3 py-2 border rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center gap-1.5 transition-colors ${!phoneWithCountry ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            title="Abrir chat directo en WhatsApp Web"
+                                        >
+                                            <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                                            <span>WhatsApp Web</span>
+                                        </a>
+                                    );
+                                })()}
+
+                                <div className="flex items-center gap-2 justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false }))}
+                                        className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={sendWhatsAppMutation.isPending || !whatsappModalData.phone.trim() || !isSelectedChannelReady}
+                                        title={!isSelectedChannelReady ? (whatsappModalData.senderType === 'VENDEDOR' ? 'El WhatsApp del vendedor no está vinculado. Vincúlelo desde la sección WhatsApp o elija Bot de Sucursal' : 'El bot de esta sucursal no está conectado') : undefined}
+                                        onClick={() => {
+                                            if (!whatsappModalData.phone.trim()) {
+                                                toast.error('Ingrese el número de teléfono del cliente');
+                                                return;
+                                            }
+                                            sendWhatsAppMutation.mutate({
+                                                proformaId: whatsappModalData.proforma.id,
+                                                phone: whatsappModalData.phone.trim(),
+                                                sucursalId: whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : undefined,
+                                                vendedorId: whatsappModalData.vendedorId ? Number(whatsappModalData.vendedorId) : undefined,
+                                                senderType: whatsappModalData.senderType,
+                                                message: whatsappModalData.customMessage.trim() || undefined
+                                            });
+                                        }}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                    >
+                                        {sendWhatsAppMutation.isPending ? (
+                                            <>
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                Enviando PDF...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send className="w-3.5 h-3.5" />
+                                                {whatsappModalData.senderType === 'VENDEDOR' ? 'Enviar desde Vendedor' : 'Enviar desde Sucursal'}
+                                            </>
+                                        )}
+                                    </button>
                                 </div>
                             </div>
-                            {(() => {
-                                const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(whatsappModalData.sucursalId));
-                                const isConn = curBranch?.status === 'CONNECTED';
-                                return (
-                                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 border shrink-0 transition-colors ${
-                                        isConn 
-                                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
-                                            : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
-                                    }`}>
-                                        <span className={`w-2 h-2 rounded-full shrink-0 ${isConn ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
-                                        <span>{isConn ? 'Bot Conectado' : 'Bot No Conectado'}</span>
-                                    </span>
-                                );
-                            })()}
                         </div>
-
-                        {/* Mensaje adicional opcional */}
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-muted-foreground">Mensaje o Nota Opcional (Pie del PDF)</label>
-                            <textarea
-                                rows={2}
-                                value={whatsappModalData.customMessage}
-                                onChange={(e) => setWhatsappModalData(prev => ({ ...prev, customMessage: e.target.value }))}
-                                placeholder="Escribe una nota personalizada si deseas acompañar el PDF con un mensaje específico..."
-                                className="w-full p-2.5 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/60"
-                            />
-                        </div>
-
-                        {/* Botones de acción */}
-                        <div className="pt-3 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-                            {/* Fallback WhatsApp Web */}
-                            {(() => {
-                                const cleanPhone = (whatsappModalData.phone || '').replace(/\D/g, '');
-                                const phoneWithCountry = cleanPhone.length === 8 ? `591${cleanPhone}` : cleanPhone;
-                                const clienteNombre = getClientDisplayName(whatsappModalData.proforma.cliente);
-                                const webText = encodeURIComponent(
-                                    `Hola ${clienteNombre}, te compartimos el resumen de tu Proforma N° ${whatsappModalData.proforma.numero || whatsappModalData.proforma.id} emitida por GIPAAF por un total de Bs. ${Number(whatsappModalData.proforma.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}. ¡Quedamos a tu disposición!`
-                                );
-                                const waLink = `https://wa.me/${phoneWithCountry}?text=${webText}`;
-
-                                return (
-                                    <a
-                                        href={phoneWithCountry ? waLink : '#'}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => {
-                                            if (!phoneWithCountry) {
-                                                e.preventDefault();
-                                                toast.error('Ingrese un número de teléfono para abrir WhatsApp Web');
-                                            }
-                                        }}
-                                        className={`px-3 py-2 border rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center gap-1.5 transition-colors ${!phoneWithCountry ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title="Abrir chat directo en WhatsApp Web"
-                                    >
-                                        <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span>WhatsApp Web</span>
-                                    </a>
-                                );
-                            })()}
-
-                            {(() => {
-                                const curBranch = whatsappBranches?.find(b => String(b.sucursalId) === String(whatsappModalData.sucursalId));
-                                const isConn = curBranch?.status === 'CONNECTED';
-
-                                return (
-                                    <div className="flex items-center gap-2 justify-end">
-                                        <button
-                                            type="button"
-                                            onClick={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false }))}
-                                            className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-accent transition-all"
-                                        >
-                                            Cancelar
-                                        </button>
-                                        <button
-                                            type="button"
-                                            disabled={sendWhatsAppMutation.isPending || !whatsappModalData.phone.trim() || !isConn}
-                                            title={!isConn ? 'El bot de WhatsApp no está conectado en esta sucursal' : undefined}
-                                            onClick={() => {
-                                                if (!isConn) {
-                                                    toast.error('El bot de WhatsApp de esta sucursal no está conectado');
-                                                    return;
-                                                }
-                                                if (!whatsappModalData.phone.trim()) {
-                                                    toast.error('Ingrese el número de teléfono del cliente');
-                                                    return;
-                                                }
-                                                sendWhatsAppMutation.mutate({
-                                                    proformaId: whatsappModalData.proforma.id,
-                                                    phone: whatsappModalData.phone.trim(),
-                                                    sucursalId: whatsappModalData.sucursalId ? Number(whatsappModalData.sucursalId) : undefined,
-                                                    message: whatsappModalData.customMessage.trim() || undefined
-                                                });
-                                            }}
-                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {sendWhatsAppMutation.isPending ? (
-                                                <>
-                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                    Enviando PDF...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Send className="w-3.5 h-3.5" />
-                                                    Enviar PDF
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                )}
+                    );
+                })()}
             </Modal>
         </div>
     );

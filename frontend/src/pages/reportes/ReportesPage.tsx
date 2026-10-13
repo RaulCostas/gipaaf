@@ -886,9 +886,9 @@ const ReportesPage: React.FC = () => {
 
         cols.push(
             { header: 'TOTAL EXISTENCIAS', dataKey: 'totalExistencias' },
-            { header: 'COSTO UNITARIO', dataKey: 'precioCompraFormatted' },
-            { header: 'TOTAL BS', dataKey: 'totalBsFormatted' },
-            { header: 'PRECIO VENTA', dataKey: 'precioVentaFormatted' },
+            { header: 'COSTO UNITARIO (Bs.)', dataKey: 'precioCompraFormatted' },
+            { header: 'TOTAL (Bs.)', dataKey: 'totalBsFormatted' },
+            { header: 'PRECIO VENTA (Bs.)', dataKey: 'precioVentaFormatted' },
             { header: 'ÚLTIMA COMPRA', dataKey: 'fechaUltimaCompraFormatted' },
             { header: 'ESTADO', dataKey: 'estado' }
         );
@@ -1242,9 +1242,9 @@ const ReportesPage: React.FC = () => {
         { header: 'NRO DE NOTA', dataKey: 'nroNota' },
         { header: 'OBSERVACIÓN', dataKey: 'observacion' },
         { header: 'NRO DE RECIBO', dataKey: 'nroRecibo' },
-        { header: 'CRÉDITO', dataKey: 'creditoFormatted' },
-        { header: 'ABONO', dataKey: 'abonoFormatted' },
-        { header: 'SALDO', dataKey: 'saldoFormatted' },
+        { header: 'CRÉDITO (Bs.)', dataKey: 'creditoFormatted' },
+        { header: 'ABONO (Bs.)', dataKey: 'abonoFormatted' },
+        { header: 'SALDO (Bs.)', dataKey: 'saldoFormatted' },
     ], []);
 
     const mappedExportDataKardex = useMemo(() => {
@@ -1367,9 +1367,9 @@ const ReportesPage: React.FC = () => {
         { header: 'Vendedor', dataKey: 'vendedorNombre' },
         { header: 'Nota de Venta', dataKey: 'observaciones' },
         { header: 'Sucursal', dataKey: 'sucursalNombre' },
-        { header: 'SubTotal', dataKey: 'subtotalFormatted' },
-        { header: 'Descuento', dataKey: 'descuentoFormatted' },
-        { header: 'Total', dataKey: 'totalFormatted' },
+        { header: 'SubTotal (Bs.)', dataKey: 'subtotalFormatted' },
+        { header: 'Descuento (Bs.)', dataKey: 'descuentoFormatted' },
+        { header: 'Total (Bs.)', dataKey: 'totalFormatted' },
         { header: 'Estado', dataKey: 'estado' }
     ];
 
@@ -1389,9 +1389,9 @@ const ReportesPage: React.FC = () => {
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : '---',
                 observaciones: s.observaciones || '-',
                 sucursalNombre: sucursalTexto,
-                subtotalFormatted: formatCurrency(subTotalCalc),
-                descuentoFormatted: formatCurrency(descCalc),
-                totalFormatted: formatCurrency(s.total || 0),
+                subtotalFormatted: formatCurrencyAmount(subTotalCalc),
+                descuentoFormatted: formatCurrencyAmount(descCalc),
+                totalFormatted: formatCurrencyAmount(s.total || 0),
                 estado: s.estado || 'CONFIRMADA'
             };
         });
@@ -1713,10 +1713,10 @@ const ReportesPage: React.FC = () => {
         { header: 'Producto', dataKey: 'productoDisplay' },
         { header: 'Forma', dataKey: 'formaPago' },
         { header: 'Cant.', dataKey: 'cantidad' },
-        { header: 'Precio Venta', dataKey: 'precioVentaFormatted' },
-        { header: 'Precio Compra', dataKey: 'precioCompraFormatted' },
-        { header: 'Ganancia Unit.', dataKey: 'gananciaFormatted' },
-        { header: 'Ganancia Total', dataKey: 'gananciaTotalFormatted' }
+        { header: 'Precio Venta (Bs.)', dataKey: 'precioVentaFormatted' },
+        { header: 'Precio Compra (Bs.)', dataKey: 'precioCompraFormatted' },
+        { header: 'Ganancia Unit. (Bs.)', dataKey: 'gananciaFormatted' },
+        { header: 'Ganancia Total (Bs.)', dataKey: 'gananciaTotalFormatted' }
     ];
 
     const mappedExportDataVentasProducto = useMemo(() => {
@@ -1875,19 +1875,17 @@ const ReportesPage: React.FC = () => {
         { header: 'Nota de Venta', dataKey: 'notaVenta' },
         { header: 'Método de Pago', dataKey: 'metodoPago' },
         { header: 'Referencia', dataKey: 'referencia' },
-        { header: 'Total Venta', dataKey: 'totalVentaFormateado' },
-        { header: 'Monto Pagado', dataKey: 'montoFormateado' },
-        { header: 'Saldo Pendiente', dataKey: 'saldoFormateado' },
+        { header: 'Total Venta (Bs.)', dataKey: 'totalVentaFormateado' },
+        { header: 'Monto Pagado (Bs.)', dataKey: 'montoFormateado' },
+        { header: 'Saldo Pendiente (Bs.)', dataKey: 'saldoFormateado' },
         { header: 'Estado', dataKey: 'estado' }
     ];
 
     const mappedExportDataCobranzas = useMemo(() => {
         return filteredCobranzas.map(p => {
-            const simbolo = p.moneda === 'USD' ? '$us' : 'Bs.';
-            const montoFormateado = `${simbolo} ${Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            const saldoSimbolo = p.nota?.moneda === 'USD' ? '$us' : 'Bs.';
-            const totalVentaFormateado = p.nota ? `${saldoSimbolo} ${Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
-            const saldoFormateado = p.nota ? `${saldoSimbolo} ${Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
+            const montoFormateado = Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const totalVentaFormateado = p.nota ? Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+            const saldoFormateado = p.nota ? Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
             const vendedorNombre = p.nota?.vendedor
                 ? `${p.nota.vendedor.nombres || ''} ${p.nota.vendedor.apellidos || ''}`.trim()
                 : (p.nota?.usuario?.persona 
@@ -2038,9 +2036,9 @@ const ReportesPage: React.FC = () => {
                 proveedorNombre: provNombre,
                 sucursalNombre: sucursalTexto,
                 moneda: s.moneda || 'BOB',
-                subtotalFormatted: formatCurrency(subTotalCalc, s.moneda || 'BOB'),
-                descuentoFormatted: formatCurrency(descCalc, s.moneda || 'BOB'),
-                totalFormatted: formatCurrency(s.total || 0, s.moneda || 'BOB'),
+                subtotalFormatted: formatCurrencyAmount(subTotalCalc),
+                descuentoFormatted: formatCurrencyAmount(descCalc),
+                totalFormatted: formatCurrencyAmount(s.total || 0),
                 estado: s.estado || 'CONFIRMADA'
             };
         });
@@ -2164,14 +2162,11 @@ const ReportesPage: React.FC = () => {
 
     const mappedExportDataPagosProveedores = useMemo(() => {
         return filteredPagosProveedores.map(p => {
-            const simbolo = p.moneda === 'USD' ? '$us' : 'Bs.';
-            const montoFormateado = `${simbolo} ${Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const montoFormateado = Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const provPersona = p.proveedor?.persona ? `${p.proveedor.persona.nombres} ${p.proveedor.persona.apellidos}`.trim() : '';
             const provNombre = p.proveedor?.empresa ? `${p.proveedor.empresa}${provPersona ? ` (${provPersona})` : ''}` : (provPersona || 'Proveedor');
-            const compraMoneda = p.nota?.moneda || 'BOB';
-            const compraSimbolo = compraMoneda === 'USD' ? '$us' : 'Bs.';
-            const totalCompraFormateado = p.nota?.total != null ? `${compraSimbolo} ${Number(p.nota.total).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
-            const saldoFormateado = p.nota?.saldo != null ? `${compraSimbolo} ${Number(p.nota.saldo).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
+            const totalCompraFormateado = p.nota?.total != null ? Number(p.nota.total).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+            const saldoFormateado = p.nota?.saldo != null ? Number(p.nota.saldo).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
             return {
                 ...p,
                 proveedorNombre: provNombre,
@@ -2263,29 +2258,29 @@ const ReportesPage: React.FC = () => {
                 <title>Reporte Estratégico y Analítica - GIPAAF</title>
                 <style>
                     * { box-sizing: border-box; }
-                    body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif; padding: 25px; color: #1e293b; background: #fff; font-size: 12px; }
-                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 16px; }
+                    body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif; padding: 25px; color: #000000; background: #fff; font-size: 12px; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000000; padding-bottom: 12px; margin-bottom: 16px; }
                     .logo { height: 48px; object-fit: contain; }
                     .title-container { text-align: right; }
-                    .report-title { color: #0f172a; margin: 0; font-size: 20px; font-weight: 800; }
-                    .report-subtitle { color: #64748b; font-size: 11px; margin: 2px 0 0 0; }
-                    .date { color: #64748b; font-size: 11px; margin: 4px 0 0 0; }
+                    .report-title { color: #000000; margin: 0; font-size: 20px; font-weight: 800; }
+                    .report-subtitle { color: #444444; font-size: 11px; margin: 2px 0 0 0; }
+                    .date { color: #333333; font-size: 11px; margin: 4px 0 0 0; }
                     
-                    .filters-box { margin-bottom: 18px; padding: 10px 14px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; line-height: 1.5; }
+                    .filters-box { margin-bottom: 18px; padding: 10px 14px; background-color: #f9f9f9; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; line-height: 1.5; color: #000000; }
                     
                     .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
-                    .kpi-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; background: #ffffff; }
-                    .kpi-title { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
-                    .kpi-value { font-size: 16px; font-weight: 800; color: #0f172a; }
-                    .kpi-sub { font-size: 10px; color: #64748b; margin-top: 2px; }
+                    .kpi-card { border: 1px solid #cccccc; border-radius: 4px; padding: 10px 12px; background: #ffffff; }
+                    .kpi-title { font-size: 10px; font-weight: 700; color: #333333; text-transform: uppercase; margin-bottom: 4px; }
+                    .kpi-value { font-size: 16px; font-weight: 800; color: #000000; }
+                    .kpi-sub { font-size: 10px; color: #444444; margin-top: 2px; }
                     
-                    .section-title { font-size: 13px; font-weight: 800; color: #0f172a; margin: 18px 0 8px 0; border-left: 4px solid #2563eb; padding-left: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+                    .section-title { font-size: 13px; font-weight: 800; color: #000000; margin: 18px 0 8px 0; border-left: 4px solid #000000; padding-left: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
                     .tables-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
                     
-                    table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 11px; }
-                    th, td { padding: 7px 9px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-                    th { background-color: #f1f5f9; color: #334155; font-weight: 700; font-size: 10.5px; text-transform: uppercase; }
-                    tr:nth-child(even) { background-color: #f8fafc; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 3px; font-size: 9.5px; }
+                    th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #cccccc; line-height: 1.2; }
+                    th { background-color: #f2f2f2; color: #000000; font-weight: 700; font-size: 9.5px; text-transform: uppercase; border-top: 1.5px solid #000000; border-bottom: 1.5px solid #000000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    tr:nth-child(even) { background-color: #fafafa; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     .text-right { text-align: right; }
                     .text-center { text-align: center; }
                     .font-bold { font-weight: 700; }
@@ -2307,13 +2302,13 @@ const ReportesPage: React.FC = () => {
                 </div>
 
                 <div class="filters-box">
-                    <strong style="color: #0f172a;">Filtros aplicados:</strong> <span style="color: #475569;">${filterStr}</span>
+                    <strong style="color: #000000;">Filtros aplicados:</strong> <span style="color: #222222;">${filterStr}</span>
                 </div>
 
                 <div class="kpi-grid">
                     <div class="kpi-card">
                         <div class="kpi-title">Ventas Totales</div>
-                        <div class="kpi-value" style="color: #2563eb;">Bs. ${strategicData.totalVentasBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <div class="kpi-value" style="color: #000000;">Bs. ${strategicData.totalVentasBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         <div class="kpi-sub">${strategicData.cantidadVentas} ventas confirmadas</div>
                     </div>
                     <div class="kpi-card">
@@ -2323,13 +2318,13 @@ const ReportesPage: React.FC = () => {
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-title">Margen Bruto</div>
-                        <div class="kpi-value" style="color: #059669;">Bs. ${strategicData.margenBruto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <div class="kpi-value" style="color: #000000;">Bs. ${strategicData.margenBruto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-title">Flujo de Caja Neto</div>
-                        <div class="kpi-value" style="color: ${strategicData.flujoCajaNeto >= 0 ? '#059669' : '#d97706'};">Bs. ${strategicData.flujoCajaNeto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <div class="kpi-value" style="color: #000000;">Bs. ${strategicData.flujoCajaNeto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         <div class="kpi-sub" style="margin-top: 4px;">Cobranzas: <strong>Bs. ${strategicData.totalCobranzasBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
-                        <div class="kpi-sub" style="border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 4px;">Pagos Prov: Bs. ${strategicData.totalPagosProvBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${strategicData.totalEgresosDiariosBOB > 0 ? ` | Egresos Diarios: Bs. ${strategicData.totalEgresosDiariosBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}${strategicData.totalCostosImportacionBOB > 0 ? ` | Gastos Import.: Bs. ${strategicData.totalCostosImportacionBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}${strategicData.totalFletesTraspasoBOB > 0 ? ` | Fletes Trasp.: Bs. ${strategicData.totalFletesTraspasoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}</div>
+                        <div class="kpi-sub" style="border-top: 1px solid #cccccc; margin-top: 4px; padding-top: 4px;">Pagos Prov: Bs. ${strategicData.totalPagosProvBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${strategicData.totalEgresosDiariosBOB > 0 ? ` | Egresos Diarios: Bs. ${strategicData.totalEgresosDiariosBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}${strategicData.totalCostosImportacionBOB > 0 ? ` | Gastos Import.: Bs. ${strategicData.totalCostosImportacionBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}${strategicData.totalFletesTraspasoBOB > 0 ? ` | Fletes Trasp.: Bs. ${strategicData.totalFletesTraspasoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}</div>
                     </div>
                 </div>
 

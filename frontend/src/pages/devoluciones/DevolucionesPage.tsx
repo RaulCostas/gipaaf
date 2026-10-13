@@ -1102,33 +1102,33 @@ const DevolucionesPage: React.FC = () => {
                                         </span>
                                     </td>
                                     <td className="p-4 text-right">
-                                        <div className="flex justify-end gap-2 flex-wrap">
+                                        <div className="flex justify-end gap-1.5">
                                             {/* Ver detalle */}
                                             <button
                                                 onClick={() => openViewModal(r)}
-                                                className="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-xs font-bold hover:bg-gray-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                                className="px-2.5 py-1.5 bg-card border hover:border-primary/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                 title="Ver Detalle"
                                             >
-                                                <Eye className="w-3" /> Ver
+                                                <Eye className="w-3.5 h-3.5 text-primary" />
                                             </button>
 
                                             {/* Enviar WhatsApp */}
                                             <button
                                                 onClick={() => handleOpenWhatsAppModal(r)}
-                                                className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                                className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                 title="Enviar Nota de Devolución por WhatsApp (PDF)"
                                             >
-                                                <MessageCircle className="w-3" /> WhatsApp
+                                                <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                             </button>
 
                                             {/* Confirmar (solo pendientes) */}
                                             {r.estado === EstadoNota.PENDIENTE && (
                                                 <button
                                                     onClick={() => confirmMutation.mutate(r.id)}
-                                                    className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-green-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                     title="Confirmar Devolución e Intercambio"
                                                 >
-                                                    <CheckCircle className="w-3" /> Confirmar
+                                                    <CheckCircle className="w-3.5 h-3.5 text-green-600" />
                                                 </button>
                                             )}
 
@@ -1136,10 +1136,10 @@ const DevolucionesPage: React.FC = () => {
                                             {r.estado === EstadoNota.PENDIENTE && (
                                                 <button
                                                     onClick={() => openEditModal(r)}
-                                                    className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                     title="Editar Devolución"
                                                 >
-                                                    <Edit className="w-3" /> Editar
+                                                    <Edit className="w-3.5 h-3.5 text-amber-500" />
                                                 </button>
                                             )}
 
@@ -1147,10 +1147,10 @@ const DevolucionesPage: React.FC = () => {
                                             {r.estado !== EstadoNota.ANULADA && (
                                                 <button
                                                     onClick={() => setAnularConfirmId(r.id)}
-                                                    className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                     title="Anular Devolución"
                                                 >
-                                                    <Trash2 className="w-3" /> Anular
+                                                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
                                                 </button>
                                             )}
                                         </div>

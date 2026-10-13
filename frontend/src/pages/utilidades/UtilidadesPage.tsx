@@ -10,7 +10,7 @@ import { getCiudades } from '../../api/ciudadService';
 import { sucursalService } from '../../api/sucursalService';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
-import { formatCurrency } from '../../utils/currencyUtils';
+import { formatCurrency, formatCurrencyAmount } from '../../utils/currencyUtils';
 import { formatDate } from '../../utils/dateUtils';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import Modal from '../../components/ui/Modal';
@@ -588,14 +588,14 @@ const UtilidadesPage: React.FC = () => {
 
     // Exportación de reporte general consolidado
     const exportData = [
-        { concepto: stats.ingresos.label, bs: formatCurrency(stats.ingresos.bs, 'BOB'), sus: formatCurrency(stats.ingresos.sus, 'USD') },
-        { concepto: 'TOTAL INGRESOS', bs: formatCurrency(stats.totalIngresos.bs, 'BOB'), sus: formatCurrency(stats.totalIngresos.sus, 'USD') },
-        { concepto: stats.pagosProveedores.label, bs: formatCurrency(stats.pagosProveedores.bs, 'BOB'), sus: formatCurrency(stats.pagosProveedores.sus, 'USD') },
-        { concepto: stats.egresosDiarios.label, bs: formatCurrency(stats.egresosDiarios.bs, 'BOB'), sus: formatCurrency(stats.egresosDiarios.sus, 'USD') },
-        { concepto: stats.gastosImportacion.label, bs: formatCurrency(stats.gastosImportacion.bs, 'BOB'), sus: formatCurrency(stats.gastosImportacion.sus, 'USD') },
-        { concepto: stats.pagosFletes.label, bs: formatCurrency(stats.pagosFletes.bs, 'BOB'), sus: formatCurrency(stats.pagosFletes.sus, 'USD') },
-        { concepto: 'TOTAL EGRESOS', bs: formatCurrency(stats.totalEgresos.bs, 'BOB'), sus: formatCurrency(stats.totalEgresos.sus, 'USD') },
-        { concepto: 'TOTAL UTILIDADES', bs: formatCurrency(stats.totalUtilidades.bs, 'BOB'), sus: formatCurrency(stats.totalUtilidades.sus, 'USD') },
+        { concepto: stats.ingresos.label, bs: formatCurrencyAmount(stats.ingresos.bs), sus: formatCurrencyAmount(stats.ingresos.sus) },
+        { concepto: 'TOTAL INGRESOS', bs: formatCurrencyAmount(stats.totalIngresos.bs), sus: formatCurrencyAmount(stats.totalIngresos.sus) },
+        { concepto: stats.pagosProveedores.label, bs: formatCurrencyAmount(stats.pagosProveedores.bs), sus: formatCurrencyAmount(stats.pagosProveedores.sus) },
+        { concepto: stats.egresosDiarios.label, bs: formatCurrencyAmount(stats.egresosDiarios.bs), sus: formatCurrencyAmount(stats.egresosDiarios.sus) },
+        { concepto: stats.gastosImportacion.label, bs: formatCurrencyAmount(stats.gastosImportacion.bs), sus: formatCurrencyAmount(stats.gastosImportacion.sus) },
+        { concepto: stats.pagosFletes.label, bs: formatCurrencyAmount(stats.pagosFletes.bs), sus: formatCurrencyAmount(stats.pagosFletes.sus) },
+        { concepto: 'TOTAL EGRESOS', bs: formatCurrencyAmount(stats.totalEgresos.bs), sus: formatCurrencyAmount(stats.totalEgresos.sus) },
+        { concepto: 'TOTAL UTILIDADES', bs: formatCurrencyAmount(stats.totalUtilidades.bs), sus: formatCurrencyAmount(stats.totalUtilidades.sus) },
     ];
 
     const exportColumns = [
@@ -615,8 +615,8 @@ const UtilidadesPage: React.FC = () => {
     const handleExportExcel = () => {
         exportToExcel(exportColumns, exportData, 'utilidades_reporte', {
             concepto: 'TOTAL UTILIDADES',
-            bs: formatCurrency(stats.totalUtilidades.bs, 'BOB'),
-            sus: formatCurrency(stats.totalUtilidades.sus, 'USD')
+            bs: formatCurrencyAmount(stats.totalUtilidades.bs),
+            sus: formatCurrencyAmount(stats.totalUtilidades.sus)
         });
     };
 
@@ -625,6 +625,7 @@ const UtilidadesPage: React.FC = () => {
         if (!selectedDetail) return { columns: [], data: [] };
 
         let columns: { header: string; dataKey: string }[] = [];
+        const montoHeader = `Monto (${selectedDetail.currency === 'Bolivianos' ? 'Bs.' : '$us'})`;
 
         switch (selectedDetail.key) {
             case 'cobranzas':
@@ -638,7 +639,7 @@ const UtilidadesPage: React.FC = () => {
                     { header: 'Método', dataKey: 'metodo' },
                     { header: 'Referencia', dataKey: 'referencia' },
                     { header: 'Comprobante', dataKey: 'comprobante' },
-                    { header: 'Monto', dataKey: 'montoFormateado' },
+                    { header: montoHeader, dataKey: 'montoFormateado' },
                 ];
                 break;
             case 'pagosProveedores':
@@ -650,7 +651,7 @@ const UtilidadesPage: React.FC = () => {
                     { header: 'Método', dataKey: 'metodo' },
                     { header: 'Referencia', dataKey: 'referencia' },
                     { header: 'Comprobante', dataKey: 'comprobante' },
-                    { header: 'Monto', dataKey: 'montoFormateado' },
+                    { header: montoHeader, dataKey: 'montoFormateado' },
                 ];
                 break;
             case 'egresosDiarios':
@@ -661,7 +662,7 @@ const UtilidadesPage: React.FC = () => {
                     { header: 'Detalle / Concepto', dataKey: 'detalle' },
                     { header: 'Método', dataKey: 'metodo' },
                     { header: 'Comprobante', dataKey: 'comprobante' },
-                    { header: 'Monto', dataKey: 'montoFormateado' },
+                    { header: montoHeader, dataKey: 'montoFormateado' },
                 ];
                 break;
             case 'gastosImportacion':
@@ -674,7 +675,7 @@ const UtilidadesPage: React.FC = () => {
                     { header: 'Método', dataKey: 'metodo' },
                     { header: 'Referencia', dataKey: 'referencia' },
                     { header: 'Comprobante', dataKey: 'comprobante' },
-                    { header: 'Monto', dataKey: 'montoFormateado' },
+                    { header: montoHeader, dataKey: 'montoFormateado' },
                 ];
                 break;
             case 'pagosFletes':
@@ -685,7 +686,7 @@ const UtilidadesPage: React.FC = () => {
                     { header: 'Sucursal Origen', dataKey: 'sucursalOrigen' },
                     { header: 'Sucursal Destino', dataKey: 'sucursalDestino' },
                     { header: 'Motivo', dataKey: 'motivo' },
-                    { header: 'Monto', dataKey: 'montoFormateado' },
+                    { header: montoHeader, dataKey: 'montoFormateado' },
                 ];
                 break;
         }

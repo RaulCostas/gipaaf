@@ -331,31 +331,31 @@ const RutasPage: React.FC = () => {
                 <title>Hoja de Ruta y Visitas - ${ruta.nombre}</title>
                 <style>
                     @page { size: portrait; margin: 10mm; }
-                    body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 10px; color: #1e293b; font-size: 11px; }
-                    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #0284c7; padding-bottom: 8px; margin-bottom: 12px; }
+                    body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 10px; color: #000000; font-size: 11px; }
+                    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #000000; padding-bottom: 8px; margin-bottom: 12px; }
                     .logo { max-height: 44px; object-fit: contain; }
                     .title-box { text-align: right; }
-                    .doc-title { font-size: 15px; font-weight: 800; color: #0f172a; margin: 0 0 2px 0; text-transform: uppercase; }
-                    .doc-sub { font-size: 10px; color: #64748b; margin: 0; }
+                    .doc-title { font-size: 15px; font-weight: 800; color: #000000; margin: 0 0 2px 0; text-transform: uppercase; }
+                    .doc-sub { font-size: 10px; color: #333333; margin: 0; }
                     
-                    .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
-                    .info-item { font-size: 11px; }
-                    .info-item strong { color: #0f172a; }
+                    .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; background-color: #f9f9f9; border: 1px solid #cccccc; border-radius: 4px; padding: 6px 10px; margin-bottom: 10px; }
+                    .info-item { font-size: 10.5px; }
+                    .info-item strong { color: #000000; }
                     
-                    table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-                    th, td { padding: 6px 5px; border: 1px solid #cbd5e1; font-size: 10px; }
-                    th { background-color: #0284c7; color: #ffffff; font-weight: bold; text-align: left; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                    tr:nth-child(even) { background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+                    th, td { padding: 4px 5px; border: 1px solid #cccccc; font-size: 9.5px; line-height: 1.2; }
+                    th { background-color: #f2f2f2; color: #000000; font-weight: bold; text-align: left; border-top: 1.5px solid #000000; border-bottom: 1.5px solid #000000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    tr:nth-child(even) { background-color: #fafafa; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     
                     .center { text-align: center; }
                     .right { text-align: right; }
-                    .check-box { width: 16px; height: 16px; border: 1px solid #475569; display: inline-block; border-radius: 2px; }
+                    .check-box { width: 16px; height: 16px; border: 1px solid #000000; display: inline-block; border-radius: 2px; }
                     
                     .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; padding-top: 10px; }
                     .sign-box { text-align: center; }
-                    .sign-line { border-top: 1px solid #334155; margin-bottom: 4px; }
-                    .sign-label { font-size: 10px; font-weight: bold; color: #334155; }
-                    .sign-sub { font-size: 9px; color: #64748b; }
+                    .sign-line { border-top: 1px solid #000000; margin-bottom: 4px; }
+                    .sign-label { font-size: 10px; font-weight: bold; color: #000000; }
+                    .sign-sub { font-size: 9px; color: #444444; }
                 </style>
             </head>
             <body>
@@ -397,14 +397,14 @@ const RutasPage: React.FC = () => {
                             <tr>
                                 <td class="center font-bold">${i + 1}</td>
                                 <td>
-                                    <strong style="color: #0f172a;">${c.nombreTienda ? c.nombreTienda : (c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : 'Sin Nombre')}</strong>
-                                    ${c.nombreTienda && c.persona ? `<br><span style="font-size: 9px; color: #475569;">👤 ${c.persona.nombres} ${c.persona.apellidos}</span>` : ''}
-                                    ${c.codigo ? `<br><span style="font-size: 8.5px; color: #64748b; font-family: monospace;">[${c.codigo}]</span>` : ''}
+                                    <strong style="color: #000000;">${c.nombreTienda ? c.nombreTienda : (c.persona ? `${c.persona.nombres} ${c.persona.apellidos}` : 'Sin Nombre')}</strong>
+                                    ${c.nombreTienda && c.persona ? `<br><span style="font-size: 9px; color: #444444;">👤 ${c.persona.nombres} ${c.persona.apellidos}</span>` : ''}
+                                    ${c.codigo ? `<br><span style="font-size: 8.5px; color: #555555; font-family: monospace;">[${c.codigo}]</span>` : ''}
                                 </td>
                                 <td>${c.persona?.ci || '-'}</td>
                                 <td>${c.persona?.telefono || '-'}</td>
                                 <td>${c.persona?.direccion || '-'}</td>
-                                <td class="right font-bold" style="color: ${(Number(c.deudaActual) || 0) > 0 ? '#b91c1c' : '#15803d'};">
+                                <td class="right font-bold" style="color: #000000;">
                                     Bs. ${(Number(c.deudaActual) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                                 <td class="center"><span class="check-box"></span></td>

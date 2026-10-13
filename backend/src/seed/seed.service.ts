@@ -21,7 +21,7 @@ const SYSTEM_PERMISSIONS = [
   { nombre: 'Ver Traspasos entre Sucursales', recurso: 'TRASPASOS', accion: 'VER', descripcion: 'Consultar transferencias de mercadería entre sucursales' },
   { nombre: 'Crear Traspasos entre Sucursales', recurso: 'TRASPASOS', accion: 'CREAR', descripcion: 'Registrar nuevos traspasos entre sucursales con flete' },
   { nombre: 'Anular Traspasos entre Sucursales', recurso: 'TRASPASOS', accion: 'ANULAR', descripcion: 'Anular traspasos y revertir stock' },
-  { nombre: 'Ver Movimientos (Historial)', recurso: 'MOVIMIENTOS', accion: 'VER', descripcion: 'Consultar movimientos y trazabilidad de inventario' },
+  { nombre: 'Ver Kardex de Producto', recurso: 'MOVIMIENTOS', accion: 'VER', descripcion: 'Consultar movimientos y trazabilidad de inventario' },
   { nombre: 'Ver Inventario de Mermas', recurso: 'MERMAS', accion: 'VER', descripcion: 'Consultar historial y reportes de mermas registradas' },
   { nombre: 'Editar/Eliminar Mermas', recurso: 'MERMAS', accion: 'GESTIONAR', descripcion: 'Modificar observaciones o eliminar/revertir mermas registradas' },
 
@@ -115,8 +115,8 @@ export class SeedService implements OnApplicationBootstrap {
             const matches = await this.permisoRepo.find({
                 where: [
                     { recurso: p.recurso, accion: p.accion },
-                    { nombre: p.nombre },
-                    ...(p.recurso === 'MOVIMIENTOS' ? [{ recurso: 'KARDEX' }, { nombre: 'Ver Kardex / Historial' }] : [])
+                    { recurso: p.recurso, nombre: p.nombre },
+                    ...(p.recurso === 'MOVIMIENTOS' ? [{ recurso: 'KARDEX' }, { nombre: 'Ver Kardex / Historial' }, { nombre: 'Ver Movimientos (Historial)' }] : [])
                 ]
             });
 

@@ -616,7 +616,7 @@ const TraspasosPage: React.FC = () => {
         if (!filteredTraspasos) return [];
         return filteredTraspasos.map(t => {
             const fechaFormateada = t.fecha ? format(new Date(t.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-';
-            const costoFormateado = `Bs. ${Number(t.costoTransporte).toLocaleString('es-BO', { minimumFractionDigits: 2 })}`;
+            const costoFormateado = Number(t.costoTransporte).toLocaleString('es-BO', { minimumFractionDigits: 2 });
             const totalItems = t.detalles?.reduce((acc, curr) => acc + Number(curr.cantidad), 0) || 0;
             const sucOrig = t.sucursalOrigen || t.almacenOrigen;
             const sucDest = t.sucursalDestino || t.almacenDestino;

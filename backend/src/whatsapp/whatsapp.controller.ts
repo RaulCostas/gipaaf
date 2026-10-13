@@ -45,6 +45,16 @@ export class SendProformaDto {
     @IsString()
     message?: string;
 
+    @ApiProperty({ required: false, description: 'Canal emisor: VENDEDOR o SUCURSAL' })
+    @IsOptional()
+    @IsString()
+    senderType?: 'VENDEDOR' | 'SUCURSAL';
+
+    @ApiProperty({ required: false, description: 'ID del vendedor emisor' })
+    @IsOptional()
+    @IsNumber()
+    vendedorId?: number;
+
     @IsOptional()
     usuarioId?: any;
 }
@@ -69,6 +79,16 @@ export class SendVentaDto {
     @IsOptional()
     @IsString()
     message?: string;
+
+    @ApiProperty({ required: false, description: 'Canal emisor: VENDEDOR o SUCURSAL' })
+    @IsOptional()
+    @IsString()
+    senderType?: 'VENDEDOR' | 'SUCURSAL';
+
+    @ApiProperty({ required: false, description: 'ID del vendedor emisor' })
+    @IsOptional()
+    @IsNumber()
+    vendedorId?: number;
 
     @IsOptional()
     usuarioId?: any;
@@ -309,6 +329,16 @@ export class ConnectBranchDto {
     usuarioId?: any;
 }
 
+export class ConnectVendorDto {
+    @ApiProperty({ description: 'ID del vendedor (personal)' })
+    @IsNumber()
+    @IsNotEmpty()
+    vendedorId: number;
+
+    @IsOptional()
+    usuarioId?: any;
+}
+
 export class UpdateWhatsAppConfigDto {
     @ApiProperty({ required: false, description: 'ID de la sucursal' })
     @IsOptional()
@@ -386,6 +416,32 @@ export class WhatsAppController {
         return await this.whatsAppService.getBranchesStatus();
     }
 
+    @Get('vendors-status')
+    async getVendorsStatus() {
+        return await this.whatsAppService.getVendorsStatus();
+    }
+
+    @Get('vendor-status')
+    async getVendorStatus(@Query('vendedorId') vendedorId: string) {
+        const vId = parseInt(vendedorId, 10);
+        return await this.whatsAppService.getVendorStatus(vId);
+    }
+
+    @Post('vendor-connect')
+    async connectVendor(@Body() body: ConnectVendorDto) {
+        const vId = Number(body.vendedorId);
+        await this.whatsAppService.connectVendorWhatsApp(vId);
+        const status = await this.whatsAppService.getVendorStatus(vId);
+        return { message: 'Iniciando vinculación de WhatsApp del vendedor...', status: status.status, vendedorId: vId };
+    }
+
+    @Post('vendor-disconnect')
+    async disconnectVendor(@Body() body: ConnectVendorDto) {
+        const vId = Number(body.vendedorId);
+        await this.whatsAppService.disconnectVendorWhatsApp(vId);
+        return { message: 'Sesión de WhatsApp del vendedor cerrada exitosamente', status: 'DISCONNECTED', vendedorId: vId };
+    }
+
     @Get('status')
     async getStatus(@Query('sucursalId') sucursalId?: string) {
         const sId = sucursalId ? parseInt(sucursalId, 10) : undefined;
@@ -442,13 +498,15 @@ export class WhatsAppController {
     @Post('send-proforma')
     async sendProforma(@Body() body: SendProformaDto) {
         const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
-        return await this.whatsAppService.sendProformaPdf(body.proformaId, body.phone, sId, body.message);
+        const vId = body.vendedorId ? Number(body.vendedorId) : undefined;
+        return await this.whatsAppService.sendProformaPdf(body.proformaId, body.phone, sId, body.message, body.senderType, vId);
     }
 
     @Post('send-venta')
     async sendVenta(@Body() body: SendVentaDto) {
         const sId = body.sucursalId ? Number(body.sucursalId) : undefined;
-        return await this.whatsAppService.sendVentaPdf(body.ventaId, body.phone, sId, body.message);
+        const vId = body.vendedorId ? Number(body.vendedorId) : undefined;
+        return await this.whatsAppService.sendVentaPdf(body.ventaId, body.phone, sId, body.message, body.senderType, vId);
     }
 
     @Post('send-cobranza')

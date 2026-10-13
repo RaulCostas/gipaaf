@@ -6,7 +6,7 @@ import {
     Search, Plus, Trash2, Wallet, 
     X, Save, AlignLeft, ChevronLeft, ChevronRight,
     Printer, FileText, FileSpreadsheet, AlertTriangle,
-    Users, ShoppingCart, CreditCard, DollarSign, Calendar, ArrowRightLeft, Pencil,
+    Users, ShoppingCart, CreditCard, DollarSign, Calendar, ArrowRightLeft, Pencil, Edit,
     Upload, Image as ImageIcon, ExternalLink, Receipt, Eye, Check, User, Lock, RotateCcw,
     MessageSquare, Send, Loader2, MessageCircle, Building2, Store
 } from 'lucide-react';
@@ -495,9 +495,7 @@ const CobranzasPage: React.FC = () => {
                     : (p.cliente?.razonSocial || ''));
                 const vendedorNombre = (p.nota?.vendedor
                     ? `${p.nota.vendedor.nombres || ''} ${p.nota.vendedor.apellidos || ''}`
-                    : (p.nota?.usuario?.persona 
-                        ? `${p.nota.usuario.persona.nombres || ''} ${p.nota.usuario.persona.apellidos || ''}`
-                        : (p.nota?.usuario?.username || ''))).toLowerCase();
+                    : '').toLowerCase();
                 const ventaNum = (p.nota?.numero || '').toLowerCase();
                 const ref = (p.referencia || '').toLowerCase();
                 const metodo = (p.metodoPago || '').toLowerCase();
@@ -515,27 +513,29 @@ const CobranzasPage: React.FC = () => {
         { header: 'Cliente', dataKey: 'clienteNombre' },
         { header: 'Vendedor', dataKey: 'vendedorNombre' },
         { header: 'Nota de Venta', dataKey: 'notaVenta' },
+        { header: 'Sucursal', dataKey: 'sucursalNombre' },
         { header: 'Método', dataKey: 'metodoPago' },
-        { header: 'Nro. Recibo', dataKey: 'referencia' },
-        { header: 'Total Venta', dataKey: 'totalVentaFormateado' },
-        { header: 'Monto Pagado', dataKey: 'montoFormateado' },
-        { header: 'Saldo Pendiente', dataKey: 'saldoFormateado' },
+        { header: 'Monto Pagado (Bs.)', dataKey: 'montoFormateado' },
         { header: 'Observaciones / Glosa', dataKey: 'observaciones' }
     ];
 
     const mappedExportData = useMemo(() => {
-        return filteredPagos.map(p => {
-            const simbolo = p.moneda === 'USD' ? '$us' : 'Bs.';
-            const montoFormateado = `${simbolo} ${Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            const saldoSimbolo = p.nota?.moneda === 'USD' ? '$us' : 'Bs.';
-            const totalVentaFormateado = p.nota ? `${saldoSimbolo} ${Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
-            const saldoFormateado = p.nota ? `${saldoSimbolo} ${Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
+        const sortedAsc = [...filteredPagos].sort((a, b) => {
+            const dateA = a.fecha ? a.fecha.split('T')[0] : '';
+            const dateB = b.fecha ? b.fecha.split('T')[0] : '';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (a.id || 0) - (b.id || 0);
+        });
+
+        return sortedAsc.map(p => {
+            const montoFormateado = Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const totalVentaFormateado = p.nota ? Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+            const saldoFormateado = p.nota ? Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
             const vendedorNombre = p.nota?.vendedor
                 ? `${p.nota.vendedor.nombres || ''} ${p.nota.vendedor.apellidos || ''}`.trim()
-                : (p.nota?.usuario?.persona 
-                    ? `${p.nota.usuario.persona.nombres || ''} ${p.nota.usuario.persona.apellidos || ''}`.trim()
-                    : (p.nota?.usuario?.username || '-'));
+                : '-';
             const notaVenta = p.nota?.observaciones || '-';
+            const sucursalNombre = p.nota?.sucursal?.nombre || p.cliente?.sucursal?.nombre || '-';
             const observaciones = p.observaciones || '-';
             const fechaStr = p.fecha ? p.fecha.split('T')[0].split('-').reverse().join('/') : '-';
             return {
@@ -544,6 +544,7 @@ const CobranzasPage: React.FC = () => {
                 clienteNombre: getClientDisplayName(p.cliente),
                 vendedorNombre,
                 notaVenta,
+                sucursalNombre,
                 notaNumero: p.nota?.numero || '-',
                 referencia: p.referencia || '-',
                 totalVentaFormateado,
@@ -595,8 +596,10 @@ const CobranzasPage: React.FC = () => {
     };
 
     const getExportColumns = () => {
-        if (filtroCliente) return exportColumns.filter(c => c.dataKey !== 'clienteNombre');
-        return exportColumns;
+        let cols = [...exportColumns];
+        if (filtroCliente) cols = cols.filter(c => c.dataKey !== 'clienteNombre');
+        if (selectedSucursal || selectedCiudad) cols = cols.filter(c => c.dataKey !== 'sucursalNombre');
+        return cols;
     };
 
     const getTotalsFooter = () => {
@@ -638,11 +641,12 @@ const CobranzasPage: React.FC = () => {
                 clienteNombre: '',
                 vendedorNombre: '',
                 notaVenta: '',
+                sucursalNombre: '',
                 metodoPago: '',
                 referencia: '',
-                totalVentaFormateado: `Bs. ${totalVentaBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                montoFormateado: `Bs. ${totalCobradoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                saldoFormateado: `Bs. ${totalSaldoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                totalVentaFormateado: totalVentaBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                montoFormateado: totalCobradoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                saldoFormateado: totalSaldoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 observaciones: ''
             });
         }
@@ -654,6 +658,7 @@ const CobranzasPage: React.FC = () => {
                 clienteNombre: '',
                 vendedorNombre: '',
                 notaVenta: '',
+                sucursalNombre: '',
                 metodoPago: '',
                 referencia: '',
                 totalVentaFormateado: `$us ${totalVentaUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -668,11 +673,11 @@ const CobranzasPage: React.FC = () => {
 
     const handlePrint = () => {
         if (!mappedExportData.length) return;
-        printData('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter(), 'landscape');
+        printData('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, getFiltersText(), getTotalsFooter(), 'portrait');
     };
     const handleExportPDF = () => {
         if (!mappedExportData.length) return;
-        exportToPDF('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, 'cobranzas_clientes_reporte', getFiltersText(), getTotalsFooter(), 'landscape');
+        exportToPDF('Reporte de Cobranzas / Pagos de Clientes', getExportColumns(), mappedExportData, 'cobranzas_clientes_reporte', getFiltersText(), getTotalsFooter(), 'portrait');
     };
     const handleExportExcel = () => {
         if (!mappedExportData.length) return;
@@ -900,6 +905,9 @@ const CobranzasPage: React.FC = () => {
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cliente</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendedor</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nota de Venta</th>
+                                {!selectedSucursal && !selectedCiudad && (
+                                    <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sucursal</th>
+                                )}
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Método</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Referencia</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Comprobante</th>
@@ -913,7 +921,7 @@ const CobranzasPage: React.FC = () => {
                         <tbody className="divide-y">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={14} className="p-8 text-center text-muted-foreground text-sm">
+                                    <td colSpan={14 + (!selectedSucursal && !selectedCiudad ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         <div className="flex items-center justify-center gap-2">
                                             <Loader2 className="w-5 h-5 animate-spin text-primary" />
                                             <span>Cargando cobranzas de clientes...</span>
@@ -922,7 +930,7 @@ const CobranzasPage: React.FC = () => {
                                 </tr>
                             ) : paginatedPagos.length === 0 ? (
                                 <tr>
-                                    <td colSpan={14} className="p-8 text-center text-muted-foreground text-sm">
+                                    <td colSpan={14 + (!selectedSucursal && !selectedCiudad ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         No se encontraron cobranzas registradas.
                                     </td>
                                 </tr>
@@ -932,10 +940,9 @@ const CobranzasPage: React.FC = () => {
                                     : (p.cliente?.razonSocial || 'Cliente');
                                 const vendedorLabel = p.nota?.vendedor
                                     ? `${p.nota.vendedor.nombres || ''} ${p.nota.vendedor.apellidos || ''}`.trim()
-                                    : (p.nota?.usuario?.persona 
-                                        ? `${p.nota.usuario.persona.nombres || ''} ${p.nota.usuario.persona.apellidos || ''}`.trim()
-                                        : (p.nota?.usuario?.username || '-'));
+                                    : '-';
                                 const notaVentaLabel = p.nota?.observaciones || p.observaciones || '';
+                                const sucursalLabel = p.nota?.sucursal?.nombre || p.cliente?.sucursal?.nombre || '-';
                                 const isUSD = p.moneda === 'USD';
                                 const simbolo = isUSD ? '$us' : 'Bs.';
                                 const ventaMoneda = p.nota?.moneda || 'BOB';
@@ -993,6 +1000,11 @@ const CobranzasPage: React.FC = () => {
                                                 <span className="text-xs text-muted-foreground/50 font-mono">-</span>
                                             )}
                                         </td>
+                                        {!selectedSucursal && !selectedCiudad && (
+                                            <td className="p-4 text-sm text-muted-foreground">
+                                                {sucursalLabel}
+                                            </td>
+                                        )}
                                         <td className="p-4 text-sm text-muted-foreground">
                                             {p.metodoPago || 'Efectivo'}
                                         </td>
@@ -1079,32 +1091,32 @@ const CobranzasPage: React.FC = () => {
                                             )}
                                         </td>
                                         <td className="p-4 text-right">
-                                            <div className="flex justify-end gap-2 flex-wrap items-center">
-                                                {p.activo && (
-                                                    <button
-                                                        onClick={() => handleOpenWhatsAppModal(p)}
-                                                        className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
-                                                        title="Enviar Recibo de Cobranza en PDF por WhatsApp"
-                                                    >
-                                                        <MessageCircle className="w-3" /> WhatsApp
-                                                    </button>
-                                                )}
+                                            <div className="flex justify-end gap-1.5 items-center">
                                                 {p.activo && canEdit && (
                                                     <button
                                                         onClick={() => openEditModal(p)}
-                                                        className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                         title="Editar Cobranza"
                                                     >
-                                                        <Pencil className="w-3 h-3" /> Editar
+                                                        <Edit className="w-3.5 h-3.5 text-amber-500" />
+                                                    </button>
+                                                )}
+                                                {p.activo && (
+                                                    <button
+                                                        onClick={() => handleOpenWhatsAppModal(p)}
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                        title="Enviar Recibo de Cobranza en PDF por WhatsApp"
+                                                    >
+                                                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                                     </button>
                                                 )}
                                                 {p.activo && canAnular && (
                                                     <button
                                                         onClick={() => setAnularConfirmId(p.id)}
-                                                        className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                         title="Anular Cobranza"
                                                     >
-                                                        <Trash2 className="w-3 h-3" /> Anular
+                                                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
                                                     </button>
                                                 )}
                                                 {(!p.activo || (!canEdit && !canAnular)) && (

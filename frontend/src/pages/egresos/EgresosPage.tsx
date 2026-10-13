@@ -6,7 +6,7 @@ import { sucursalService } from '../../api/sucursalService';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 import { 
-    Search, Plus, Pencil, Trash2, DollarSign, 
+    Search, Plus, Pencil, Edit, Trash2, DollarSign, 
     X, Save, AlignLeft, ChevronLeft, ChevronRight, Check,
     Printer, FileText, FileSpreadsheet, Calendar,
     Building2, Upload, CreditCard, ArrowDownRight,
@@ -29,7 +29,7 @@ const EgresosPage: React.FC = () => {
     const { isAdmin, hasAction } = useAuth();
     const canCreate = isAdmin || hasAction('EGRESOS', 'CREAR');
     const canEdit = isAdmin || hasAction('EGRESOS', 'EDITAR');
-    const canAnular = isAdmin || hasAction('EGRESOS', 'ANULAR') || hasAction('EGRESOS', 'ELIMINAR');
+    const canDelete = isAdmin || hasAction('EGRESOS', 'ELIMINAR') || hasAction('EGRESOS', 'ANULAR');
 
     const queryClient = useQueryClient();
     const { selectedSucursal, selectedCiudad } = useFilters();
@@ -40,6 +40,7 @@ const EgresosPage: React.FC = () => {
     // Filtros
     const [searchTerm, setSearchTerm] = useState('');
     const [filtroMetodo, setFiltroMetodo] = useState('TODOS');
+    const [filtroMoneda, setFiltroMoneda] = useState<'TODOS' | 'BOB' | 'USD'>('TODOS');
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
 
@@ -72,28 +73,14 @@ const EgresosPage: React.FC = () => {
             nroComprobante: '',
             comprobanteUrl: '',
             observaciones: '',
-            sucursalId: selectedSucursal ? Number(selectedSucursal) : (sucursales && sucursales.length > 0 ? sucursales[0].id : undefined),
-            activo: true
+            sucursalId: selectedSucursal ? Number(selectedSucursal) : (sucursales && sucursales.length > 0 ? sucursales[0].id : undefined)
         });
     };
-
-    // Export Columns
-    const exportColumns = [
-        { header: 'Fecha', dataKey: 'fechaFormatted' },
-        { header: 'Código', dataKey: 'codigo' },
-        { header: 'Detalle / Concepto', dataKey: 'detalle' },
-        { header: 'Sucursal', dataKey: 'sucursalNombre' },
-        { header: 'Forma de Pago', dataKey: 'formaPago' },
-        { header: 'Nro. Comprobante', dataKey: 'nroComprobante' },
-        { header: 'Monto', dataKey: 'montoFormatted' },
-        { header: 'Estado', dataKey: 'estadoFormatted' }
-    ];
 
     const mappedExportData = useMemo(() => {
         if (!egresosList) return [];
         return egresosList.map(e => {
-            const simbolo = e.moneda === 'USD' ? '$us' : 'Bs.';
-            const montoFormatted = `${simbolo} ${Number(e.monto || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const montoFormatted = Number(e.monto || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const fechaFormatted = e.fecha ? format(new Date(e.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-';
             const sucursalNombre = e.sucursal?.nombre ? `${e.sucursal.nombre}${e.sucursal.ciudad?.nombre ? ` (${e.sucursal.ciudad.nombre})` : ''}` : '-';
 
@@ -102,8 +89,8 @@ const EgresosPage: React.FC = () => {
                 fechaFormatted,
                 montoFormatted,
                 sucursalNombre,
-                nroComprobante: e.nroComprobante || '-',
-                estadoFormatted: e.activo ? 'Activo' : 'Inactivo'
+                moneda: e.moneda || 'BOB',
+                nroComprobante: e.nroComprobante || '-'
             };
         });
     }, [egresosList]);
@@ -119,26 +106,13 @@ const EgresosPage: React.FC = () => {
             if (s?.nombre) texts.push(`Sucursal: ${s.nombre}`);
         }
         if (filtroMetodo !== 'TODOS') texts.push(`Método: ${filtroMetodo}`);
+        if (filtroMoneda === 'BOB') texts.push('Moneda: Solo Bolivianos (BOB)');
+        else if (filtroMoneda === 'USD') texts.push('Moneda: Solo Dólares (USD)');
         if (fechaDesde && fechaHasta) texts.push(`Rango: ${fechaDesde.split('-').reverse().join('/')} al ${fechaHasta.split('-').reverse().join('/')}`);
         else if (fechaDesde) texts.push(`Desde: ${fechaDesde.split('-').reverse().join('/')}`);
         else if (fechaHasta) texts.push(`Hasta: ${fechaHasta.split('-').reverse().join('/')}`);
         if (searchTerm) texts.push(`Búsqueda: "${searchTerm}"`);
         return texts.join(' | ') || 'Todos los egresos';
-    };
-
-    const handlePrint = () => {
-        if (!mappedExportData.length) return;
-        printData('Reporte de Egresos Diarios y Gastos Operativos', exportColumns, filteredEgresosMapped, getFiltersText());
-    };
-
-    const handleExportPDF = () => {
-        if (!mappedExportData.length) return;
-        exportToPDF('Reporte de Egresos Diarios', exportColumns, filteredEgresosMapped, 'egresos_diarios_reporte', getFiltersText());
-    };
-
-    const handleExportExcel = () => {
-        if (!mappedExportData.length) return;
-        exportToExcel(exportColumns, filteredEgresosMapped, 'egresos_diarios_reporte');
     };
 
     // Mutations
@@ -164,13 +138,13 @@ const EgresosPage: React.FC = () => {
         onError: () => toast.error('Ocurrió un error al actualizar el egreso')
     });
 
-    const anularMutation = useMutation({
-        mutationFn: egresoService.anular,
+    const deleteMutation = useMutation({
+        mutationFn: egresoService.delete,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['egresosList'] });
-            toast.error('Egreso desactivado');
+            toast.success('Egreso eliminado correctamente');
         },
-        onError: () => toast.error('Ocurrió un error al desactivar el egreso')
+        onError: () => toast.error('Ocurrió un error al eliminar el egreso')
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -195,7 +169,7 @@ const EgresosPage: React.FC = () => {
             comprobanteUrl: currentEgreso.comprobanteUrl || undefined,
             observaciones: currentEgreso.observaciones?.trim() || undefined,
             sucursalId: currentEgreso.sucursalId ? Number(currentEgreso.sucursalId) : undefined,
-            activo: currentEgreso.activo !== false
+            activo: true
         };
 
         if (currentEgreso.id) {
@@ -229,7 +203,7 @@ const EgresosPage: React.FC = () => {
     const handleDelete = (id: number) => setDeleteConfirmId(id);
     const confirmDelete = () => {
         if (deleteConfirmId) {
-            anularMutation.mutate(deleteConfirmId);
+            deleteMutation.mutate(deleteConfirmId);
             setDeleteConfirmId(null);
         }
     };
@@ -247,6 +221,12 @@ const EgresosPage: React.FC = () => {
 
         if (filtroMetodo !== 'TODOS') {
             filtered = filtered.filter(e => (e.formaPago || 'Efectivo') === filtroMetodo);
+        }
+
+        if (filtroMoneda === 'BOB') {
+            filtered = filtered.filter(e => !e.moneda || e.moneda === 'BOB');
+        } else if (filtroMoneda === 'USD') {
+            filtered = filtered.filter(e => e.moneda === 'USD');
         }
 
         if (fechaDesde) {
@@ -268,7 +248,10 @@ const EgresosPage: React.FC = () => {
         }
 
         return filtered;
-    }, [egresosList, selectedSucursal, selectedCiudad, filtroMetodo, fechaDesde, fechaHasta, searchTerm]);
+    }, [egresosList, selectedSucursal, selectedCiudad, filtroMetodo, filtroMoneda, fechaDesde, fechaHasta, searchTerm]);
+
+    const hasBOB = useMemo(() => filteredEgresos.some(e => !e.moneda || e.moneda === 'BOB'), [filteredEgresos]);
+    const hasUSD = useMemo(() => filteredEgresos.some(e => e.moneda === 'USD'), [filteredEgresos]);
 
     const filteredEgresosMapped = useMemo(() => {
         const ids = new Set(filteredEgresos.map(e => e.id));
@@ -279,26 +262,98 @@ const EgresosPage: React.FC = () => {
     const totals = useMemo(() => {
         let totalBOB = 0;
         let totalUSD = 0;
-        let activosCount = 0;
 
         filteredEgresos.forEach(e => {
-            if (e.activo) {
-                activosCount++;
-                if (e.moneda === 'USD') {
-                    totalUSD += Number(e.monto || 0);
-                } else {
-                    totalBOB += Number(e.monto || 0);
-                }
+            if (e.moneda === 'USD') {
+                totalUSD += Number(e.monto || 0);
+            } else {
+                totalBOB += Number(e.monto || 0);
             }
         });
 
         return {
             totalBOB,
             totalUSD,
-            activosCount,
             totalCount: filteredEgresos.length
         };
     }, [filteredEgresos]);
+
+    const getExportColumns = () => {
+        return [
+            { header: 'Fecha', dataKey: 'fechaFormatted' },
+            { header: 'Código', dataKey: 'codigo' },
+            { header: 'Detalle / Concepto', dataKey: 'detalle' },
+            { header: 'Sucursal', dataKey: 'sucursalNombre' },
+            { header: 'Forma de Pago', dataKey: 'formaPago' },
+            { header: 'Nro. Comprobante', dataKey: 'nroComprobante' },
+            { header: 'Moneda', dataKey: 'moneda' },
+            { 
+                header: !hasBOB && hasUSD ? 'Monto ($us)' : hasBOB && !hasUSD ? 'Monto (Bs.)' : 'Monto', 
+                dataKey: 'montoFormatted' 
+            }
+        ];
+    };
+
+    const getTotalsFooter = (): Array<Record<string, string>> => {
+        const fmt = (n: number) => n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const footers: Array<Record<string, string>> = [];
+
+        if (hasBOB) {
+            footers.push({
+                fechaFormatted: hasUSD ? 'TOTALES (Bs.)' : 'TOTALES (Bs.)',
+                codigo: '',
+                detalle: '',
+                sucursalNombre: '',
+                formaPago: '',
+                nroComprobante: '',
+                moneda: 'BOB',
+                montoFormatted: fmt(totals.totalBOB)
+            });
+        }
+
+        if (hasUSD) {
+            footers.push({
+                fechaFormatted: hasBOB ? 'TOTALES ($us)' : 'TOTALES ($us)',
+                codigo: '',
+                detalle: '',
+                sucursalNombre: '',
+                formaPago: '',
+                nroComprobante: '',
+                moneda: 'USD',
+                montoFormatted: fmt(totals.totalUSD)
+            });
+        }
+
+        if (footers.length === 0) {
+            footers.push({
+                fechaFormatted: 'TOTALES',
+                codigo: '',
+                detalle: '',
+                sucursalNombre: '',
+                formaPago: '',
+                nroComprobante: '',
+                moneda: '',
+                montoFormatted: '0,00'
+            });
+        }
+
+        return footers;
+    };
+
+    const handlePrint = () => {
+        if (!filteredEgresosMapped.length) return;
+        printData('Reporte de Egresos Diarios y Gastos Operativos', getExportColumns(), filteredEgresosMapped, getFiltersText(), getTotalsFooter());
+    };
+
+    const handleExportPDF = () => {
+        if (!filteredEgresosMapped.length) return;
+        exportToPDF('Reporte de Egresos Diarios', getExportColumns(), filteredEgresosMapped, 'egresos_diarios_reporte', getFiltersText(), getTotalsFooter());
+    };
+
+    const handleExportExcel = () => {
+        if (!filteredEgresosMapped.length) return;
+        exportToExcel(getExportColumns(), filteredEgresosMapped, 'egresos_diarios_reporte', getTotalsFooter());
+    };
 
     const totalPages = Math.ceil(filteredEgresos.length / itemsPerPage) || 1;
     const paginatedEgresos = useMemo(() => {
@@ -306,7 +361,7 @@ const EgresosPage: React.FC = () => {
         return filteredEgresos.slice(start, start + itemsPerPage);
     }, [filteredEgresos, currentPage]);
 
-    React.useEffect(() => setCurrentPage(1), [searchTerm, filtroMetodo, fechaDesde, fechaHasta]);
+    React.useEffect(() => setCurrentPage(1), [searchTerm, filtroMetodo, filtroMoneda, fechaDesde, fechaHasta]);
 
 
     return (
@@ -353,7 +408,7 @@ const EgresosPage: React.FC = () => {
                     <div className="text-2xl font-black text-rose-600 dark:text-rose-400">
                         Bs. {totals.totalBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Gastos activos en Bolivianos</p>
+                    <p className="text-[11px] text-muted-foreground">Gastos en Bolivianos</p>
                 </div>
 
                 <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
@@ -363,7 +418,7 @@ const EgresosPage: React.FC = () => {
                     <div className="text-2xl font-black text-rose-600 dark:text-rose-400">
                         $us {totals.totalUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Gastos activos en Dólares</p>
+                    <p className="text-[11px] text-muted-foreground">Gastos en Dólares</p>
                 </div>
 
                 <div className="p-4 bg-card border rounded-xl shadow-sm space-y-1">
@@ -371,7 +426,7 @@ const EgresosPage: React.FC = () => {
                         <CreditCard className="w-4 h-4 text-primary" /> Total Registros
                     </span>
                     <div className="text-2xl font-black text-foreground">
-                        {totals.activosCount} <span className="text-sm font-normal text-muted-foreground">/ {totals.totalCount} registros</span>
+                        {totals.totalCount} <span className="text-sm font-normal text-muted-foreground">registros</span>
                     </div>
                     <p className="text-[11px] text-muted-foreground">Egresos registrados en el periodo</p>
                 </div>
@@ -379,7 +434,7 @@ const EgresosPage: React.FC = () => {
 
             {/* Filtros */}
             <div className="bg-card p-4 border rounded-xl shadow-sm space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                             <CreditCard className="w-3.5 h-3.5 text-primary" /> Forma de Pago
@@ -393,6 +448,21 @@ const EgresosPage: React.FC = () => {
                             {METODOS_PAGO.map(m => (
                                 <option key={m} value={m}>{m}</option>
                             ))}
+                        </select>
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            <DollarSign className="w-3.5 h-3.5 text-primary" /> Moneda
+                        </label>
+                        <select
+                            value={filtroMoneda}
+                            onChange={(e) => setFiltroMoneda(e.target.value as any)}
+                            className="w-full p-2 border rounded-lg bg-background text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+                        >
+                            <option value="TODOS">Todas las Monedas</option>
+                            <option value="BOB">Solo Bolivianos (BOB)</option>
+                            <option value="USD">Solo Dólares (USD)</option>
                         </select>
                     </div>
 
@@ -439,10 +509,11 @@ const EgresosPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                        {(filtroMetodo !== 'TODOS' || fechaDesde || fechaHasta || searchTerm) && (
+                        {(filtroMetodo !== 'TODOS' || filtroMoneda !== 'TODOS' || fechaDesde || fechaHasta || searchTerm) && (
                             <button
                                 onClick={() => {
                                     setFiltroMetodo('TODOS');
+                                    setFiltroMoneda('TODOS');
                                     setFechaDesde('');
                                     setFechaHasta('');
                                     setSearchTerm('');
@@ -655,22 +726,6 @@ const EgresosPage: React.FC = () => {
                         />
                     </div>
 
-                    <div className="flex items-center justify-between p-3 border rounded-lg bg-background hover:border-primary/50 transition-colors">
-                        <div className="space-y-0.5">
-                            <label className="text-sm font-semibold text-foreground">Estado del Registro</label>
-                            <p className="text-[11px] text-muted-foreground">Activo (afecta caja) o Inactivo</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input 
-                                type="checkbox" 
-                                className="sr-only peer"
-                                checked={currentEgreso.activo !== false}
-                                onChange={(e) => setCurrentEgreso({ ...currentEgreso, activo: e.target.checked })}
-                            />
-                            <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                        </label>
-                    </div>
-
                     <div className="flex justify-end space-x-3 pt-4 border-t border-border/50">
                         <button
                             type="button"
@@ -690,18 +745,18 @@ const EgresosPage: React.FC = () => {
                 </form>
             </Modal>
 
-            {/* Modal Confirmar Desactivación */}
+            {/* Modal Confirmar Eliminación */}
             <Modal
                 isOpen={deleteConfirmId !== null}
                 onClose={() => setDeleteConfirmId(null)}
-                title="Desactivar Egreso Diario"
+                title="Eliminar Egreso Diario"
             >
                 <div className="space-y-6">
                     <div className="flex items-start gap-4 p-4 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
                         <Trash2 className="w-6 h-6 shrink-0 mt-0.5" />
                         <div>
-                            <h4 className="font-semibold text-sm">Este egreso pasará a estado Inactivo</h4>
-                            <p className="text-xs mt-1 opacity-90 text-destructive/80">Este registro dejará de estar disponible y no se contabilizará en los cálculos de flujo de caja, pero no se borrará para preservar el historial.</p>
+                            <h4 className="font-semibold text-sm">¿Desea eliminar este egreso?</h4>
+                            <p className="text-xs mt-1 opacity-90 text-destructive/80">Esta acción no se puede deshacer y el registro será eliminado de forma permanente del sistema.</p>
                         </div>
                     </div>
                     
@@ -715,10 +770,12 @@ const EgresosPage: React.FC = () => {
                         </button>
                         <button
                             type="button"
+                            disabled={deleteMutation.isPending}
                             onClick={confirmDelete}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all shadow-sm cursor-pointer"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
                         >
-                            Sí, Desactivar
+                            {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            Sí, Eliminar
                         </button>
                     </div>
                 </div>
@@ -778,8 +835,10 @@ const EgresosPage: React.FC = () => {
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Sucursal</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground">Forma de Pago</th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Comprobante</th>
-                                <th className="p-4 text-sm font-semibold text-muted-foreground text-right">Monto</th>
-                                <th className="p-4 text-sm font-semibold text-muted-foreground w-28 text-center">Estado</th>
+                                <th className="p-4 text-sm font-semibold text-muted-foreground text-center">Moneda</th>
+                                <th className="p-4 text-sm font-semibold text-muted-foreground text-right">
+                                    Monto {!hasBOB && hasUSD ? '($us)' : hasBOB && !hasUSD ? '(Bs.)' : ''}
+                                </th>
                                 <th className="p-4 text-sm font-semibold text-muted-foreground text-right w-32">Acciones</th>
                             </tr>
                         </thead>
@@ -864,6 +923,11 @@ const EgresosPage: React.FC = () => {
                                                     <span className="text-xs text-muted-foreground">-</span>
                                                 )}
                                             </td>
+                                            <td className="p-4 text-center">
+                                                <span className="px-2 py-0.5 bg-muted rounded text-xs font-bold text-muted-foreground">
+                                                    {egreso.moneda || 'BOB'}
+                                                </span>
+                                            </td>
                                             <td className="p-4 text-right font-bold text-rose-600 dark:text-rose-400">
                                                 <div className="text-sm">
                                                     {simbolo} {Number(egreso.monto || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -874,19 +938,8 @@ const EgresosPage: React.FC = () => {
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="p-4 text-sm text-center">
-                                                {egreso.activo ? (
-                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold bg-green-500/10 text-green-500 uppercase tracking-widest">
-                                                        Activo
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold bg-red-500/10 text-red-500 uppercase tracking-widest">
-                                                        Inactivo
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="p-4 text-sm">
-                                                <div className="flex justify-end gap-2 transition-opacity">
+                                            <td className="p-4 text-right">
+                                                <div className="flex justify-end gap-1.5">
                                                     {canEdit && (
                                                         <button
                                                             onClick={() => {
@@ -902,37 +955,24 @@ const EgresosPage: React.FC = () => {
                                                                     nroComprobante: egreso.nroComprobante || '',
                                                                     comprobanteUrl: egreso.comprobanteUrl || '',
                                                                     observaciones: egreso.observaciones || '',
-                                                                    sucursalId: egreso.sucursal?.id || egreso.sucursalId,
-                                                                    activo: egreso.activo
+                                                                    sucursalId: egreso.sucursal?.id || egreso.sucursalId
                                                                 });
                                                                 setIsEditing(true);
                                                             }}
                                                             title="Editar"
-                                                            className="p-2 text-primary bg-primary/10 hover:bg-primary/20 hover:scale-110 active:scale-95 rounded-lg transition-all"
+                                                            className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                                         >
-                                                            <Pencil className="w-4 h-4" />
+                                                            <Edit className="w-3.5 h-3.5 text-amber-500" />
                                                         </button>
                                                     )}
-                                                    {canAnular && (
-                                                        egreso.activo ? (
-                                                            <button
-                                                                onClick={() => handleDelete(egreso.id)}
-                                                                title="Desactivar"
-                                                                className="p-2 text-red-600 dark:text-red-100 bg-red-100 dark:bg-red-600 hover:bg-red-200 dark:hover:bg-red-700 hover:scale-110 active:scale-95 rounded-lg transition-all"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => updateMutation.mutate({ id: egreso.id, data: { activo: true } }, {
-                                                                    onSuccess: () => toast.success('Egreso activado con éxito')
-                                                                })}
-                                                                title="Activar"
-                                                                className="p-2 text-green-600 dark:text-green-500 bg-green-500/10 hover:bg-green-500/20 hover:scale-110 active:scale-95 rounded-lg transition-all"
-                                                            >
-                                                                <Check className="w-4 h-4" />
-                                                            </button>
-                                                        )
+                                                    {canDelete && (
+                                                        <button
+                                                            onClick={() => handleDelete(egreso.id)}
+                                                            title="Eliminar"
+                                                            className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                                        </button>
                                                     )}
                                                 </div>
                                             </td>

@@ -335,22 +335,22 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
             const itemTc = g.tipoCambio !== undefined && g.tipoCambio !== '' ? g.tipoCambio : 0;
             return `
             <tr>
-                <td style="border: 1px solid #ddd; padding: 6px 10px; font-size: 12px;">${g.motivo || '-'}</td>
-                ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">${g.montoUsd ? Number(g.montoUsd).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>` : ''}
-                ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-family: monospace;">${itemTc !== undefined && itemTc !== null && Number(itemTc) > 0 ? Number(itemTc).toFixed(2) : '-'}</td>` : ''}
-                <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-weight: bold;">${(Number(g.montoBob) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">${costoFobBob > 0 ? ((Number(g.montoBob) * 100) / costoFobBob).toFixed(2) : '0.00'}%</td>
+                <td style="border: 1px solid #cccccc; padding: 4px 6px; font-size: 10px;">${g.motivo || '-'}</td>
+                ${isUSD ? `<td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 10px;">${g.montoUsd ? Number(g.montoUsd).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>` : ''}
+                ${isUSD ? `<td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 10px; font-family: monospace;">${itemTc !== undefined && itemTc !== null && Number(itemTc) > 0 ? Number(itemTc).toFixed(2) : '-'}</td>` : ''}
+                <td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 10px; font-weight: bold;">${(Number(g.montoBob) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 10px;">${costoFobBob > 0 ? ((Number(g.montoBob) * 100) / costoFobBob).toFixed(2) : '0.00'}%</td>
             </tr>
         `;
         }).join('');
 
         const prodsHtml = productosPreview.map((p: any) => `
             <tr>
-                <td style="border: 1px solid #ddd; padding: 6px 8px; font-size: 11px;">${p.codigo}</td>
-                <td style="border: 1px solid #ddd; padding: 6px 8px; font-size: 11px;">${p.nombre}</td>
-                <td style="border: 1px solid #ddd; padding: 6px 8px; text-align: center; font-size: 11px;">${p.cantidad}</td>
-                <td style="border: 1px solid #ddd; padding: 6px 8px; text-align: right; font-size: 11px;">${isUSD ? `$ ${p.precioUnitarioOriginal.toFixed(2)} (Bs. ${p.precioUnitarioFobBob.toFixed(2)})` : `Bs. ${p.precioUnitarioOriginal.toFixed(2)}`}</td>
-                <td style="border: 1px solid #ddd; padding: 6px 8px; text-align: right; font-size: 11px; font-weight: bold; color: #1e3a8a;">Bs. ${p.nuevoPrecioCompra.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="border: 1px solid #cccccc; padding: 4px 6px; font-size: 9.5px;">${p.codigo}</td>
+                <td style="border: 1px solid #cccccc; padding: 4px 6px; font-size: 9.5px;">${p.nombre}</td>
+                <td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: center; font-size: 9.5px;">${p.cantidad}</td>
+                <td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 9.5px;">${isUSD ? `$ ${p.precioUnitarioOriginal.toFixed(2)} (Bs. ${p.precioUnitarioFobBob.toFixed(2)})` : `Bs. ${p.precioUnitarioOriginal.toFixed(2)}`}</td>
+                <td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 9.5px; font-weight: bold; color: #000000;">Bs. ${p.nuevoPrecioCompra.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
         `).join('');
 
@@ -362,18 +362,18 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
             <head>
                 <title>Costo de Importación - ${compra?.numero || ''}</title>
                 <style>
-                    @page { size: auto; margin: 12mm; }
-                    body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 10px; color: #111; }
-                    .header-box { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #eaeaea; padding-bottom: 10px; margin-bottom: 12px; }
-                    .logo { max-height: 48px; object-fit: contain; }
+                    @page { size: auto; margin: 10mm; }
+                    body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 8px; color: #000000; }
+                    .header-box { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #000000; padding-bottom: 8px; margin-bottom: 10px; }
+                    .logo { max-height: 40px; object-fit: contain; }
                     .title-box { text-align: right; }
-                    .title { font-size: 18px; font-weight: bold; color: #0f172a; text-transform: uppercase; margin: 0 0 3px 0; }
-                    .subtitle { font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase; margin: 0; }
-                    .info-bar { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; }
-                    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-                    th { background-color: #2980b9; color: #ffffff; border: 1px solid #2980b9; padding: 7px 8px; font-size: 11.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                    .highlight { background-color: #fef08a; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                    .footer-note { font-size: 10.5px; font-style: italic; color: #666; margin-top: 10px; }
+                    .title { font-size: 16px; font-weight: bold; color: #000000; text-transform: uppercase; margin: 0 0 2px 0; }
+                    .subtitle { font-size: 11px; font-weight: bold; color: #333333; text-transform: uppercase; margin: 0; }
+                    .info-bar { display: flex; justify-content: space-between; font-size: 10.5px; margin-bottom: 10px; background-color: #f9f9f9; border: 1px solid #cccccc; padding: 5px 8px; border-radius: 4px; color: #000000; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+                    th { background-color: #f2f2f2; color: #000000; border: 1px solid #000000; padding: 5px 6px; font-size: 10px; border-top: 1.5px solid #000000; border-bottom: 1.5px solid #000000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .highlight { background-color: #f2f2f2; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .footer-note { font-size: 10px; font-style: italic; color: #444444; margin-top: 8px; }
                 </style>
             </head>
             <body>
@@ -396,35 +396,35 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                     <thead>
                         <tr>
                             <th style="text-align: left;">Concepto / Motivo</th>
-                            ${isUSD ? '<th style="text-align: right; width: 100px;">Dólares ($)</th>' : ''}
-                            ${isUSD ? '<th style="text-align: right; width: 90px;">T/C (Bs./$)</th>' : ''}
-                            <th style="text-align: right; width: 120px;">Bolivianos (Bs.)</th>
-                            <th style="text-align: right; width: 90px;">Porcentual</th>
+                            ${isUSD ? '<th style="text-align: right; width: 90px;">Dólares ($)</th>' : ''}
+                            ${isUSD ? '<th style="text-align: right; width: 80px;">T/C (Bs./$)</th>' : ''}
+                            <th style="text-align: right; width: 110px;">Bolivianos (Bs.)</th>
+                            <th style="text-align: right; width: 80px;">Porcentual</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr style="background-color: #f8fafc; font-weight: bold;">
-                            <td style="border: 1px solid #ddd; padding: 6px 10px; font-size: 12px;">Costo FOB ${provNombre}</td>
-                            ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">$ ${costoFobUsd.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>` : ''}
-                            ${isUSD ? `<td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px; font-family: monospace;">${Number(tipoCambioFob).toFixed(2)}</td>` : ''}
-                            <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">Bs. ${costoFobBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: right; font-size: 12px;">-</td>
+                        <tr style="background-color: #f9f9f9; font-weight: bold;">
+                            <td style="border: 1px solid #cccccc; padding: 4px 6px; font-size: 10px;">Costo FOB ${provNombre}</td>
+                            ${isUSD ? `<td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 10px;">$ ${costoFobUsd.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>` : ''}
+                            ${isUSD ? `<td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 10px; font-family: monospace;">${Number(tipoCambioFob).toFixed(2)}</td>` : ''}
+                            <td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 10px;">Bs. ${costoFobBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td style="border: 1px solid #cccccc; padding: 4px 6px; text-align: right; font-size: 10px;">-</td>
                         </tr>
                         ${rowsHtml}
-                        <tr style="background-color: #f1f5f9; font-weight: bold;">
-                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 12px;">Costo Total</td>
-                            <td style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 12.5px;">Bs. ${costoTotalBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td style="border: 1px solid #ddd; padding: 7px 10px;"></td>
+                        <tr style="background-color: #f2f2f2; font-weight: bold;">
+                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #cccccc; padding: 5px 6px; text-align: right; font-size: 10.5px;">Costo Total</td>
+                            <td style="border: 1px solid #cccccc; padding: 5px 6px; text-align: right; font-size: 10.5px;">Bs. ${costoTotalBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td style="border: 1px solid #cccccc; padding: 5px 6px;"></td>
                         </tr>
-                        <tr style="background-color: #e2e8f0; font-weight: bold;">
-                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 12px;">Total Gastos</td>
-                            <td style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 12.5px; color: #b91c1c;">Bs. ${totalGastosBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td class="highlight" style="border: 1px solid #ddd; padding: 7px 10px; text-align: right; font-size: 13px; color: #854d0e;">${porcentajeGastosTotal.toFixed(2)}%</td>
+                        <tr style="background-color: #e5e5e5; font-weight: bold;">
+                            <td colspan="${isUSD ? 3 : 1}" style="border: 1px solid #cccccc; padding: 5px 6px; text-align: right; font-size: 10.5px;">Total Gastos</td>
+                            <td style="border: 1px solid #cccccc; padding: 5px 6px; text-align: right; font-size: 10.5px; color: #000000;">Bs. ${totalGastosBob.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td class="highlight" style="border: 1px solid #cccccc; padding: 5px 6px; text-align: right; font-size: 11px; color: #000000;">${porcentajeGastosTotal.toFixed(2)}%</td>
                         </tr>
                     </tbody>
                 </table>
 
-                <h4 style="margin: 12px 0 6px 0; font-size: 12.5px; color: #1e3a8a;">Actualización de Costos por Producto</h4>
+                <h4 style="margin: 10px 0 5px 0; font-size: 11px; color: #000000; border-left: 3px solid #000000; padding-left: 6px;">Actualización de Costos por Producto</h4>
                 <table>
                     <thead>
                         <tr>

@@ -23,6 +23,7 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProveedorId, setSelectedProveedorId] = useState<string>('');
     const [estadoFiltro, setEstadoFiltro] = useState<'TODOS' | 'PENDIENTE' | 'SALDADO'>('TODOS');
+    const [monedaFiltro, setMonedaFiltro] = useState<'TODOS' | 'BOB' | 'USD'>('TODOS');
     const [fechaDesde, setFechaDesde] = useState<string>('');
     const [fechaHasta, setFechaHasta] = useState<string>('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -76,6 +77,13 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
             filtered = filtered.filter(p => Number(p.saldo) === 0);
         }
 
+        // Currency filter
+        if (monedaFiltro === 'BOB') {
+            filtered = filtered.filter(p => !p.moneda || p.moneda === 'BOB');
+        } else if (monedaFiltro === 'USD') {
+            filtered = filtered.filter(p => p.moneda === 'USD');
+        }
+
         // Date range filter
         if (fechaDesde) {
             filtered = filtered.filter(p => p.fecha && p.fecha.substring(0, 10) >= fechaDesde);
@@ -97,7 +105,7 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
         }
 
         return filtered;
-    }, [purchasesList, selectedSucursal, selectedCiudad, selectedProveedorId, estadoFiltro, fechaDesde, fechaHasta, searchTerm]);
+    }, [purchasesList, selectedSucursal, selectedCiudad, selectedProveedorId, estadoFiltro, monedaFiltro, fechaDesde, fechaHasta, searchTerm]);
 
     // Financial Metrics Calculation
     const metrics = useMemo(() => {
@@ -144,7 +152,10 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
         return filteredPurchases.slice(start, start + itemsPerPage);
     }, [filteredPurchases, currentPage]);
 
-    React.useEffect(() => setCurrentPage(1), [selectedProveedorId, estadoFiltro, fechaDesde, fechaHasta, searchTerm]);
+    React.useEffect(() => setCurrentPage(1), [selectedProveedorId, estadoFiltro, monedaFiltro, fechaDesde, fechaHasta, searchTerm]);
+
+    const hasBOB = useMemo(() => filteredPurchases.some(p => !p.moneda || p.moneda === 'BOB'), [filteredPurchases]);
+    const hasUSD = useMemo(() => filteredPurchases.some(p => p.moneda === 'USD'), [filteredPurchases]);
 
     // Export reports
     const exportColumns = [
@@ -161,8 +172,6 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
 
     const mappedExportData = useMemo(() => {
         return filteredPurchases.map(p => {
-            const isUSD = p.moneda === 'USD';
-            const sim = isUSD ? '$us' : 'Bs.';
             const total = Number(p.total) || 0;
             const saldo = Number(p.saldo) || 0;
             const pagado = Math.max(0, total - saldo);
@@ -178,9 +187,10 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
                 fechaFormateada: p.fecha ? format(new Date(p.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-',
                 proveedorNombre: provName,
                 observaciones: p.proveedor?.observaciones || '-',
-                totalFormateado: `${sim} ${total.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`,
-                pagadoFormateado: `${sim} ${pagado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`,
-                saldoFormateado: `${sim} ${saldo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`,
+                moneda: p.moneda || 'BOB',
+                totalFormateado: total.toLocaleString('es-BO', { minimumFractionDigits: 2 }),
+                pagadoFormateado: pagado.toLocaleString('es-BO', { minimumFractionDigits: 2 }),
+                saldoFormateado: saldo.toLocaleString('es-BO', { minimumFractionDigits: 2 }),
                 estadoSaldo: saldo === 0 ? 'Pagado' : 'Por Pagar'
             };
         });
@@ -218,6 +228,13 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
             texts.push('Estado Deuda: Pagados');
         }
 
+        // Moneda
+        if (monedaFiltro === 'BOB') {
+            texts.push('Moneda: Solo Bolivianos (BOB)');
+        } else if (monedaFiltro === 'USD') {
+            texts.push('Moneda: Solo Dólares (USD)');
+        }
+
         // Fechas
         if (fechaDesde && fechaHasta) {
             texts.push(`Rango: ${fechaDesde.split('-').reverse().join('/')} al ${fechaHasta.split('-').reverse().join('/')}`);
@@ -232,7 +249,25 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
 
 
     const getExportColumns = () => {
-        let cols = [...exportColumns];
+        let cols = exportColumns.map(c => {
+            if (c.dataKey === 'totalFormateado') {
+                if (!hasBOB && hasUSD) return { ...c, header: 'Total Compra ($us)' };
+                if (hasBOB && !hasUSD) return { ...c, header: 'Total Compra (Bs.)' };
+                return { ...c, header: 'Total Compra' };
+            }
+            if (c.dataKey === 'pagadoFormateado') {
+                if (!hasBOB && hasUSD) return { ...c, header: 'Total Pagado ($us)' };
+                if (hasBOB && !hasUSD) return { ...c, header: 'Total Pagado (Bs.)' };
+                return { ...c, header: 'Total Pagado' };
+            }
+            if (c.dataKey === 'saldoFormateado') {
+                if (!hasBOB && hasUSD) return { ...c, header: 'Saldo Pendiente ($us)' };
+                if (hasBOB && !hasUSD) return { ...c, header: 'Saldo Pendiente (Bs.)' };
+                return { ...c, header: 'Saldo Pendiente' };
+            }
+            return c;
+        });
+
         if (selectedProveedorId) {
             cols = cols.filter(c => c.dataKey !== 'proveedorNombre');
         }
@@ -242,36 +277,53 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
         return cols;
     };
 
-    const getTotalsFooter = (): Record<string, string> => {
-        // Calcular totales en BOB (convertir USD al tipo de cambio de cada compra)
-        let totalCompra = 0;
-        let totalPagado = 0;
-        let totalSaldo = 0;
+    const getTotalsFooter = (): Array<Record<string, string>> => {
+        const fmt = (n: number) => n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const footers: Array<Record<string, string>> = [];
 
-        filteredPurchases.forEach(p => {
-            const total = Number(p.total) || 0;
-            const saldo = Number(p.saldo) || 0;
-            const pagado = Math.max(0, total - saldo);
-            const tc = Number(p.tipoCambio) || 6.96;
-            const isUSD = p.moneda === 'USD';
-            totalCompra  += isUSD ? total  * tc : total;
-            totalPagado  += isUSD ? pagado * tc : pagado;
-            totalSaldo   += isUSD ? saldo  * tc : saldo;
-        });
+        if (hasBOB) {
+            footers.push({
+                fechaFormateada: hasUSD ? 'TOTALES (Bs.)' : 'TOTALES (Bs.)',
+                numero: '',
+                proveedorNombre: '',
+                observaciones: '',
+                moneda: 'BOB',
+                totalFormateado: fmt(metrics.totalComprasBOB),
+                pagadoFormateado: fmt(metrics.totalPagadoBOB),
+                saldoFormateado: fmt(metrics.totalSaldoBOB),
+                estadoSaldo: '',
+            });
+        }
 
-        const fmt = (n: number) => `Bs. ${n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        if (hasUSD) {
+            footers.push({
+                fechaFormateada: hasBOB ? 'TOTALES ($us)' : 'TOTALES ($us)',
+                numero: '',
+                proveedorNombre: '',
+                observaciones: '',
+                moneda: 'USD',
+                totalFormateado: fmt(metrics.totalComprasUSD),
+                pagadoFormateado: fmt(metrics.totalPagadoUSD),
+                saldoFormateado: fmt(metrics.totalSaldoUSD),
+                estadoSaldo: '',
+            });
+        }
 
-        return {
-            fechaFormateada: 'TOTALES',
-            numero: '',
-            proveedorNombre: '',
-            observaciones: '',
-            moneda: '',
-            totalFormateado: fmt(totalCompra),
-            pagadoFormateado: fmt(totalPagado),
-            saldoFormateado: fmt(totalSaldo),
-            estadoSaldo: '',
-        };
+        if (footers.length === 0) {
+            footers.push({
+                fechaFormateada: 'TOTALES',
+                numero: '',
+                proveedorNombre: '',
+                observaciones: '',
+                moneda: '',
+                totalFormateado: '0,00',
+                pagadoFormateado: '0,00',
+                saldoFormateado: '0,00',
+                estadoSaldo: '',
+            });
+        }
+
+        return footers;
     };
 
     const handlePrint = () => {
@@ -286,7 +338,7 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
 
     const handleExportExcel = () => {
         if (!mappedExportData.length) return;
-        exportToExcel(getExportColumns(), mappedExportData, 'estado_cuenta_proveedores');
+        exportToExcel(getExportColumns(), mappedExportData, 'estado_cuenta_proveedores', getTotalsFooter());
     };
 
 
@@ -367,7 +419,7 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
 
             {/* Filter Bar */}
             <div className="bg-card p-4 border rounded-xl shadow-sm space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                     {/* Selector de Proveedor */}
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-foreground flex items-center gap-1">
@@ -394,7 +446,7 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
                     {/* Filtro de Estado de Saldo */}
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                            <DollarSign className="w-3.5 h-3.5 text-primary" /> Estado de Deuda
+                            <Clock className="w-3.5 h-3.5 text-primary" /> Estado de Deuda
                         </label>
                         <select
                             value={estadoFiltro}
@@ -404,6 +456,22 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
                             <option value="TODOS">Todos (Por Pagar y Pagados)</option>
                             <option value="PENDIENTE">Solo Por Pagar</option>
                             <option value="SALDADO">Solo Pagados</option>
+                        </select>
+                    </div>
+
+                    {/* Filtro de Moneda */}
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            <DollarSign className="w-3.5 h-3.5 text-primary" /> Moneda
+                        </label>
+                        <select
+                            value={monedaFiltro}
+                            onChange={(e) => setMonedaFiltro(e.target.value as any)}
+                            className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                        >
+                            <option value="TODOS">Todas las Monedas</option>
+                            <option value="BOB">Solo Bolivianos (BOB)</option>
+                            <option value="USD">Solo Dólares (USD)</option>
                         </select>
                     </div>
 
@@ -432,11 +500,12 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
                                 onChange={(e) => setFechaHasta(e.target.value)}
                                 className="w-full p-2 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
                             />
-                            {(fechaDesde || fechaHasta || selectedProveedorId || estadoFiltro !== 'TODOS') && (
+                            {(fechaDesde || fechaHasta || selectedProveedorId || estadoFiltro !== 'TODOS' || monedaFiltro !== 'TODOS') && (
                                 <button
                                     onClick={() => {
                                         setSelectedProveedorId('');
                                         setEstadoFiltro('TODOS');
+                                        setMonedaFiltro('TODOS');
                                         setFechaDesde('');
                                         setFechaHasta('');
                                         setSearchTerm('');
@@ -483,9 +552,15 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
                                 )}
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Observaciones</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Moneda</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Compra</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Pagado</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Saldo Deuda</th>
+                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                                    Total Compra {!hasBOB && hasUSD ? '($us)' : hasBOB && !hasUSD ? '(Bs.)' : ''}
+                                </th>
+                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                                    Pagado {!hasBOB && hasUSD ? '($us)' : hasBOB && !hasUSD ? '(Bs.)' : ''}
+                                </th>
+                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                                    Saldo Deuda {!hasBOB && hasUSD ? '($us)' : hasBOB && !hasUSD ? '(Bs.)' : ''}
+                                </th>
                                 {estadoFiltro === 'TODOS' && (
                                     <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-28">Estado</th>
                                 )}
@@ -584,13 +659,15 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
                                             </td>
                                         )}
                                         <td className="p-4 text-right">
-                                            <button
-                                                onClick={() => setViewingNota(p)}
-                                                className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-all flex items-center gap-1.5 ml-auto shadow-sm"
-                                                title="Ver Historial de Pagos"
-                                            >
-                                                <Receipt className="w-3.5 h-3.5" /> Ver Pagos
-                                            </button>
+                                            <div className="flex justify-end gap-1.5">
+                                                <button
+                                                    onClick={() => setViewingNota(p)}
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-primary/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                    title="Ver Historial de Pagos"
+                                                >
+                                                    <Receipt className="w-3.5 h-3.5 text-primary" />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 );

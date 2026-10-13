@@ -92,15 +92,36 @@ const RolesPage: React.FC = () => {
     const [viewingRolPermisos, setViewingRolPermisos] = useState<Rol | null>(null);
     const [viewingPermSearch, setViewingPermSearch] = useState('');
 
-    const { data: roles, isLoading: loadingRoles } = useQuery({
+    const normalizePermiso = (p: Permiso): Permiso => {
+        if (
+            (p.recurso?.toUpperCase() === 'MOVIMIENTOS' && p.accion?.toUpperCase() === 'VER') ||
+            p.nombre === 'Ver Movimientos (Historial)'
+        ) {
+            return { ...p, nombre: 'Ver Kardex de Producto' };
+        }
+        return p;
+    };
+
+    const { data: rawRoles, isLoading: loadingRoles } = useQuery({
         queryKey: ['roles'],
         queryFn: roleService.getAll,
     });
 
-    const { data: permissions, isLoading: loadingPerms } = useQuery({
+    const { data: rawPermissions, isLoading: loadingPerms } = useQuery({
         queryKey: ['permissions'],
         queryFn: permissionService.getAll,
     });
+
+    const roles = useMemo(() => {
+        return rawRoles?.map(r => ({
+            ...r,
+            permisos: r.permisos?.map(normalizePermiso),
+        }));
+    }, [rawRoles]);
+
+    const permissions = useMemo(() => {
+        return rawPermissions?.map(normalizePermiso);
+    }, [rawPermissions]);
 
     const createMutation = useMutation({
         mutationFn: roleService.create,

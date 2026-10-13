@@ -33,8 +33,8 @@ export const proformaService = {
         const response = await apiClient.put<Nota>(`/notas/${id}/convertir-venta`);
         return response.data;
     },
-    sendWhatsApp: async (payload: { proformaId: number; phone?: string; sucursalId?: number; message?: string }) => {
-        const response = await apiClient.post<{ success: boolean; message: string; phone: string }>('/whatsapp/send-proforma', payload);
+    sendWhatsApp: async (payload: { proformaId: number; phone?: string; sucursalId?: number; message?: string; senderType?: 'VENDEDOR' | 'SUCURSAL'; vendedorId?: number }) => {
+        const response = await apiClient.post<{ success: boolean; message: string; phone: string; sentVia?: 'VENDEDOR' | 'SUCURSAL' }>('/whatsapp/send-proforma', payload);
         return response.data;
     }
 };

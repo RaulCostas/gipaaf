@@ -1061,33 +1061,33 @@ const MuestrasPage: React.FC = () => {
                                             )}
                                         </td>
                                         <td className="p-4 text-right">
-                                            <div className="flex items-center justify-end gap-1.5 flex-nowrap whitespace-nowrap">
+                                            <div className="flex justify-end gap-1.5 whitespace-nowrap">
                                                 {/* Ver */}
                                                 <button
                                                     onClick={() => { setCurrentMuestra(m); setIsViewing(true); }}
-                                                    className="px-2.5 py-1.5 bg-gray-600 text-white rounded-lg text-xs font-bold hover:bg-gray-700 transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-primary/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer whitespace-nowrap"
                                                     title="Ver Detalle"
                                                 >
-                                                    <Eye className="w-3" /> Ver
+                                                    <Eye className="w-3.5 h-3.5 text-primary" />
                                                 </button>
 
                                                 {/* Enviar WhatsApp */}
                                                 <button
                                                     onClick={() => handleOpenWhatsAppModal(m)}
-                                                    className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-xs cursor-pointer whitespace-nowrap"
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer whitespace-nowrap"
                                                     title="Enviar Acta de Muestras por WhatsApp (PDF)"
                                                 >
-                                                    <MessageCircle className="w-3" /> WhatsApp
+                                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                                 </button>
 
                                                 {/* Registrar Devolución */}
                                                 {canReturn && m.estado !== 'ANULADO' && m.estado !== 'DEVUELTO_TOTAL' && (
                                                     <button
                                                         onClick={() => handleOpenReturn(m)}
-                                                        className="px-2.5 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-1 shadow-xs cursor-pointer whitespace-nowrap"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-green-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer whitespace-nowrap"
                                                         title="Registrar Devolución"
                                                     >
-                                                        <RotateCcw className="w-3" /> Devolución
+                                                        <RotateCcw className="w-3.5 h-3.5 text-green-600" />
                                                     </button>
                                                 )}
 
@@ -1095,10 +1095,10 @@ const MuestrasPage: React.FC = () => {
                                                 {canEdit && m.estado !== 'ANULADO' && (
                                                     <button
                                                         onClick={() => handleOpenEdit(m)}
-                                                        className="px-2.5 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-1 shadow-xs cursor-pointer whitespace-nowrap"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer whitespace-nowrap"
                                                         title="Editar Muestra"
                                                     >
-                                                        <Edit className="w-3" /> Editar
+                                                        <Edit className="w-3.5 h-3.5 text-amber-500" />
                                                     </button>
                                                 )}
 
@@ -1106,10 +1106,10 @@ const MuestrasPage: React.FC = () => {
                                                 {canAnular && m.estado !== 'ANULADO' && (
                                                     <button
                                                         onClick={() => setAnularConfirmId(m.id)}
-                                                        className="px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer whitespace-nowrap"
                                                         title="Anular Muestra"
                                                     >
-                                                        <Trash2 className="w-3" /> Anular
+                                                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
                                                     </button>
                                                 )}
                                             </div>
