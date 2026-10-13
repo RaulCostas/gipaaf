@@ -24,6 +24,7 @@ import { sucursalService } from '../../api/sucursalService';
 import { getCiudades } from '../../api/ciudadService';
 import { personalService } from '../../api/personalService';
 import { whatsappService } from '../../api/whatsappService';
+import { clientService } from '../../api/clientService';
 
 const CobranzasPage: React.FC = () => {
     const { isAdmin, isVendedor, isJefeVentas, userPersonal, hasAction } = useAuth();
@@ -144,6 +145,7 @@ const CobranzasPage: React.FC = () => {
 
     const { data: sucursales } = useQuery({ queryKey: ['sucursales'], queryFn: sucursalService.getAll });
     const { data: ciudades } = useQuery({ queryKey: ['ciudades'], queryFn: getCiudades });
+    const { data: clients } = useQuery({ queryKey: ['clients'], queryFn: () => clientService.getAll() });
 
     // Query all sales with pending debt (saldo > 0)
     const { data: todasLasDeudas, isLoading: loadingDeudas } = useQuery({
@@ -493,6 +495,8 @@ const CobranzasPage: React.FC = () => {
                 const clienteNombre = (p.cliente?.nombreTienda ? `${p.cliente.nombreTienda} ` : '') + (p.cliente?.persona 
                     ? `${p.cliente.persona.nombres} ${p.cliente.persona.apellidos}` 
                     : (p.cliente?.razonSocial || ''));
+                const cliObj = p.cliente?.id ? (clients?.find(c => c.id === p.cliente?.id) || p.cliente) : p.cliente;
+                const clienteCodigo = (p.cliente?.codigo || p.nota?.cliente?.codigo || cliObj?.codigo || '').toLowerCase();
                 const vendedorNombre = (p.nota?.vendedor
                     ? `${p.nota.vendedor.nombres || ''} ${p.nota.vendedor.apellidos || ''}`
                     : '').toLowerCase();
@@ -500,12 +504,12 @@ const CobranzasPage: React.FC = () => {
                 const ref = (p.referencia || '').toLowerCase();
                 const metodo = (p.metodoPago || '').toLowerCase();
 
-                return clienteNombre.toLowerCase().includes(s) || vendedorNombre.includes(s) || ventaNum.includes(s) || ref.includes(s) || metodo.includes(s);
+                return clienteNombre.toLowerCase().includes(s) || clienteCodigo.includes(s) || vendedorNombre.includes(s) || ventaNum.includes(s) || ref.includes(s) || metodo.includes(s);
             });
         }
 
         return filtered;
-    }, [pagosList, selectedSucursal, selectedCiudad, searchTerm, filtroCliente, filtroVendedores, filtroEstado, filtroMetodo, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
+    }, [pagosList, selectedSucursal, selectedCiudad, searchTerm, filtroCliente, filtroVendedores, filtroEstado, filtroMetodo, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal, clients]);
 
     const exportColumns = [
         { header: 'Fecha', dataKey: 'fecha' },
@@ -515,6 +519,21 @@ const CobranzasPage: React.FC = () => {
         { header: 'Nota de Venta', dataKey: 'notaVenta' },
         { header: 'Sucursal', dataKey: 'sucursalNombre' },
         { header: 'Método', dataKey: 'metodoPago' },
+        { header: 'Nro. Recibo', dataKey: 'recibo' },
+        { header: 'Monto Pagado (Bs.)', dataKey: 'montoFormateado' },
+        { header: 'Observaciones / Glosa', dataKey: 'observaciones' }
+    ];
+
+    const excelColumns = [
+        { header: 'Fecha', dataKey: 'fecha' },
+        { header: 'Nro Venta', dataKey: 'notaNumero' },
+        { header: 'Código Cliente', dataKey: 'codigoCliente' },
+        { header: 'Cliente', dataKey: 'clienteNombreSolo' },
+        { header: 'Vendedor', dataKey: 'vendedorNombre' },
+        { header: 'Nota de Venta', dataKey: 'notaVenta' },
+        { header: 'Sucursal', dataKey: 'sucursalNombre' },
+        { header: 'Método', dataKey: 'metodoPago' },
+        { header: 'Nro. Recibo', dataKey: 'recibo' },
         { header: 'Monto Pagado (Bs.)', dataKey: 'montoFormateado' },
         { header: 'Observaciones / Glosa', dataKey: 'observaciones' }
     ];
@@ -538,22 +557,31 @@ const CobranzasPage: React.FC = () => {
             const sucursalNombre = p.nota?.sucursal?.nombre || p.cliente?.sucursal?.nombre || '-';
             const observaciones = p.observaciones || '-';
             const fechaStr = p.fecha ? p.fecha.split('T')[0].split('-').reverse().join('/') : '-';
+            const cliObj = p.cliente?.id ? (clients?.find(c => c.id === p.cliente?.id) || p.cliente) : p.cliente;
+            const cliCodigo = (p.cliente?.codigo || p.nota?.cliente?.codigo || cliObj?.codigo || '').trim();
+            const cliTienda = (p.cliente?.nombreTienda || cliObj?.nombreTienda || '').trim() || getClientDisplayName(p.cliente);
+            const clienteTexto = cliCodigo ? `(${cliCodigo}) ${cliTienda}` : cliTienda;
+            const recibo = (p.referencia || (p.id ? `REC-${String(p.id).padStart(6, '0')}` : '-')).trim() || '-';
+
             return {
                 ...p,
                 fecha: fechaStr,
-                clienteNombre: getClientDisplayName(p.cliente),
+                notaNumero: p.nota?.numero || '-',
+                recibo,
+                referencia: recibo,
+                codigoCliente: (cliCodigo ? cliCodigo.replace(/\./g, '') : '') || '-',
+                clienteNombre: clienteTexto,
+                clienteNombreSolo: cliTienda,
                 vendedorNombre,
                 notaVenta,
                 sucursalNombre,
-                notaNumero: p.nota?.numero || '-',
-                referencia: p.referencia || '-',
                 totalVentaFormateado,
                 montoFormateado,
                 saldoFormateado,
                 observaciones
             };
         });
-    }, [filteredPagos]);
+    }, [filteredPagos, clients]);
 
     const getFiltersText = () => {
         const texts: string[] = [];
@@ -602,6 +630,13 @@ const CobranzasPage: React.FC = () => {
         return cols;
     };
 
+    const getExcelColumns = () => {
+        let cols = [...excelColumns];
+        if (filtroCliente) cols = cols.filter(c => c.dataKey !== 'clienteNombreSolo' && c.dataKey !== 'codigoCliente');
+        if (selectedSucursal || selectedCiudad) cols = cols.filter(c => c.dataKey !== 'sucursalNombre');
+        return cols;
+    };
+
     const getTotalsFooter = () => {
         let totalCobradoBOB = 0;
         let totalCobradoUSD = 0;
@@ -638,7 +673,10 @@ const CobranzasPage: React.FC = () => {
             rows.push({
                 fecha: (totalCobradoUSD > 0 || totalVentaUSD > 0) ? 'TOTALES (Bs.)' : 'TOTALES',
                 notaNumero: '',
+                recibo: '',
+                codigoCliente: '',
                 clienteNombre: '',
+                clienteNombreSolo: '',
                 vendedorNombre: '',
                 notaVenta: '',
                 sucursalNombre: '',
@@ -655,7 +693,10 @@ const CobranzasPage: React.FC = () => {
             rows.push({
                 fecha: (totalCobradoBOB > 0 || totalVentaBOB > 0) ? 'TOTALES ($us)' : 'TOTALES',
                 notaNumero: '',
+                recibo: '',
+                codigoCliente: '',
                 clienteNombre: '',
+                clienteNombreSolo: '',
                 vendedorNombre: '',
                 notaVenta: '',
                 sucursalNombre: '',
@@ -681,7 +722,7 @@ const CobranzasPage: React.FC = () => {
     };
     const handleExportExcel = () => {
         if (!mappedExportData.length) return;
-        exportToExcel(getExportColumns(), mappedExportData, 'cobranzas_clientes_reporte', getTotalsFooter());
+        exportToExcel(getExcelColumns(), mappedExportData, 'cobranzas_clientes_reporte', getTotalsFooter());
     };
 
     // Financial KPI Totals
@@ -909,7 +950,7 @@ const CobranzasPage: React.FC = () => {
                                     <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sucursal</th>
                                 )}
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Método</th>
-                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Referencia</th>
+                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nro. Recibo</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Comprobante</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Venta</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Monto Pagado</th>
@@ -935,6 +976,8 @@ const CobranzasPage: React.FC = () => {
                                     </td>
                                 </tr>
                             ) : paginatedPagos.map((p, index) => {
+                                const cliObj = p.cliente?.id ? (clients?.find(c => c.id === p.cliente?.id) || p.cliente) : p.cliente;
+                                const cliCodigo = (p.cliente?.codigo || p.nota?.cliente?.codigo || cliObj?.codigo || '').trim();
                                 const cliLabel = p.cliente?.persona 
                                     ? `${p.cliente.persona.nombres} ${p.cliente.persona.apellidos}` 
                                     : (p.cliente?.razonSocial || 'Cliente');
@@ -950,6 +993,7 @@ const CobranzasPage: React.FC = () => {
                                 const saldoSimbolo = ventaMoneda === 'USD' ? '$us' : 'Bs.';
                                 const saldoNota = Number(p.nota?.saldo || 0);
                                 const totalVenta = Number(p.nota?.total || 0);
+                                const reciboNumero = p.referencia || (p.id ? `REC-${String(p.id).padStart(6, '0')}` : '-');
 
                                 return (
                                     <tr key={p.id} className="hover:bg-accent/30 transition-colors group">
@@ -977,14 +1021,28 @@ const CobranzasPage: React.FC = () => {
                                         <td className="p-4">
                                             <div className="flex flex-col">
                                                 {p.cliente?.nombreTienda ? (
-                                                    <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                        {p.cliente.nombreTienda}
-                                                    </span>
+                                                    <>
+                                                        <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                            <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                            {p.cliente.nombreTienda}
+                                                        </span>
+                                                        {cliCodigo && (
+                                                            <span className="text-xs text-muted-foreground font-mono">
+                                                                Cód: {cliCodigo}
+                                                            </span>
+                                                        )}
+                                                    </>
                                                 ) : (
-                                                    <span className="text-sm font-semibold text-foreground">
-                                                        {getClientPersonName(p.cliente)}
-                                                    </span>
+                                                    <>
+                                                        <span className="text-sm font-semibold text-foreground">
+                                                            {getClientPersonName(p.cliente)}
+                                                        </span>
+                                                        {cliCodigo && (
+                                                            <span className="text-xs text-muted-foreground font-mono">
+                                                                Cód: {cliCodigo}
+                                                            </span>
+                                                        )}
+                                                    </>
                                                 )}
                                             </div>
                                         </td>
@@ -1009,7 +1067,7 @@ const CobranzasPage: React.FC = () => {
                                             {p.metodoPago || 'Efectivo'}
                                         </td>
                                         <td className="p-4 text-sm text-muted-foreground font-mono text-xs">
-                                            {p.referencia || '-'}
+                                            {reciboNumero}
                                         </td>
                                         <td className="p-4 text-center">
                                             {p.comprobanteUrl ? (

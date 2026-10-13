@@ -329,4 +329,168 @@ export class InventarioService implements OnModuleInit {
     }
 
     async remove(id: number) { const i = await this.findOne(id); return this.repo.remove(i); }
+
+    async getInventarioAlmacen(sucursalId?: number, ciudadId?: number, fechaCorte?: string) {
+        // Local today date string (YYYY-MM-DD)
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
+
+        const isPast = Boolean(fechaCorte && fechaCorte.trim() < todayStr);
+        // If fechaCorte is in the past, subtract movements that occurred after that day's 23:59:59.
+        // If fechaCorte is today or future, do not subtract any movements (stockActual is already live).
+        const cutoffTimestamp = isPast ? `${fechaCorte!.trim()} 23:59:59.999` : '2099-12-31 23:59:59.999';
+
+        let query = '';
+        let params: any[] = [];
+
+        if (sucursalId) {
+            query = `
+                SELECT 
+                    p.id as "productoId",
+                    p.codigo,
+                    p.nombre,
+                    p."unidadMedida",
+                    p."precioVenta",
+                    p."precioCompra",
+                    COALESCE(m.nombre, '-') as marca,
+                    COALESCE(l.nombre, '-') as linea,
+                    COALESCE(g.nombre, '-') as grupo,
+                    COALESCE(SUM(i."stockActual"), 0) as "stockActualHoy",
+                    COALESCE(SUM(mov.total_movs), 0) as "movimientosDespues",
+                    (COALESCE(SUM(i."stockActual"), 0) - COALESCE(SUM(mov.total_movs), 0)) as "stockCorte"
+                FROM productos p
+                LEFT JOIN marcas m ON p."marcaId" = m.id
+                LEFT JOIN lineas l ON p."lineaId" = l.id
+                LEFT JOIN grupos g ON p."grupoId" = g.id
+                LEFT JOIN inventario i ON i."productoId" = p.id AND i."sucursalId" = $2
+                LEFT JOIN (
+                    SELECT "inventarioId", SUM(cantidad) as total_movs
+                    FROM movimientos_inventario
+                    WHERE "creadoEn" > $1::timestamp
+                    GROUP BY "inventarioId"
+                ) mov ON mov."inventarioId" = i.id
+                WHERE p.activo = true AND p."eliminadoEn" IS NULL
+                GROUP BY p.id, p.codigo, p.nombre, p."unidadMedida", p."precioVenta", p."precioCompra", m.nombre, l.nombre, g.nombre
+                ORDER BY p.nombre ASC
+            `;
+            params = [cutoffTimestamp, sucursalId];
+        } else if (ciudadId) {
+            query = `
+                SELECT 
+                    p.id as "productoId",
+                    p.codigo,
+                    p.nombre,
+                    p."unidadMedida",
+                    p."precioVenta",
+                    p."precioCompra",
+                    COALESCE(m.nombre, '-') as marca,
+                    COALESCE(l.nombre, '-') as linea,
+                    COALESCE(g.nombre, '-') as grupo,
+                    COALESCE(SUM(i."stockActual"), 0) as "stockActualHoy",
+                    COALESCE(SUM(mov.total_movs), 0) as "movimientosDespues",
+                    (COALESCE(SUM(i."stockActual"), 0) - COALESCE(SUM(mov.total_movs), 0)) as "stockCorte"
+                FROM productos p
+                LEFT JOIN marcas m ON p."marcaId" = m.id
+                LEFT JOIN lineas l ON p."lineaId" = l.id
+                LEFT JOIN grupos g ON p."grupoId" = g.id
+                LEFT JOIN (
+                    SELECT inv.* 
+                    FROM inventario inv 
+                    INNER JOIN sucursales suc ON inv."sucursalId" = suc.id 
+                    WHERE suc."ciudadId" = $2
+                ) i ON i."productoId" = p.id
+                LEFT JOIN (
+                    SELECT "inventarioId", SUM(cantidad) as total_movs
+                    FROM movimientos_inventario
+                    WHERE "creadoEn" > $1::timestamp
+                    GROUP BY "inventarioId"
+                ) mov ON mov."inventarioId" = i.id
+                WHERE p.activo = true AND p."eliminadoEn" IS NULL
+                GROUP BY p.id, p.codigo, p.nombre, p."unidadMedida", p."precioVenta", p."precioCompra", m.nombre, l.nombre, g.nombre
+                ORDER BY p.nombre ASC
+            `;
+            params = [cutoffTimestamp, ciudadId];
+        } else {
+            query = `
+                SELECT 
+                    p.id as "productoId",
+                    p.codigo,
+                    p.nombre,
+                    p."unidadMedida",
+                    p."precioVenta",
+                    p."precioCompra",
+                    COALESCE(m.nombre, '-') as marca,
+                    COALESCE(l.nombre, '-') as linea,
+                    COALESCE(g.nombre, '-') as grupo,
+                    COALESCE(SUM(i."stockActual"), 0) as "stockActualHoy",
+                    COALESCE(SUM(mov.total_movs), 0) as "movimientosDespues",
+                    (COALESCE(SUM(i."stockActual"), 0) - COALESCE(SUM(mov.total_movs), 0)) as "stockCorte"
+                FROM productos p
+                LEFT JOIN marcas m ON p."marcaId" = m.id
+                LEFT JOIN lineas l ON p."lineaId" = l.id
+                LEFT JOIN grupos g ON p."grupoId" = g.id
+                LEFT JOIN inventario i ON i."productoId" = p.id
+                LEFT JOIN (
+                    SELECT "inventarioId", SUM(cantidad) as total_movs
+                    FROM movimientos_inventario
+                    WHERE "creadoEn" > $1::timestamp
+                    GROUP BY "inventarioId"
+                ) mov ON mov."inventarioId" = i.id
+                WHERE p.activo = true AND p."eliminadoEn" IS NULL
+                GROUP BY p.id, p.codigo, p.nombre, p."unidadMedida", p."precioVenta", p."precioCompra", m.nombre, l.nombre, g.nombre
+                ORDER BY p.nombre ASC
+            `;
+            params = [cutoffTimestamp];
+        }
+
+        const rawRows = await this.repo.query(query, params);
+
+        const lotesWhere: any = { cantidadActual: MoreThan(0) };
+        if (sucursalId) {
+            lotesWhere.sucursal = { id: sucursalId };
+        }
+        const activeLotes = await this.loteRepo.find({
+            where: lotesWhere,
+            relations: ['producto', 'sucursal'],
+            order: { fechaVencimiento: { direction: 'ASC', nulls: 'NULLS LAST' } as any, fechaIngreso: 'ASC' }
+        });
+
+        const lotesByProduct = new Map<number, any[]>();
+        activeLotes.forEach(l => {
+            if (!l.producto?.id) return;
+            if (!lotesByProduct.has(l.producto.id)) {
+                lotesByProduct.set(l.producto.id, []);
+            }
+            lotesByProduct.get(l.producto.id)!.push({
+                numeroLote: l.numeroLote,
+                cantidadActual: Number(l.cantidadActual || 0),
+                fechaVencimiento: l.fechaVencimiento ? String(l.fechaVencimiento).substring(0, 10) : null
+            });
+        });
+
+        return rawRows.map((r: any) => {
+            const stockCorteNum = Number(r.stockCorte || 0);
+            const stockActualNum = Number(r.stockActualHoy || 0);
+            const itemLotes = lotesByProduct.get(Number(r.productoId)) || [];
+
+            return {
+                productoId: Number(r.productoId),
+                codigo: r.codigo || '-',
+                nombre: r.nombre || '-',
+                marca: r.marca || '-',
+                linea: r.linea || '-',
+                grupo: r.grupo || '-',
+                unidadMedida: r.unidadMedida || 'UNIDAD',
+                precioVenta: Number(r.precioVenta || 0),
+                precioCompra: Number(r.precioCompra || 0),
+                stockActualHoy: stockActualNum,
+                movimientosDespues: Number(r.movimientosDespues || 0),
+                stockCorte: stockCorteNum,
+                lotes: itemLotes
+            };
+        });
+    }
 }

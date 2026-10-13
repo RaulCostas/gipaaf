@@ -207,8 +207,35 @@ export const exportToPDF = async (
   doc.save(`${filename}.pdf`);
 };
 
+export const isCodeOrIdColumn = (colKey?: string, header?: string): boolean => {
+  const k = (colKey || '').toLowerCase();
+  const h = (header || '').toLowerCase();
+  return (
+    k.includes('codigocliente') ||
+    k.includes('clientecodigo') ||
+    k.includes('cliente_codigo') ||
+    k.includes('codigo_cliente') ||
+    (k.includes('cliente') && (k.includes('cod') || k.includes('codigo'))) ||
+    (h.includes('cliente') && (h.includes('código') || h.includes('codigo') || h.includes('cód'))) ||
+    k === 'codigo' ||
+    k === 'cod' ||
+    h === 'código' ||
+    h === 'codigo' ||
+    h === 'cód.' ||
+    h === 'cód' ||
+    k === 'ci' ||
+    k === 'nit' ||
+    k.includes('telefono') ||
+    k.includes('celular')
+  );
+};
+
 const parsePossibleExcelNumber = (val: any, colKey?: string, header?: string): any => {
   if (val === null || val === undefined || val === '') return '';
+  if (isCodeOrIdColumn(colKey, header)) {
+    // Preserve codes as text strings without thousands separator dots
+    return String(val).replace(/\./g, '').trim();
+  }
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (typeof val === 'boolean') return val ? 'Activo' : 'Inactivo';
   if (typeof val === 'string') {
@@ -287,6 +314,22 @@ export const exportToExcel = (
   Object.keys(worksheet).forEach(cellRef => {
     if (cellRef.startsWith('!')) return;
     const cell = worksheet[cellRef];
+    const decoded = XLSX.utils.decode_cell(cellRef);
+    const colDef = columns[decoded.c];
+
+    // Skip header row
+    if (decoded.r === 0) return;
+
+    // For code columns (like client code), ensure they are treated as plain text without thousands grouping
+    if (colDef && isCodeOrIdColumn(colDef.dataKey, colDef.header)) {
+      if (cell) {
+        cell.t = 's';
+        cell.v = String(cell.v ?? '').replace(/\./g, '').trim();
+        delete cell.z;
+      }
+      return;
+    }
+
     if (cell && cell.t === 'n') {
       if (Number.isInteger(cell.v)) {
         cell.z = '#,##0';

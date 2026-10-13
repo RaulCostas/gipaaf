@@ -707,6 +707,8 @@ const ProformasPage: React.FC = () => {
             filtered = filtered.filter(p => 
                 p.numero.toLowerCase().includes(term) ||
                 (p.numeroFactura && p.numeroFactura.toLowerCase().includes(term)) ||
+                p.cliente?.codigo?.toLowerCase().includes(term) ||
+                (clients?.find(c => c.id === p.cliente?.id)?.codigo?.toLowerCase().includes(term)) ||
                 p.cliente?.nombreTienda?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.nombres?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.apellidos?.toLowerCase().includes(term) ||
@@ -716,7 +718,7 @@ const ProformasPage: React.FC = () => {
         }
 
         return filtered;
-    }, [proformas, search, selectedSucursal, selectedCiudad, selectedVendedores, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
+    }, [proformas, search, selectedSucursal, selectedCiudad, selectedVendedores, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal, clients]);
 
     const getExportColumns = () => {
         let cols = [
@@ -724,6 +726,25 @@ const ProformasPage: React.FC = () => {
             { header: 'Nro Proforma', dataKey: 'numero' },
             { header: 'Vendedor', dataKey: 'vendedorNombre' },
             { header: 'Cliente', dataKey: 'clienteNombre' },
+            { header: 'Nota de Proforma', dataKey: 'observaciones' },
+            { header: 'Sucursal', dataKey: 'sucursalNombre' },
+            { header: 'Total Bs.', dataKey: 'totalFormatted' }
+        ];
+
+        if (selectedSucursal || selectedCiudad) {
+            cols = cols.filter(c => c.dataKey !== 'sucursalNombre');
+        }
+
+        return cols;
+    };
+
+    const getExcelColumns = () => {
+        let cols = [
+            { header: 'Fecha', dataKey: 'fechaFormatted' },
+            { header: 'Nro Proforma', dataKey: 'numero' },
+            { header: 'Vendedor', dataKey: 'vendedorNombre' },
+            { header: 'Código Cliente', dataKey: 'clienteCodigo' },
+            { header: 'Cliente', dataKey: 'clienteNombreSolo' },
             { header: 'Nota de Proforma', dataKey: 'observaciones' },
             { header: 'Sucursal', dataKey: 'sucursalNombre' },
             { header: 'Total Bs.', dataKey: 'totalFormatted' }
@@ -770,7 +791,9 @@ const ProformasPage: React.FC = () => {
                 fechaFormatted: s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '-',
                 documentoFormatted: docTexto,
                 pagoFormatted: pagoTexto,
+                clienteCodigo: (cliCodigo ? cliCodigo.replace(/\./g, '') : '') || '-',
                 clienteNombre: clienteTexto,
+                clienteNombreSolo: cliTienda,
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : 'Sin asignar',
                 observaciones: s.observaciones || '-',
                 sucursalNombre: sucursalTexto,
@@ -788,7 +811,9 @@ const ProformasPage: React.FC = () => {
             fechaFormatted: 'TOTALES (Bs.)',
             numero: '',
             vendedorNombre: '',
+            clienteCodigo: '',
             clienteNombre: '',
+            clienteNombreSolo: '',
             observaciones: '',
             sucursalNombre: '',
             totalFormatted: formatCurrencyAmount(totalSum)
@@ -852,7 +877,7 @@ const ProformasPage: React.FC = () => {
             toast.error('No hay proformas para exportar');
             return;
         }
-        exportToExcel(getExportColumns(), getFormattedData(), 'proformas_reporte', getTotalsFooter());
+        exportToExcel(getExcelColumns(), getFormattedData(), 'proformas_reporte', getTotalsFooter());
     };
 
     const hasActiveFilters = selectedVendedores.length > 0 || !!fechaDesde || !!fechaHasta || !!search;
@@ -1002,6 +1027,9 @@ const ProformasPage: React.FC = () => {
                                 totalPct = (descCalc / subTotalCalc) * 100;
                             }
                             
+                            const cliObj = s.cliente?.id ? (clients?.find(c => c.id === s.cliente?.id) || s.cliente) : s.cliente;
+                            const cliCodigo = (s.cliente?.codigo || cliObj?.codigo || '').trim();
+                            
                             return (
                                 <tr key={s.id} className="hover:bg-accent/50 transition-colors group">
                                     <td className="p-4">
@@ -1029,14 +1057,28 @@ const ProformasPage: React.FC = () => {
                                     <td className="p-4">
                                         <div className="flex flex-col">
                                             {s.cliente?.nombreTienda ? (
-                                                <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                                                    <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                    {s.cliente.nombreTienda}
-                                                </span>
+                                                <>
+                                                    <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                        {s.cliente.nombreTienda}
+                                                    </span>
+                                                    {cliCodigo && (
+                                                        <span className="text-xs text-muted-foreground font-mono">
+                                                            Cód: {cliCodigo}
+                                                        </span>
+                                                    )}
+                                                </>
                                             ) : (
-                                                <span className="text-sm font-medium">
-                                                    {getClientPersonName(s.cliente)}
-                                                </span>
+                                                <>
+                                                    <span className="text-sm font-medium">
+                                                        {getClientPersonName(s.cliente)}
+                                                    </span>
+                                                    {cliCodigo && (
+                                                        <span className="text-xs text-muted-foreground font-mono">
+                                                            Cód: {cliCodigo}
+                                                        </span>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </td>

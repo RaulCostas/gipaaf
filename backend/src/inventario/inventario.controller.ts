@@ -21,6 +21,25 @@ export class InventarioController {
         return this.service.findAll();
     }
 
+    @Get('almacen')
+    @ApiQuery({ name: 'sucursalId', required: false })
+    @ApiQuery({ name: 'almacenId', required: false })
+    @ApiQuery({ name: 'ciudadId', required: false })
+    @ApiQuery({ name: 'fechaCorte', required: false })
+    getInventarioAlmacen(
+        @Query('sucursalId') sucursalId?: number,
+        @Query('almacenId') almacenId?: number,
+        @Query('ciudadId') ciudadId?: number,
+        @Query('fechaCorte') fechaCorte?: string
+    ) {
+        const targetSucursalId = sucursalId || almacenId;
+        return this.service.getInventarioAlmacen(
+            targetSucursalId ? Number(targetSucursalId) : undefined,
+            ciudadId ? Number(ciudadId) : undefined,
+            fechaCorte
+        );
+    }
+
     @Get(':id') findOne(@Param('id', ParseIntPipe) id: number) { return this.service.findOne(id); }
     @Post() create(@Body() body: any) { return this.service.create(body); }
     @Put(':id') update(@Param('id', ParseIntPipe) id: number, @Body() body: any) { return this.service.update(id, body); }

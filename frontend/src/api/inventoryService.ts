@@ -14,6 +14,26 @@ export interface Inventario {
     precioVenta: number;
 }
 
+export interface InventarioAlmacenItem {
+    productoId: number;
+    codigo: string;
+    nombre: string;
+    marca: string;
+    linea: string;
+    grupo: string;
+    unidadMedida: string;
+    precioVenta: number;
+    precioCompra: number;
+    stockActualHoy: number;
+    movimientosDespues: number;
+    stockCorte: number;
+    lotes?: Array<{
+        numeroLote: string;
+        cantidadActual: number;
+        fechaVencimiento: string | null;
+    }>;
+}
+
 export const inventoryService = {
     getAll: async () => {
         const response = await apiClient.get<Inventario[]>('/inventario');
@@ -29,6 +49,15 @@ export const inventoryService = {
     },
     getByProducto: async (productoId: number) => {
         const response = await apiClient.get<Inventario[]>(`/inventario?productoId=${productoId}`);
+        return response.data;
+    },
+    getInventarioAlmacen: async (params?: { sucursalId?: number; ciudadId?: number; fechaCorte?: string }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.sucursalId) queryParams.append('sucursalId', String(params.sucursalId));
+        if (params?.ciudadId) queryParams.append('ciudadId', String(params.ciudadId));
+        if (params?.fechaCorte) queryParams.append('fechaCorte', params.fechaCorte);
+        const qs = queryParams.toString();
+        const response = await apiClient.get<InventarioAlmacenItem[]>(`/inventario/almacen${qs ? `?${qs}` : ''}`);
         return response.data;
     },
     ajustarStock: async (id: number, cantidad: number, observaciones?: string) => {

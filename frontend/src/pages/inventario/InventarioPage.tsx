@@ -8,11 +8,12 @@ import { grupoService } from '../../api/grupoService';
 import { getCiudades } from '../../api/ciudadService';
 import { sucursalService } from '../../api/sucursalService';
 import Modal from '../../components/ui/Modal';
+import InventarioAlmacenModal from './InventarioAlmacenModal';
 import { 
     Boxes, Search, Filter, AlertTriangle, AlertOctagon,
     Printer, FileText, FileSpreadsheet, X, 
     ChevronLeft, ChevronRight, Check,
-    ArrowUpRight, History, Tag, Layers
+    ArrowUpRight, History, Tag, Layers, Warehouse
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
@@ -39,6 +40,7 @@ const InventarioPage: React.FC = () => {
     const [isAdjusting, setIsAdjusting] = useState(false);
     const [isEditingLimits, setIsEditingLimits] = useState(false);
     const [isMermaOpen, setIsMermaOpen] = useState(false);
+    const [isAlmacenModalOpen, setIsAlmacenModalOpen] = useState(false);
     const [limits, setLimits] = useState<{ id: number; productName: string; stockMinimo: number; stockMaximo: number; branchRecords?: any[] }>({ id: 0, productName: '', stockMinimo: 0, stockMaximo: 0 });
     const [adjustment, setAdjustment] = useState<{ id: number; cantidadStr: string; currentStock: number; productName: string; observaciones: string; branchRecords?: any[] }>({ id: 0, cantidadStr: '', currentStock: 0, productName: '', observaciones: '' });
     const [mermaData, setMermaData] = useState<{ id: number; productName: string; codigo: string; currentStock: number; cantidadStr: string; motivo: string; observaciones: string; branchRecords?: any[] }>({ id: 0, productName: '', codigo: '', currentStock: 0, cantidadStr: '', motivo: 'Vencimiento / Caducidad', observaciones: '' });
@@ -397,6 +399,14 @@ const InventarioPage: React.FC = () => {
                 </div>
                 
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setIsAlmacenModalOpen(true)}
+                        className="px-3.5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
+                        title="Inventario Almacén (Toma de Existencias)"
+                    >
+                        <Warehouse className="w-4 h-4" />
+                        <span>Inventario Almacén</span>
+                    </button>
                     <button
                         onClick={handlePrint}
                         className="px-3 py-2 bg-card border rounded-lg text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
@@ -1066,6 +1076,12 @@ const InventarioPage: React.FC = () => {
                     </div>
                 </div>
             </Modal>
+
+            {/* Modal de Inventario Almacén */}
+            <InventarioAlmacenModal
+                isOpen={isAlmacenModalOpen}
+                onClose={() => setIsAlmacenModalOpen(false)}
+            />
 
         </div>
     );

@@ -792,6 +792,8 @@ const VentasPage: React.FC = () => {
             filtered = filtered.filter(p => 
                 p.numero.toLowerCase().includes(term) ||
                 (p.numeroFactura && p.numeroFactura.toLowerCase().includes(term)) ||
+                p.cliente?.codigo?.toLowerCase().includes(term) ||
+                (clients?.find(c => c.id === p.cliente?.id)?.codigo?.toLowerCase().includes(term)) ||
                 p.cliente?.nombreTienda?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.nombres?.toLowerCase().includes(term) ||
                 p.cliente?.persona?.apellidos?.toLowerCase().includes(term) ||
@@ -801,7 +803,7 @@ const VentasPage: React.FC = () => {
         }
 
         return filtered;
-    }, [ventas, search, selectedSucursal, selectedCiudad, selectedVendedores, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal]);
+    }, [ventas, search, selectedSucursal, selectedCiudad, selectedVendedores, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal, clients]);
 
     const totalPages = Math.ceil(filteredventas.length / itemsPerPage) || 1;
 
@@ -820,6 +822,25 @@ const VentasPage: React.FC = () => {
             { header: 'Nro Venta', dataKey: 'numero' },
             { header: 'Vendedor', dataKey: 'vendedorNombre' },
             { header: 'Cliente', dataKey: 'clienteNombre' },
+            { header: 'Nota de Venta', dataKey: 'observaciones' },
+            { header: 'Sucursal', dataKey: 'sucursalNombre' },
+            { header: 'Total Bs.', dataKey: 'totalFormatted' }
+        ];
+
+        if (selectedSucursal || selectedCiudad) {
+            cols = cols.filter(c => c.dataKey !== 'sucursalNombre');
+        }
+
+        return cols;
+    };
+
+    const getExcelColumns = () => {
+        let cols = [
+            { header: 'Fecha', dataKey: 'fechaFormatted' },
+            { header: 'Nro Venta', dataKey: 'numero' },
+            { header: 'Vendedor', dataKey: 'vendedorNombre' },
+            { header: 'Código Cliente', dataKey: 'clienteCodigo' },
+            { header: 'Cliente', dataKey: 'clienteNombreSolo' },
             { header: 'Nota de Venta', dataKey: 'observaciones' },
             { header: 'Sucursal', dataKey: 'sucursalNombre' },
             { header: 'Total Bs.', dataKey: 'totalFormatted' }
@@ -861,7 +882,9 @@ const VentasPage: React.FC = () => {
                 id: s.id,
                 numero: s.numero || '-',
                 fechaFormatted: s.fecha ? s.fecha.split('T')[0].split('-').reverse().join('/') : '-',
+                clienteCodigo: (cliCodigo ? cliCodigo.replace(/\./g, '') : '') || '-',
                 clienteNombre: clienteTexto,
+                clienteNombreSolo: cliTienda,
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : '---',
                 observaciones: s.observaciones || '-',
                 sucursalNombre: s.sucursal?.nombre || '-',
@@ -880,7 +903,9 @@ const VentasPage: React.FC = () => {
             fechaFormatted: 'TOTALES (Bs.)',
             numero: '',
             vendedorNombre: '',
+            clienteCodigo: '',
             clienteNombre: '',
+            clienteNombreSolo: '',
             observaciones: '',
             sucursalNombre: '',
             totalFormatted: formatCurrencyAmount(totalSum)
@@ -944,7 +969,7 @@ const VentasPage: React.FC = () => {
             toast.error('No hay ventas para exportar');
             return;
         }
-        exportToExcel(getExportColumns(), getFormattedData(), 'ventas_reporte', getTotalsFooter());
+        exportToExcel(getExcelColumns(), getFormattedData(), 'ventas_reporte', getTotalsFooter());
     };
 
     const hasActiveFilters = selectedVendedores.length > 0 || !!fechaDesde || !!fechaHasta || !!search;
@@ -1094,6 +1119,9 @@ const VentasPage: React.FC = () => {
                             const hasFijo = Boolean(s.aplicaDescuentoFijo) || Number(s.descuentoFijoPorcentaje || 0) > 0 || descFijoCalc > 0;
                             const descPromoPct = Number(s.descuentoPromocionPorcentaje) || 0;
 
+                            const cliObj = s.cliente?.id ? (clients?.find(c => c.id === s.cliente?.id) || s.cliente) : s.cliente;
+                            const cliCodigo = (s.cliente?.codigo || cliObj?.codigo || '').trim();
+
                             return (
                                 <tr key={s.id} className="hover:bg-accent/50 transition-colors group">
                                     <td className="p-4">
@@ -1116,14 +1144,28 @@ const VentasPage: React.FC = () => {
                                     <td className="p-4">
                                         <div className="flex flex-col">
                                             {s.cliente?.nombreTienda ? (
-                                                <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                                                    <Store className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                    {s.cliente.nombreTienda}
-                                                </span>
+                                                <>
+                                                    <span className="text-sm font-bold text-foreground flex items-center gap-1">
+                                                        <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                                                        {s.cliente.nombreTienda}
+                                                    </span>
+                                                    {cliCodigo && (
+                                                        <span className="text-xs text-muted-foreground font-mono">
+                                                            Cód: {cliCodigo}
+                                                        </span>
+                                                    )}
+                                                </>
                                             ) : (
-                                                <span className="text-sm font-medium">
-                                                    {getClientPersonName(s.cliente)}
-                                                </span>
+                                                <>
+                                                    <span className="text-sm font-medium">
+                                                        {getClientPersonName(s.cliente)}
+                                                    </span>
+                                                    {cliCodigo && (
+                                                        <span className="text-xs text-muted-foreground font-mono">
+                                                            Cód: {cliCodigo}
+                                                        </span>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </td>
