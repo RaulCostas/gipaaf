@@ -331,17 +331,44 @@ const ReportesPage: React.FC = () => {
         return list;
     }, [personalList, selectedSucursal, selectedCiudad]);
 
-    // Clientes únicos ordenados para el selector
+    // Clientes únicos ordenados para el selector, respetando el filtro global de sucursal y ciudad
     const clientesUnicos = useMemo(() => {
-        if (clientesList && clientesList.length > 0) {
-            return [...clientesList].sort((a, b) => {
-                const na = getClientDisplayName(a);
-                const nb = getClientDisplayName(b);
-                return na.localeCompare(nb);
+        if (!clientesList || clientesList.length === 0) return [];
+        
+        let list = clientesList;
+
+        if (selectedSucursal) {
+            const sucId = Number(selectedSucursal);
+            list = list.filter(c => 
+                c.sucursal?.id === sucId ||
+                (c as any).sucursalId === sucId ||
+                c.ruta?.sucursal?.id === sucId ||
+                (c.ruta as any)?.sucursalId === sucId ||
+                (c.ruta as any)?.sucursales?.some((s: any) => s.id === sucId)
+            );
+        } else if (selectedCiudad) {
+            const ciuId = Number(selectedCiudad);
+            list = list.filter(c => {
+                const directCiudadId = (c.sucursal as any)?.ciudad?.id || (c.sucursal as any)?.ciudadId || (c as any).ciudad?.id || (c as any).ciudadId || (c.persona as any)?.ciudad?.id;
+                if (directCiudadId === ciuId) return true;
+                const rutaCiudadId = (c.ruta?.sucursal as any)?.ciudad?.id || (c.ruta?.sucursal as any)?.ciudadId;
+                if (rutaCiudadId === ciuId) return true;
+                if ((c.ruta as any)?.sucursales?.some((s: any) => s.ciudad?.id === ciuId || s.ciudadId === ciuId)) return true;
+                const clientSucId = c.sucursal?.id || (c as any).sucursalId || c.ruta?.sucursal?.id || (c.ruta as any)?.sucursalId;
+                if (clientSucId && sucursales) {
+                    const foundSuc = sucursales.find(s => s.id === clientSucId);
+                    if (foundSuc && ((foundSuc as any).ciudad?.id === ciuId || foundSuc.ciudadId === ciuId)) return true;
+                }
+                return false;
             });
         }
-        return [];
-    }, [clientesList]);
+
+        return [...list].sort((a, b) => {
+            const na = getClientDisplayName(a);
+            const nb = getClientDisplayName(b);
+            return na.localeCompare(nb);
+        });
+    }, [clientesList, selectedSucursal, selectedCiudad, sucursales]);
 
     const clientReportOptions: SearchableOption[] = useMemo(() => {
         return clientesUnicos.map(c => ({
@@ -358,6 +385,21 @@ const ReportesPage: React.FC = () => {
             ...clientReportOptions
         ];
     }, [clientReportOptions]);
+
+    // Limpiar clientes seleccionados si cambia la sucursal/ciudad global y ya no pertenecen a la lista filtrada
+    React.useEffect(() => {
+        if (kardexClienteId && clientesUnicos.length > 0 && !clientesUnicos.some(c => String(c.id) === kardexClienteId)) {
+            setKardexClienteId('');
+        }
+        if (filtroVentaCliente && clientesUnicos.length > 0 && !clientesUnicos.some(c => String(c.id) === filtroVentaCliente)) {
+            setFiltroVentaCliente('');
+            setVentaCurrentPage(1);
+        }
+        if (filtroCobranzaCliente && clientesUnicos.length > 0 && !clientesUnicos.some(c => String(c.id) === filtroCobranzaCliente)) {
+            setFiltroCobranzaCliente('');
+            setCobranzaCurrentPage(1);
+        }
+    }, [selectedSucursal, selectedCiudad, clientesUnicos, kardexClienteId, filtroVentaCliente, filtroCobranzaCliente]);
 
     // Proveedores ordenados para el selector
     const proveedoresUnicos = useMemo(() => {
@@ -1036,32 +1078,69 @@ const ReportesPage: React.FC = () => {
         const hastaStr = kardexFechaHasta ? kardexFechaHasta.substring(0, 10) : '';
 
         // 1. Ventas del cliente
-        const clientVentas = (ventasList || []).filter(v => 
-            (v.cliente?.id === cId || (v as any).clienteId === cId) && 
-            v.estado !== 'ANULADA' &&
-            (!selectedSucursal || v.sucursal?.id === Number(selectedSucursal) || (v as any).sucursalId === Number(selectedSucursal))
-        );
+        const clientVentas = (ventasList || []).filter(v => {
+            if (v.cliente?.id !== cId && (v as any).clienteId !== cId) return false;
+            if (v.estado === 'ANULADA') return false;
+            if (selectedSucursal) return v.sucursal?.id === Number(selectedSucursal) || (v as any).sucursalId === Number(selectedSucursal);
+            if (selectedCiudad) {
+                const ciudadId = (v.sucursal as any)?.ciudad?.id || (v.sucursal as any)?.ciudadId;
+                if (ciudadId) return ciudadId === Number(selectedCiudad);
+                const suc = sucursales?.find(s => s.id === (v.sucursal?.id || (v as any).sucursalId));
+                return (suc as any)?.ciudad?.id === Number(selectedCiudad) || suc?.ciudadId === Number(selectedCiudad);
+            }
+            return true;
+        });
 
         // 2. Pagos / Cobranzas del cliente
-        const clientPagos = (pagosList || []).filter(p => 
-            (p.cliente?.id === cId || (p as any).clienteId === cId || p.nota?.cliente?.id === cId || (p.nota as any)?.clienteId === cId) && 
-            p.activo !== false &&
-            (!selectedSucursal || p.nota?.sucursal?.id === Number(selectedSucursal) || (p.nota as any)?.sucursalId === Number(selectedSucursal))
-        );
+        const clientPagos = (pagosList || []).filter(p => {
+            if (p.cliente?.id !== cId && (p as any).clienteId !== cId && p.nota?.cliente?.id !== cId && (p.nota as any)?.clienteId !== cId) return false;
+            if (p.activo === false) return false;
+            if (selectedSucursal) {
+                return (p.nota?.sucursal as any)?.id === Number(selectedSucursal) || 
+                       (p.nota as any)?.sucursalId === Number(selectedSucursal) || 
+                       (p.cliente?.sucursal as any)?.id === Number(selectedSucursal);
+            }
+            if (selectedCiudad) {
+                const ciudadNota = (p.nota?.sucursal as any)?.ciudad?.id || (p.nota?.sucursal as any)?.ciudadId;
+                const ciudadCli = (p.cliente?.sucursal as any)?.ciudad?.id || (p.cliente?.sucursal as any)?.ciudadId;
+                if (ciudadNota === Number(selectedCiudad) || ciudadCli === Number(selectedCiudad)) return true;
+                const sucId = (p.nota?.sucursal as any)?.id || (p.nota as any)?.sucursalId || (p.cliente?.sucursal as any)?.id;
+                if (sucId && sucursales) {
+                    const suc = sucursales.find(s => s.id === sucId);
+                    return (suc as any)?.ciudad?.id === Number(selectedCiudad) || suc?.ciudadId === Number(selectedCiudad);
+                }
+                return false;
+            }
+            return true;
+        });
 
         // 3. Devoluciones del cliente (Cambios de producto a producto)
-        const clientDevoluciones = (devolucionesList || []).filter(d => 
-            (d.cliente?.id === cId || (d as any).clienteId === cId) && 
-            d.estado !== 'ANULADA' &&
-            (!selectedSucursal || d.sucursal?.id === Number(selectedSucursal) || (d as any).sucursalId === Number(selectedSucursal))
-        );
+        const clientDevoluciones = (devolucionesList || []).filter(d => {
+            if (d.cliente?.id !== cId && (d as any).clienteId !== cId) return false;
+            if (d.estado === 'ANULADA') return false;
+            if (selectedSucursal) return d.sucursal?.id === Number(selectedSucursal) || (d as any).sucursalId === Number(selectedSucursal);
+            if (selectedCiudad) {
+                const ciudadId = (d.sucursal as any)?.ciudad?.id || (d.sucursal as any)?.ciudadId;
+                if (ciudadId) return ciudadId === Number(selectedCiudad);
+                const suc = sucursales?.find(s => s.id === (d.sucursal?.id || (d as any).sucursalId));
+                return (suc as any)?.ciudad?.id === Number(selectedCiudad) || suc?.ciudadId === Number(selectedCiudad);
+            }
+            return true;
+        });
 
         // 4. Muestras entregadas al cliente
-        const clientMuestras = (muestrasList || []).filter(m => 
-            (m.cliente?.id === cId || (m as any).clienteId === cId) && 
-            m.estado !== 'ANULADO' &&
-            (!selectedSucursal || m.sucursal?.id === Number(selectedSucursal) || (m as any).sucursalId === Number(selectedSucursal))
-        );
+        const clientMuestras = (muestrasList || []).filter(m => {
+            if (m.cliente?.id !== cId && (m as any).clienteId !== cId) return false;
+            if (m.estado === 'ANULADO') return false;
+            if (selectedSucursal) return m.sucursal?.id === Number(selectedSucursal) || (m as any).sucursalId === Number(selectedSucursal);
+            if (selectedCiudad) {
+                const ciudadId = (m.sucursal as any)?.ciudad?.id || (m.sucursal as any)?.ciudadId;
+                if (ciudadId) return ciudadId === Number(selectedCiudad);
+                const suc = sucursales?.find(s => s.id === (m.sucursal?.id || (m as any).sucursalId));
+                return (suc as any)?.ciudad?.id === Number(selectedCiudad) || suc?.ciudadId === Number(selectedCiudad);
+            }
+            return true;
+        });
 
         // 5. Saldo Inicial: Ventas - Pagos anteriores a kardexFechaDesde
         let saldoInicial = 0;
@@ -1235,7 +1314,7 @@ const ReportesPage: React.FC = () => {
             totalMuestras: totalMuestrasCount,
             totalDevoluciones: totalDevs
         };
-    }, [selectedKardexCliente, ventasList, pagosList, devolucionesList, muestrasList, kardexFechaDesde, kardexFechaHasta, kardexIncluirDevoluciones, kardexIncluirMuestras, selectedSucursal]);
+    }, [selectedKardexCliente, ventasList, pagosList, devolucionesList, muestrasList, kardexFechaDesde, kardexFechaHasta, kardexIncluirDevoluciones, kardexIncluirMuestras, selectedSucursal, selectedCiudad, sucursales]);
 
     const exportColumnsKardex = useMemo(() => [
         { header: 'FECHA', dataKey: 'fecha' },
@@ -3507,7 +3586,7 @@ const ReportesPage: React.FC = () => {
                             <div className="pt-4 max-w-2xl mx-auto text-left">
                                 <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Clientes registrados recientemente:</div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {clientesList?.slice(0, 6).map(c => (
+                                    {clientesUnicos.slice(0, 6).map(c => (
                                         <button
                                             key={c.id}
                                             onClick={() => setKardexClienteId(String(c.id))}
