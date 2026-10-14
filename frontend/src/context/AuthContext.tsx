@@ -118,15 +118,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const hasAction = (recurso: string, accion: string): boolean => {
         if (isAdmin) return true;
         if (!user || !user.roles) return false;
-        const targetRecurso = recurso.toUpperCase();
-        const targetAccion = accion.toUpperCase();
+        const targetRecurso = recurso.trim().toUpperCase();
+        const targetAccion = accion.trim().toUpperCase();
 
         return user.roles.some((r: any) => {
             if (!r || !r.permisos || !Array.isArray(r.permisos)) return false;
-            return r.permisos.some((p: any) => 
-                (p.recurso && p.recurso.toUpperCase() === targetRecurso) &&
-                (p.accion && p.accion.toUpperCase() === targetAccion)
-            );
+            return r.permisos.some((p: any) => {
+                const rec = (p.recurso || '').trim().toUpperCase();
+                const acc = (p.accion || '').trim().toUpperCase();
+                const nom = (p.nombre || '').trim().toUpperCase();
+                return rec === targetRecurso && (acc === targetAccion || nom.includes(targetAccion));
+            });
         });
     };
 

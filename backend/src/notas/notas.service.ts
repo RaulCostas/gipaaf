@@ -382,6 +382,14 @@ export class NotasService implements OnModuleInit {
                 for (const det of nota.detalles || []) {
                     await manager.delete(MovimientoLote, { detalleNota: { id: det.id } });
                 }
+                // Si la nota estaba confirmada, borrar los movimientos de inventario anteriores para regenerarlos con los nuevos datos
+                if (nota.estado === EstadoNota.CONFIRMADA) {
+                    await manager.createQueryBuilder()
+                        .delete()
+                        .from(MovimientoInventario)
+                        .where('numeroDocumento = :num OR motivo LIKE :mot', { num: nota.numero, mot: `%[${nota.numero}]%` })
+                        .execute();
+                }
                 // Borrar detalles anteriores de la nota
                 await manager.delete(DetalleNota, { nota: { id: nota.id } });
 
@@ -540,6 +548,28 @@ export class NotasService implements OnModuleInit {
                                     fechaUltimaCompra: data.fecha || nota.fecha || new Date()
                                 });
                             }
+
+                            const finalInv = inv || (targetSucursal && det.producto ? await manager.findOne(Inventario, { 
+                                where: { producto: { id: det.producto.id }, sucursal: { id: targetSucursal.id } } 
+                            }) : null);
+
+                            if (finalInv) {
+                                const provPersona = nota.proveedor?.persona;
+                                const provName = nota.proveedor?.empresa || (provPersona ? `${provPersona.nombres || ''} ${provPersona.apellidos || ''}`.trim() : '');
+                                const motivo = `Compra [${nota.numero}]${provName ? ' - ' + provName : ''}`;
+                                const mov = manager.create(MovimientoInventario, {
+                                    inventario: finalInv,
+                                    tipo: 'COMPRA',
+                                    cantidad: Number(det.cantidad),
+                                    motivo: motivo.trim(),
+                                    numeroDocumento: nota.numero,
+                                    observaciones: data.observaciones !== undefined ? data.observaciones : (nota.observaciones || ''),
+                                    costoUnitario: costoUnitarioFinal,
+                                    usuario: nota.usuario || undefined,
+                                    creadoEn: data.fecha ? new Date(data.fecha + 'T12:00:00') : (nota.fecha ? new Date(nota.fecha + 'T12:00:00') : new Date()),
+                                });
+                                await manager.save(mov);
+                            }
                         }
                     } else if (nota.tipo === TipoNota.VENTA) {
                         for (const det of savedDetalles) {
@@ -610,6 +640,23 @@ export class NotasService implements OnModuleInit {
                             if (inv) {
                                 inv.stockActual = Number(inv.stockActual) - Number(det.cantidad);
                                 await manager.save(inv);
+
+                                // Registrar en Kardex / Movimientos
+                                const cliPersona = nota.cliente?.persona;
+                                const cliName = cliPersona ? `${cliPersona.nombres || ''} ${cliPersona.apellidos || ''}`.trim() : '';
+                                const motivo = `Venta [${nota.numero}]${cliName ? ' - ' + cliName : ''}`;
+                                const mov = manager.create(MovimientoInventario, {
+                                    inventario: inv,
+                                    tipo: 'VENTA',
+                                    cantidad: -Number(det.cantidad),
+                                    motivo: motivo.trim(),
+                                    numeroDocumento: nota.numero,
+                                    observaciones: data.observaciones !== undefined ? data.observaciones : (nota.observaciones || ''),
+                                    costoUnitario: Number(inv.precioCompra) || Number(det.producto?.precioCompra) || 0,
+                                    usuario: nota.usuario || undefined,
+                                    creadoEn: data.fecha ? new Date(data.fecha + 'T12:00:00') : (nota.fecha ? new Date(nota.fecha + 'T12:00:00') : new Date()),
+                                });
+                                await manager.save(mov);
                             }
                         }
                     }

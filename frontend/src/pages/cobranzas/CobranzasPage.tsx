@@ -527,8 +527,7 @@ const CobranzasPage: React.FC = () => {
     const excelColumns = [
         { header: 'Fecha', dataKey: 'fecha' },
         { header: 'Nro Venta', dataKey: 'notaNumero' },
-        { header: 'Código Cliente', dataKey: 'codigoCliente' },
-        { header: 'Cliente', dataKey: 'clienteNombreSolo' },
+        { header: 'Cliente', dataKey: 'clienteExcel' },
         { header: 'Vendedor', dataKey: 'vendedorNombre' },
         { header: 'Nota de Venta', dataKey: 'notaVenta' },
         { header: 'Sucursal', dataKey: 'sucursalNombre' },
@@ -559,8 +558,10 @@ const CobranzasPage: React.FC = () => {
             const fechaStr = p.fecha ? p.fecha.split('T')[0].split('-').reverse().join('/') : '-';
             const cliObj = p.cliente?.id ? (clients?.find(c => c.id === p.cliente?.id) || p.cliente) : p.cliente;
             const cliCodigo = (p.cliente?.codigo || p.nota?.cliente?.codigo || cliObj?.codigo || '').trim();
-            const cliTienda = (p.cliente?.nombreTienda || cliObj?.nombreTienda || '').trim() || getClientDisplayName(p.cliente);
+            const cliTienda = (p.cliente?.nombreTienda || cliObj?.nombreTienda || '').trim() || getClientDisplayName(cliObj || p.cliente);
             const clienteTexto = cliCodigo ? `(${cliCodigo}) ${cliTienda}` : cliTienda;
+            const cleanCodigo = (cliCodigo ? cliCodigo.replace(/\./g, '') : '').trim();
+            const clienteExcel = [cleanCodigo, cliTienda].filter(Boolean).join(' ') || '-';
             const recibo = (p.referencia || (p.id ? `REC-${String(p.id).padStart(6, '0')}` : '-')).trim() || '-';
 
             return {
@@ -572,6 +573,7 @@ const CobranzasPage: React.FC = () => {
                 codigoCliente: (cliCodigo ? cliCodigo.replace(/\./g, '') : '') || '-',
                 clienteNombre: clienteTexto,
                 clienteNombreSolo: cliTienda,
+                clienteExcel,
                 vendedorNombre,
                 notaVenta,
                 sucursalNombre,
@@ -632,7 +634,7 @@ const CobranzasPage: React.FC = () => {
 
     const getExcelColumns = () => {
         let cols = [...excelColumns];
-        if (filtroCliente) cols = cols.filter(c => c.dataKey !== 'clienteNombreSolo' && c.dataKey !== 'codigoCliente');
+        if (filtroCliente) cols = cols.filter(c => c.dataKey !== 'clienteExcel');
         if (selectedSucursal || selectedCiudad) cols = cols.filter(c => c.dataKey !== 'sucursalNombre');
         return cols;
     };
@@ -677,6 +679,7 @@ const CobranzasPage: React.FC = () => {
                 codigoCliente: '',
                 clienteNombre: '',
                 clienteNombreSolo: '',
+                clienteExcel: '',
                 vendedorNombre: '',
                 notaVenta: '',
                 sucursalNombre: '',
@@ -697,6 +700,7 @@ const CobranzasPage: React.FC = () => {
                 codigoCliente: '',
                 clienteNombre: '',
                 clienteNombreSolo: '',
+                clienteExcel: '',
                 vendedorNombre: '',
                 notaVenta: '',
                 sucursalNombre: '',

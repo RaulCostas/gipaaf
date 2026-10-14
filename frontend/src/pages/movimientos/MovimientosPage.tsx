@@ -128,6 +128,8 @@ const MovimientosPage: React.FC = () => {
             const timeA = a.creadoEn ? new Date(a.creadoEn).getTime() : 0;
             const timeB = b.creadoEn ? new Date(b.creadoEn).getTime() : 0;
             if (timeA !== timeB) return timeA - timeB;
+            if (a.tipo === 'INVENTARIO_INICIAL' && b.tipo !== 'INVENTARIO_INICIAL') return -1;
+            if (b.tipo === 'INVENTARIO_INICIAL' && a.tipo !== 'INVENTARIO_INICIAL') return 1;
             return (a.id || 0) - (b.id || 0);
         });
 
@@ -229,20 +231,26 @@ const MovimientosPage: React.FC = () => {
     const totals = useMemo(() => {
         let totalIngresos = 0;
         let totalSalidas = 0;
+        let inventarioInicial = 0;
 
         filteredMovimientos.forEach(m => {
             totalIngresos += m.ingreso;
             totalSalidas += m.salida;
+            if (m.tipo === 'INVENTARIO_INICIAL') {
+                inventarioInicial += m.ingreso;
+            }
         });
 
-        // If a specific product is filtered, the latest balance is the top item's saldo
-        const latestSaldo = filteredMovimientos.length > 0 ? filteredMovimientos[0].saldoCalculado : 0;
+        const comprasUOtrosIngresos = Math.max(0, totalIngresos - inventarioInicial);
+        const saldoActual = totalIngresos - totalSalidas;
 
         return {
+            inventarioInicial,
+            comprasUOtrosIngresos,
             totalIngresos,
             totalSalidas,
-            saldoNeto: totalIngresos - totalSalidas,
-            latestSaldo,
+            saldoNeto: saldoActual,
+            latestSaldo: saldoActual,
             count: filteredMovimientos.length
         };
     }, [filteredMovimientos]);
@@ -337,6 +345,7 @@ const MovimientosPage: React.FC = () => {
 
         if (tipoFilter !== 'TODOS') {
             const tipoMap: Record<string, string> = {
+                INVENTARIO_INICIAL: 'Inventario Inicial',
                 VENTA: 'Ventas',
                 COMPRA: 'Compras',
                 AJUSTE: 'Ajustes Manuales',
@@ -402,6 +411,7 @@ const MovimientosPage: React.FC = () => {
     }, [searchTerm, selectedProductId, selectedCiudad, selectedSucursal, tipoFilter, fechaHasta]);
 
     const getTipoIcon = (tipo: string, cantidad: number) => {
+        if (tipo === 'INVENTARIO_INICIAL') return <Package className="w-3 h-3" />;
         if (tipo === 'ENTRADA' || tipo === 'COMPRA' || tipo === 'TRASPASO_ENTRADA' || tipo === 'DEVOLUCION' || tipo === 'ANULACION_VENTA' || cantidad > 0) return <ArrowUpRight className="w-3 h-3" />;
         if (tipo === 'SALIDA' || tipo === 'VENTA' || tipo === 'TRASPASO_SALIDA' || tipo === 'ANULACION_COMPRA' || cantidad < 0) return <ArrowDownRight className="w-3 h-3" />;
         return <RefreshCw className="w-3 h-3" />;
@@ -409,6 +419,9 @@ const MovimientosPage: React.FC = () => {
 
     const getTipoColor = (tipo: string, cantidad: number) => {
         const t = (tipo || '').toUpperCase();
+        if (t === 'INVENTARIO_INICIAL') {
+            return 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800';
+        }
         if (t === 'VENTA') {
             return 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800';
         }
@@ -480,7 +493,7 @@ const MovimientosPage: React.FC = () => {
 
             {/* Banner de Producto Seleccionado (Estilo Kardex Individual) */}
             {selectedProduct && (
-                <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
                     <div className="space-y-1">
                         <div className="flex items-center gap-2">
                             <span className="px-2.5 py-0.5 rounded bg-primary text-primary-foreground font-mono font-bold text-xs shadow-sm">
@@ -498,10 +511,28 @@ const MovimientosPage: React.FC = () => {
                             <span>Precio Venta: <strong className="text-foreground">Bs. {Number(selectedProduct.precioVenta || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}</strong></span>
                         </p>
                     </div>
-                    <div className="flex items-center gap-4 bg-background/80 backdrop-blur px-4 py-2.5 rounded-xl border shadow-sm">
-                        <div className="text-right">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Saldo Actual</span>
-                            <span className="text-lg font-black text-primary font-mono">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 bg-background/90 backdrop-blur px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border shadow-sm">
+                        <div className="text-center px-2 border-r border-border/60">
+                            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">Ingreso Inicial</span>
+                            <span className="text-sm sm:text-base font-extrabold text-blue-700 dark:text-blue-300 font-mono">
+                                {formatQuantity(totals.inventarioInicial)}
+                            </span>
+                        </div>
+                        <div className="text-center px-2 border-r border-border/60">
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Otros Ingresos</span>
+                            <span className="text-sm sm:text-base font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
+                                {formatQuantity(totals.comprasUOtrosIngresos)}
+                            </span>
+                        </div>
+                        <div className="text-center px-2 border-r border-border/60">
+                            <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block">Total Salidas</span>
+                            <span className="text-sm sm:text-base font-extrabold text-rose-600 dark:text-rose-400 font-mono">
+                                {formatQuantity(totals.totalSalidas)}
+                            </span>
+                        </div>
+                        <div className="text-center sm:text-right pl-2">
+                            <span className="text-[10px] font-bold text-primary uppercase tracking-wider block">Saldo Actual</span>
+                            <span className="text-base sm:text-lg font-black text-primary font-mono">
                                 {formatQuantity(totals.latestSaldo)} {selectedProduct.unidadMedida || ''}
                             </span>
                         </div>
@@ -543,6 +574,7 @@ const MovimientosPage: React.FC = () => {
                         className="bg-transparent border-none outline-none font-medium cursor-pointer text-sm"
                     >
                         <option value="TODOS" className="bg-background text-foreground">Todos los Tipos</option>
+                        <option value="INVENTARIO_INICIAL" className="bg-background text-foreground">Inventario Inicial</option>
                         <option value="VENTA" className="bg-background text-foreground">Ventas</option>
                         <option value="COMPRA" className="bg-background text-foreground">Compras</option>
                         <option value="AJUSTE" className="bg-background text-foreground">Ajustes Manuales</option>

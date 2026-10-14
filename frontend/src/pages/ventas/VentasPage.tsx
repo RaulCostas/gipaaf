@@ -27,8 +27,12 @@ import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 
 const VentasPage: React.FC = () => {
-    const { isAdmin, isVendedor, isJefeVentas, userPersonal } = useAuth();
+    const { isAdmin, isVendedor, isJefeVentas, userPersonal, hasAction } = useAuth();
     const isRestrictedVendor = isVendedor && !isAdmin && !isJefeVentas && !!userPersonal;
+    const canCreateVenta = isAdmin || hasAction('VENTAS', 'CREAR');
+    const canEditVenta = isAdmin || hasAction('VENTAS', 'EDITAR') || hasAction('VENTAS', 'CREAR');
+    const canConfirmVenta = isAdmin || hasAction('VENTAS', 'CONFIRMAR');
+    const canAnularVenta = isAdmin || hasAction('VENTAS', 'ANULAR');
     const { selectedSucursal, selectedCiudad, isRestrictedToBranch, userSucursal, userCiudad } = useFilters();
     const queryClient = useQueryClient();
     const [isCreating, setIsCreating] = useState(false);
@@ -839,8 +843,7 @@ const VentasPage: React.FC = () => {
             { header: 'Fecha', dataKey: 'fechaFormatted' },
             { header: 'Nro Venta', dataKey: 'numero' },
             { header: 'Vendedor', dataKey: 'vendedorNombre' },
-            { header: 'Código Cliente', dataKey: 'clienteCodigo' },
-            { header: 'Cliente', dataKey: 'clienteNombreSolo' },
+            { header: 'Cliente', dataKey: 'clienteExcel' },
             { header: 'Nota de Venta', dataKey: 'observaciones' },
             { header: 'Sucursal', dataKey: 'sucursalNombre' },
             { header: 'Total Bs.', dataKey: 'totalFormatted' }
@@ -877,6 +880,8 @@ const VentasPage: React.FC = () => {
             const cliCodigo = (s.cliente?.codigo || cliObj?.codigo || '').trim();
             const cliTienda = (s.cliente?.nombreTienda || cliObj?.nombreTienda || '').trim() || getClientDisplayName(cliObj);
             const clienteTexto = cliCodigo ? `(${cliCodigo}) ${cliTienda}` : cliTienda;
+            const cleanCodigo = (cliCodigo ? cliCodigo.replace(/\./g, '') : '').trim();
+            const clienteExcel = [cleanCodigo, cliTienda].filter(Boolean).join(' ') || '-';
 
             return {
                 id: s.id,
@@ -885,6 +890,7 @@ const VentasPage: React.FC = () => {
                 clienteCodigo: (cliCodigo ? cliCodigo.replace(/\./g, '') : '') || '-',
                 clienteNombre: clienteTexto,
                 clienteNombreSolo: cliTienda,
+                clienteExcel,
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : '---',
                 observaciones: s.observaciones || '-',
                 sucursalNombre: s.sucursal?.nombre || '-',
@@ -906,6 +912,7 @@ const VentasPage: React.FC = () => {
             clienteCodigo: '',
             clienteNombre: '',
             clienteNombreSolo: '',
+            clienteExcel: '',
             observaciones: '',
             sucursalNombre: '',
             totalFormatted: formatCurrencyAmount(totalSum)
@@ -1004,15 +1011,19 @@ const VentasPage: React.FC = () => {
                         </button>
                     </div>
 
-                    <div className="hidden sm:block h-8 w-px bg-border mx-1"></div>
+                    {canCreateVenta && (
+                        <>
+                            <div className="hidden sm:block h-8 w-px bg-border mx-1"></div>
 
-                    <button
-                        onClick={() => { resetForm(); setIsCreating(true); }}
-                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm flex items-center gap-2"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Nueva Venta
-                    </button>
+                            <button
+                                onClick={() => { resetForm(); setIsCreating(true); }}
+                                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Nueva Venta
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -1238,7 +1249,7 @@ const VentasPage: React.FC = () => {
                                         >
                                             <Eye className="w-3.5 h-3.5 text-primary" />
                                         </button>
-                                        {s.estado !== EstadoNota.ANULADA && (
+                                        {canEditVenta && s.estado !== EstadoNota.ANULADA && (
                                             <button
                                                 onClick={() => handleEdit(s)}
                                                 className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1254,7 +1265,7 @@ const VentasPage: React.FC = () => {
                                         >
                                             <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                         </button>
-                                        {s.estado === EstadoNota.PENDIENTE && (
+                                        {canConfirmVenta && s.estado === EstadoNota.PENDIENTE && (
                                             <button
                                                 onClick={() => confirmMutation.mutate(s.id)}
                                                 className="px-2.5 py-1.5 bg-card border hover:border-green-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1263,7 +1274,7 @@ const VentasPage: React.FC = () => {
                                                 <CheckCircle className="w-3.5 h-3.5 text-green-600" />
                                             </button>
                                         )}
-                                        {s.estado !== EstadoNota.ANULADA && (
+                                        {canAnularVenta && s.estado !== EstadoNota.ANULADA && (
                                             Number(s.saldo) < Number(s.total) ? (
                                                 <button
                                                     type="button"
@@ -1831,7 +1842,7 @@ const VentasPage: React.FC = () => {
                                 </>
                             )}
 
-                            {!isViewing && (
+                            {!isViewing && (editingId ? canEditVenta : canCreateVenta) && (
                                 <button
                                     type="submit"
                                     className="px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-bold shadow-md hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"

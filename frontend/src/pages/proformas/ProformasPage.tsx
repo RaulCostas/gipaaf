@@ -27,8 +27,12 @@ import { getClientDisplayName, getClientPersonName, getClientStoreName } from '.
 import { useAuth } from '../../context/AuthContext';
 
 const ProformasPage: React.FC = () => {
-    const { isAdmin, isVendedor, isJefeVentas, userPersonal } = useAuth();
+    const { isAdmin, isVendedor, isJefeVentas, userPersonal, hasAction } = useAuth();
     const isRestrictedVendor = isVendedor && !isAdmin && !isJefeVentas && !!userPersonal;
+    const canCreateProforma = isAdmin || hasAction('PROFORMAS', 'CREAR');
+    const canEditProforma = isAdmin || hasAction('PROFORMAS', 'EDITAR') || hasAction('PROFORMAS', 'CREAR');
+    const canAnularProforma = isAdmin || hasAction('PROFORMAS', 'ANULAR');
+    const canConvertVenta = isAdmin || hasAction('VENTAS', 'CREAR');
     const { selectedSucursal, selectedCiudad, isRestrictedToBranch, userSucursal, userCiudad } = useFilters();
     const queryClient = useQueryClient();
     const [isCreating, setIsCreating] = useState(false);
@@ -743,8 +747,7 @@ const ProformasPage: React.FC = () => {
             { header: 'Fecha', dataKey: 'fechaFormatted' },
             { header: 'Nro Proforma', dataKey: 'numero' },
             { header: 'Vendedor', dataKey: 'vendedorNombre' },
-            { header: 'Código Cliente', dataKey: 'clienteCodigo' },
-            { header: 'Cliente', dataKey: 'clienteNombreSolo' },
+            { header: 'Cliente', dataKey: 'clienteExcel' },
             { header: 'Nota de Proforma', dataKey: 'observaciones' },
             { header: 'Sucursal', dataKey: 'sucursalNombre' },
             { header: 'Total Bs.', dataKey: 'totalFormatted' }
@@ -784,6 +787,8 @@ const ProformasPage: React.FC = () => {
             const cliCodigo = (s.cliente?.codigo || cliObj?.codigo || '').trim();
             const cliTienda = (s.cliente?.nombreTienda || cliObj?.nombreTienda || '').trim() || getClientDisplayName(cliObj);
             const clienteTexto = cliCodigo ? `(${cliCodigo}) ${cliTienda}` : cliTienda;
+            const cleanCodigo = (cliCodigo ? cliCodigo.replace(/\./g, '') : '').trim();
+            const clienteExcel = [cleanCodigo, cliTienda].filter(Boolean).join(' ') || '-';
 
             return {
                 id: s.id,
@@ -794,6 +799,7 @@ const ProformasPage: React.FC = () => {
                 clienteCodigo: (cliCodigo ? cliCodigo.replace(/\./g, '') : '') || '-',
                 clienteNombre: clienteTexto,
                 clienteNombreSolo: cliTienda,
+                clienteExcel,
                 vendedorNombre: s.vendedor ? `${s.vendedor.nombres || ''} ${s.vendedor.apellidos || ''}`.trim() : 'Sin asignar',
                 observaciones: s.observaciones || '-',
                 sucursalNombre: sucursalTexto,
@@ -814,6 +820,7 @@ const ProformasPage: React.FC = () => {
             clienteCodigo: '',
             clienteNombre: '',
             clienteNombreSolo: '',
+            clienteExcel: '',
             observaciones: '',
             sucursalNombre: '',
             totalFormatted: formatCurrencyAmount(totalSum)
@@ -912,15 +919,19 @@ const ProformasPage: React.FC = () => {
                         </button>
                     </div>
 
-                    <div className="hidden sm:block h-8 w-px bg-border mx-1"></div>
+                    {canCreateProforma && (
+                        <>
+                            <div className="hidden sm:block h-8 w-px bg-border mx-1"></div>
 
-                    <button
-                        onClick={() => { resetForm(); setIsCreating(true); }}
-                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm flex items-center gap-2"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Nueva Proforma
-                    </button>
+                            <button
+                                onClick={() => { resetForm(); setIsCreating(true); }}
+                                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Nueva Proforma
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -1146,7 +1157,7 @@ const ProformasPage: React.FC = () => {
                                         >
                                             <Eye className="w-3.5 h-3.5 text-primary" />
                                         </button>
-                                        {s.estado === EstadoNota.PENDIENTE && (
+                                        {canEditProforma && s.estado === EstadoNota.PENDIENTE && (
                                             <button
                                                 onClick={() => handleEdit(s)}
                                                 className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1162,7 +1173,7 @@ const ProformasPage: React.FC = () => {
                                         >
                                             <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                         </button>
-                                        {s.estado !== EstadoNota.ANULADA && s.estado !== EstadoNota.CONVERTIDA && (
+                                        {canConvertVenta && s.estado !== EstadoNota.ANULADA && s.estado !== EstadoNota.CONVERTIDA && (
                                             <button
                                                 onClick={() => convertMutation.mutate(s.id)}
                                                 disabled={convertMutation.isPending}
@@ -1172,7 +1183,7 @@ const ProformasPage: React.FC = () => {
                                                 <Calculator className="w-3.5 h-3.5 text-green-600" />
                                             </button>
                                         )}
-                                        {s.estado !== EstadoNota.ANULADA && s.estado !== EstadoNota.CONVERTIDA && (
+                                        {canAnularProforma && s.estado !== EstadoNota.ANULADA && s.estado !== EstadoNota.CONVERTIDA && (
                                             <button
                                                 onClick={() => setAnularConfirmId(s.id)}
                                                 className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1654,7 +1665,7 @@ const ProformasPage: React.FC = () => {
                                     </button>
                                 </>
                             )}
-                            {!isViewing && (
+                            {!isViewing && (editingId ? canEditProforma : canCreateProforma) && (
                                 <button
                                     type="submit"
                                     className="px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-bold shadow-md hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"

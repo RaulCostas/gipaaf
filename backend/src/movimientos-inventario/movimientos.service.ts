@@ -24,6 +24,7 @@ export class MovimientosInventarioService implements OnModuleInit {
 
     async onModuleInit() {
         await this.syncHistoricalNotas();
+        await this.syncInitialStock();
     }
 
     async syncHistoricalNotas() {
@@ -38,12 +39,45 @@ export class MovimientosInventarioService implements OnModuleInit {
                     continue;
                 }
 
-                // Check if any MovimientoInventario already exists for this nota number
-                const count = await this.repo.count({
-                    where: { motivo: Like(`%[${nota.numero}]%`) }
+                // Check existing MovimientoInventario for this nota number
+                const existingMovs = await this.repo.find({
+                    where: [
+                        { numeroDocumento: nota.numero },
+                        { motivo: Like(`%[${nota.numero}]%`) }
+                    ],
+                    relations: ['inventario', 'inventario.producto']
                 });
 
-                if (count > 0) continue; // Already synced
+                let needsResync = false;
+                if (existingMovs.length === 0) {
+                    needsResync = true;
+                } else if (existingMovs.length !== (nota.detalles || []).length) {
+                    needsResync = true;
+                } else {
+                    for (const det of (nota.detalles || [])) {
+                        const matchingMov = existingMovs.find(m => m.inventario?.producto?.id === det.producto?.id);
+                        if (!matchingMov) {
+                            needsResync = true;
+                            break;
+                        }
+                        const expectedCant = nota.tipo === TipoNota.COMPRA 
+                            ? Number(det.cantidad) 
+                            : (nota.tipo === TipoNota.VENTA ? -Number(det.cantidad) : Number(det.cantidad));
+                        if (Math.abs(Number(matchingMov.cantidad) - expectedCant) > 0.001) {
+                            needsResync = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!needsResync) {
+                    continue; // Already in sync with nota details
+                }
+
+                if (existingMovs.length > 0) {
+                    console.log(`[syncHistoricalNotas] Reconciliando movimientos para nota ${nota.numero} (detectada discrepancia en cantidad/detalles)...`);
+                    await this.repo.remove(existingMovs);
+                }
 
                 let targetSucursal: Sucursal | null = nota.sucursal || null;
                 if (!targetSucursal) {
@@ -217,6 +251,130 @@ export class MovimientosInventarioService implements OnModuleInit {
             }
         } catch (error) {
             console.error('Error sincronizando notas históricas a movimientos:', error);
+        }
+    }
+
+    async syncInitialStock() {
+        try {
+            // Buscar lotes de saldo inicial ('L-INI%')
+            const initialLotes = await this.loteRepo.find({
+                where: { numeroLote: Like('L-INI%') },
+                relations: ['producto', 'sucursal']
+            });
+
+            if (!initialLotes || initialLotes.length === 0) return;
+
+            // Verificar qué lotes o inventarios ya tienen su movimiento INVENTARIO_INICIAL
+            const existingInitialMovs = await this.repo.find({
+                where: { tipo: 'INVENTARIO_INICIAL' },
+                select: ['id', 'numeroDocumento']
+            });
+            const existingDocs = new Set(existingInitialMovs.map(m => m.numeroDocumento).filter(Boolean));
+
+            const lotesToSync = initialLotes.filter(l => !existingDocs.has(l.numeroLote));
+            
+            // Buscar todos los inventarios para relacionar rápido
+            const allInventarios = await this.inventarioRepo.find({
+                relations: ['producto', 'sucursal']
+            });
+            const invMap = new Map<string, Inventario>();
+            for (const inv of allInventarios) {
+                if (inv.producto?.id && inv.sucursal?.id) {
+                    invMap.set(`${inv.producto.id}_${inv.sucursal.id}`, inv);
+                }
+            }
+
+            const rawRowsToInsert: any[] = [];
+            for (const lote of lotesToSync) {
+                const prodId = lote.producto?.id;
+                const sucId = lote.sucursal?.id;
+                if (!prodId || !sucId) continue;
+
+                let inv = invMap.get(`${prodId}_${sucId}`);
+                if (!inv) {
+                    inv = await this.inventarioRepo.save(this.inventarioRepo.create({
+                        producto: lote.producto,
+                        sucursal: lote.sucursal,
+                        stockActual: Number(lote.cantidadActual) || Number(lote.cantidadInicial) || 0,
+                        stockMinimo: 0,
+                        stockMaximo: 0,
+                        precioCompra: Number(lote.costoUnitario) || 0,
+                        precioVenta: Number(lote.producto?.precioVenta) || 0
+                    }));
+                    invMap.set(`${prodId}_${sucId}`, inv);
+                }
+
+                const cant = Number(lote.cantidadInicial) || 0;
+                if (cant <= 0) continue;
+
+                const baseDate = lote.fechaIngreso 
+                    ? new Date(lote.fechaIngreso).toISOString() 
+                    : '2026-09-30 00:00:00';
+
+                rawRowsToInsert.push([
+                    inv.id,
+                    'INVENTARIO_INICIAL',
+                    cant,
+                    `Inventario Inicial [${lote.numeroLote}]`,
+                    lote.numeroLote,
+                    'Carga inicial de inventario al 30/09/2026',
+                    Number(lote.costoUnitario) || Number(inv.precioCompra) || 0,
+                    baseDate
+                ]);
+            }
+
+            // También verificar inventarios que tengan stockActual > 0 y no hayan tenido lote L-INI
+            for (const inv of allInventarios) {
+                const docId = `INI-INV-${inv.id}`;
+                const hasIniMov = existingDocs.has(docId);
+                const hasLoteForInv = initialLotes.some(l => l.producto?.id === inv.producto?.id && l.sucursal?.id === inv.sucursal?.id);
+                if (!hasIniMov && !hasLoteForInv && Number(inv.stockActual) > 0) {
+                    rawRowsToInsert.push([
+                        inv.id,
+                        'INVENTARIO_INICIAL',
+                        Number(inv.stockActual),
+                        `Inventario Inicial [${docId}]`,
+                        docId,
+                        'Stock inicial registrado en inventario al 30/09/2026',
+                        Number(inv.precioCompra) || 0,
+                        '2026-09-30 00:00:00'
+                    ]);
+                }
+            }
+
+            if (rawRowsToInsert.length === 0) {
+                return;
+            }
+
+            console.log(`[syncInitialStock] Insertando ${rawRowsToInsert.length} movimientos de inventario inicial...`);
+
+            // Insertar por lotes de 100
+            const batchSize = 100;
+            for (let i = 0; i < rawRowsToInsert.length; i += batchSize) {
+                const batch = rawRowsToInsert.slice(i, i + batchSize);
+                const valuePlaceholders: string[] = [];
+                const flatParams: any[] = [];
+                let paramIndex = 1;
+
+                for (const row of batch) {
+                    const rowPlaceholders: string[] = [];
+                    for (const val of row) {
+                        rowPlaceholders.push(`$${paramIndex++}`);
+                        flatParams.push(val);
+                    }
+                    valuePlaceholders.push(`(${rowPlaceholders.join(', ')})`);
+                }
+
+                const sql = `
+                    INSERT INTO movimientos_inventario ("inventarioId", tipo, cantidad, motivo, "numeroDocumento", observaciones, "costoUnitario", "creadoEn")
+                    VALUES ${valuePlaceholders.join(', ')}
+                `;
+                await this.repo.query(sql, flatParams);
+            }
+
+            console.log(`[syncInitialStock] Se crearon exitosamente ${rawRowsToInsert.length} movimientos de inventario inicial.`);
+        } catch (error) {
+            console.error('Error sincronizando inventario inicial a movimientos:', error);
         }
     }
 
