@@ -256,11 +256,37 @@ export class MovimientosInventarioService implements OnModuleInit {
 
     async syncInitialStock() {
         try {
-            // Buscar lotes de saldo inicial ('L-INI%')
-            const initialLotes = await this.loteRepo.find({
-                where: { numeroLote: Like('L-INI%') },
+            // 1. Limpiar movimientos erróneos de INVENTARIO_INICIAL generados para lotes auto-creados (L-INICIAL-%) o con fecha posterior al 30/09/2026
+            await this.repo.createQueryBuilder()
+                .delete()
+                .from(MovimientoInventario)
+                .where("tipo = 'INVENTARIO_INICIAL' AND (\"numeroDocumento\" LIKE 'L-INICIAL-%' OR \"creadoEn\" > :cutoff)", {
+                    cutoff: new Date('2026-10-05T00:00:00.000Z')
+                })
+                .execute();
+
+            // Eliminar lotes residuales L-INICIAL-% que no tengan movimientos_lote asociados
+            try {
+                await this.loteRepo.query(`
+                    DELETE FROM lotes l
+                    WHERE l."numeroLote" LIKE 'L-INICIAL-%'
+                      AND NOT EXISTS (SELECT 1 FROM movimientos_lote ml WHERE ml."loteId" = l.id);
+                `);
+            } catch (e) {
+                console.warn('Advertencia limpiando lotes residuales L-INICIAL:', e);
+            }
+
+            // 2. Buscar lotes de saldo inicial auténticos ('L-INI-%')
+            const allLotes = await this.loteRepo.find({
+                where: { numeroLote: Like('L-INI-%') },
                 relations: ['producto', 'sucursal']
             });
+
+            const initialLotes = (allLotes || []).filter(l =>
+                l.numeroLote.startsWith('L-INI-') &&
+                !l.numeroLote.startsWith('L-INICIAL') &&
+                (!l.fechaIngreso || new Date(l.fechaIngreso).getTime() <= new Date('2026-10-05T00:00:00.000Z').getTime())
+            );
 
             if (!initialLotes || initialLotes.length === 0) return;
 

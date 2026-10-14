@@ -78,7 +78,7 @@ export class InventarioService implements OnModuleInit {
 
                 if (faltante > 0) {
                     const nuevoLote = this.loteRepo.create({
-                        numeroLote: `L-INICIAL-${inv.producto.codigo || inv.producto.id}`,
+                        numeroLote: `L-AUTO-${inv.producto.codigo || inv.producto.id}`,
                         producto: inv.producto,
                         sucursal: inv.sucursal,
                         cantidadInicial: faltante,
