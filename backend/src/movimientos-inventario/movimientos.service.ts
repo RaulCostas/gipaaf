@@ -6,6 +6,7 @@ import { Nota, TipoNota, EstadoNota } from '../notas/nota.entity';
 import { Inventario } from '../inventario/inventario.entity';
 import { Sucursal } from '../sucursales/sucursal.entity';
 import { Lote } from '../inventario/lote.entity';
+import { Producto } from '../productos/producto.entity';
 
 @Injectable()
 export class MovimientosInventarioService implements OnModuleInit {
@@ -24,6 +25,7 @@ export class MovimientosInventarioService implements OnModuleInit {
 
     async onModuleInit() {
         await this.syncHistoricalNotas();
+        await this.applyInitialStockCorrections();
         await this.syncInitialStock();
     }
 
@@ -496,5 +498,121 @@ export class MovimientosInventarioService implements OnModuleInit {
         }
 
         return this.repo.remove(mov);
+    }
+
+    async applyInitialStockCorrections() {
+        try {
+            const corrections = [
+                { codigo: '100689L.36', nuevaCantidad: 61 },
+                { codigo: '300889B.90', nuevaCantidad: 33 },
+                { codigo: 'HW-1K-3003', nuevaCantidad: 36 },
+                { codigo: 'HW-1K-3025', nuevaCantidad: 3 },
+                { codigo: 'HW-1K-3034GLN', nuevaCantidad: 70 },
+                { codigo: 'HW-B-211', nuevaCantidad: 78 },
+                { codigo: 'HW-B-800', nuevaCantidad: 78 },
+                { codigo: 'HW-SPB', nuevaCantidad: 168 },
+                { codigo: 'IC-1K52', nuevaCantidad: 20 },
+                { codigo: 'IC-LIJA-P360', nuevaCantidad: 7600 },
+                { codigo: 'MAX-MPROM LL', nuevaCantidad: 18 },
+                { codigo: 'A21-09777', nuevaCantidad: 10 }
+            ];
+
+            const prodRepo = this.loteRepo.manager.getRepository(Producto);
+            const sucLP = await this.sucursalRepo.findOne({ where: { id: 1 } });
+            if (!sucLP) return;
+
+            for (const item of corrections) {
+                const loteNum = `L-INI-LP-${item.codigo}`;
+                const prod = await prodRepo.findOne({ where: { codigo: item.codigo } });
+                if (!prod) continue;
+
+                const lote = await this.loteRepo.findOne({
+                    where: { numeroLote: loteNum, sucursal: { id: 1 } },
+                    relations: ['producto', 'sucursal']
+                });
+
+                if (lote) {
+                    const oldInicial = Number(lote.cantidadInicial) || 0;
+                    const oldActual = Number(lote.cantidadActual) || 0;
+                    const diffInicial = item.nuevaCantidad - oldInicial;
+
+                    if (Math.abs(diffInicial) > 0.001) {
+                        const cantUsada = Math.max(0, oldInicial - oldActual);
+                        const newActual = Math.max(0, item.nuevaCantidad - cantUsada);
+
+                        lote.cantidadInicial = item.nuevaCantidad;
+                        lote.cantidadActual = newActual;
+                        await this.loteRepo.save(lote);
+
+                        const inv = await this.inventarioRepo.findOne({
+                            where: { producto: { id: prod.id }, sucursal: { id: 1 } }
+                        });
+                        if (inv) {
+                            inv.stockActual = Number(inv.stockActual) + diffInicial;
+                            await this.inventarioRepo.save(inv);
+                        }
+                    }
+                } else {
+                    let inv = await this.inventarioRepo.findOne({
+                        where: { producto: { id: prod.id }, sucursal: { id: 1 } }
+                    });
+                    if (!inv) {
+                        inv = await this.inventarioRepo.save(this.inventarioRepo.create({
+                            producto: prod,
+                            sucursal: sucLP,
+                            stockActual: item.nuevaCantidad,
+                            stockMinimo: 0,
+                            stockMaximo: 0,
+                            precioCompra: Number(prod.precioCompra) || 0,
+                            precioVenta: Number(prod.precioVenta) || 0
+                        }));
+                    } else {
+                        inv.stockActual = Number(inv.stockActual) <= 0 ? item.nuevaCantidad + Number(inv.stockActual) : item.nuevaCantidad;
+                        await this.inventarioRepo.save(inv);
+                    }
+
+                    await this.loteRepo.save(this.loteRepo.create({
+                        numeroLote: loteNum,
+                        producto: prod,
+                        sucursal: sucLP,
+                        cantidadInicial: item.nuevaCantidad,
+                        cantidadActual: Math.max(0, Number(inv.stockActual)),
+                        costoUnitario: Number(prod.precioCompra) || 0,
+                        fechaIngreso: new Date('2026-09-30T04:00:00.000Z')
+                    }));
+                }
+
+                // Sincronizar o crear el movimiento INVENTARIO_INICIAL
+                const mov = await this.repo.findOne({
+                    where: { numeroDocumento: loteNum, tipo: 'INVENTARIO_INICIAL' },
+                    relations: ['inventario']
+                });
+                if (mov) {
+                    if (Math.abs(Number(mov.cantidad) - item.nuevaCantidad) > 0.001) {
+                        mov.cantidad = item.nuevaCantidad;
+                        await this.repo.save(mov);
+                    }
+                } else {
+                    const inv = await this.inventarioRepo.findOne({
+                        where: { producto: { id: prod.id }, sucursal: { id: 1 } }
+                    });
+                    if (inv) {
+                        await this.repo.save(this.repo.create({
+                            inventario: inv,
+                            tipo: 'INVENTARIO_INICIAL',
+                            cantidad: item.nuevaCantidad,
+                            motivo: `Inventario Inicial [${loteNum}]`,
+                            numeroDocumento: loteNum,
+                            observaciones: 'Carga inicial de inventario al 30/09/2026',
+                            costoUnitario: Number(prod.precioCompra) || Number(inv.precioCompra) || 0,
+                            creadoEn: new Date('2026-09-30T08:00:00.000Z')
+                        }));
+                    }
+                }
+            }
+            console.log('[applyInitialStockCorrections] Correcciones de inventario inicial en La Paz aplicadas exitosamente.');
+        } catch (error) {
+            console.error('Error aplicando correcciones de inventario inicial en La Paz:', error);
+        }
     }
 }
