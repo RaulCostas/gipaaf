@@ -83,6 +83,8 @@ const RolesPage: React.FC = () => {
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRol, setEditingRol] = useState<Rol | null>(null);
+    const [rolNombre, setRolNombre] = useState('');
+    const [rolDescripcion, setRolDescripcion] = useState('');
     const [search, setSearch] = useState('');
     const [permSearch, setPermSearch] = useState('');
     const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
@@ -119,6 +121,13 @@ const RolesPage: React.FC = () => {
         }));
     }, [rawRoles]);
 
+    const duplicateRolNombre = useMemo(() => {
+        if (!isModalOpen || !roles) return null;
+        const nom = rolNombre.trim().toUpperCase();
+        if (!nom) return null;
+        return roles.find(r => r.id !== editingRol?.id && r.nombre?.trim().toUpperCase() === nom);
+    }, [isModalOpen, rolNombre, editingRol?.id, roles]);
+
     const permissions = useMemo(() => {
         return rawPermissions?.map(normalizePermiso);
     }, [rawPermissions]);
@@ -130,7 +139,7 @@ const RolesPage: React.FC = () => {
             setIsModalOpen(false);
             toast.success('Rol de seguridad creado exitosamente');
         },
-        onError: () => toast.error('Error al crear el rol'),
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al crear el rol'),
     });
 
     const updateMutation = useMutation({
@@ -141,7 +150,7 @@ const RolesPage: React.FC = () => {
             setIsModalOpen(false);
             toast.success('Rol de seguridad actualizado con éxito');
         },
-        onError: () => toast.error('Error al actualizar el rol'),
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al actualizar el rol'),
     });
 
     const toggleStatusMutation = useMutation({
@@ -151,7 +160,7 @@ const RolesPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['roles'] });
             toast.success(vars.activo ? 'Rol reactivado con éxito' : 'Rol dado de baja correctamente');
         },
-        onError: () => toast.error('Error al cambiar el estado del rol'),
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al cambiar el estado del rol'),
     });
 
     const deleteMutation = useMutation({
@@ -160,11 +169,13 @@ const RolesPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['roles'] });
             toast.success('Rol eliminado');
         },
-        onError: () => toast.error('No se pudo eliminar el rol'),
+        onError: (err: any) => toast.error(err.response?.data?.message || 'No se pudo eliminar el rol'),
     });
 
     const handleEdit = (rol: Rol) => {
         setEditingRol(rol);
+        setRolNombre(rol.nombre || '');
+        setRolDescripcion(rol.descripcion || '');
         setIsActivo(rol.activo !== false);
         setSelectedPermissions(rol.permisos?.map(p => p.id) || []);
         setPermSearch('');
@@ -173,6 +184,8 @@ const RolesPage: React.FC = () => {
 
     const handleOpenCreate = () => {
         setEditingRol(null);
+        setRolNombre('');
+        setRolDescripcion('');
         setIsActivo(true);
         setSelectedPermissions([]);
         setPermSearch('');
@@ -206,18 +219,21 @@ const RolesPage: React.FC = () => {
 
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const formData = new FormData(e.currentTarget);
-        const nombre = formData.get('nombre') as string;
-        const descripcion = formData.get('descripcion') as string;
+        const nombreLimpio = rolNombre.trim().toUpperCase();
 
-        if (!nombre || !nombre.trim()) {
+        if (!nombreLimpio) {
             toast.error('El nombre del rol es obligatorio');
             return;
         }
 
+        if (duplicateRolNombre) {
+            toast.error(`Ya existe un rol de seguridad registrado con el nombre "${nombreLimpio}".`);
+            return;
+        }
+
         const data = {
-            nombre: nombre.trim().toUpperCase(),
-            descripcion: descripcion ? descripcion.trim() : undefined,
+            nombre: nombreLimpio,
+            descripcion: rolDescripcion ? rolDescripcion.trim() : undefined,
             activo: isActivo,
             permisos: selectedPermissions.map(id => ({ id }))
         };
@@ -608,12 +624,20 @@ const RolesPage: React.FC = () => {
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                                 <input
                                     name="nombre"
-                                    defaultValue={editingRol?.nombre}
+                                    value={rolNombre}
+                                    onChange={(e) => setRolNombre(e.target.value)}
                                     required
-                                    className="w-full pl-10 pr-3 py-2 bg-background border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 font-mono uppercase text-sm font-bold"
+                                    className={`w-full pl-10 pr-3 py-2 bg-background border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 font-mono uppercase text-sm font-bold ${
+                                        duplicateRolNombre ? 'border-destructive focus:ring-destructive/20' : ''
+                                    }`}
                                     placeholder="EJ: VENDEDOR, CAJERO..."
                                 />
                             </div>
+                            {duplicateRolNombre && (
+                                <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                    <span>⚠️ Ya existe un rol de seguridad con el nombre "{duplicateRolNombre.nombre}".</span>
+                                </p>
+                            )}
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Descripción del Perfil</label>
@@ -621,7 +645,8 @@ const RolesPage: React.FC = () => {
                                 <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                                 <input
                                     name="descripcion"
-                                    defaultValue={editingRol?.descripcion}
+                                    value={rolDescripcion}
+                                    onChange={(e) => setRolDescripcion(e.target.value)}
                                     className="w-full pl-10 pr-3 py-2 bg-background border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
                                     placeholder="Breve resumen de responsabilidades..."
                                 />

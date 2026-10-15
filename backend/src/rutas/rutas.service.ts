@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Ruta } from './ruta.entity';
@@ -31,14 +31,44 @@ export class RutasService {
         return ruta;
     }
 
+    async validarNombreUnico(nombre?: string, sucursalId?: number, excludeId?: number) {
+        if (!nombre || !nombre.trim()) return;
+        const nombreLimpio = nombre.trim();
+        const qb = this.repo
+            .createQueryBuilder('r')
+            .where('LOWER(TRIM(r.nombre)) = LOWER(:nombre)', { nombre: nombreLimpio })
+            .andWhere('r.eliminadoEn IS NULL');
+
+        if (sucursalId) {
+            qb.andWhere('r.sucursalId = :sucursalId', { sucursalId });
+        } else {
+            qb.andWhere('r.sucursalId IS NULL');
+        }
+
+        const existing = await qb.getOne();
+
+        if (existing && (!excludeId || existing.id !== Number(excludeId))) {
+            const mensajeSucursal = sucursalId ? ' en esta sucursal' : '';
+            throw new BadRequestException(`Ya existe una ruta de ventas registrada con el nombre "${existing.nombre}"${mensajeSucursal}.`);
+        }
+    }
+
     async create(data: any) {
         const clienteIds = data.clienteIds;
         delete data.clienteIds;
 
-        let sucursalEntity: Sucursal | null = null;
+        const nombreLimpio = data.nombre?.trim();
         const sucursalId = typeof data.sucursal === 'object' ? data.sucursal?.id : data.sucursal;
-        if (sucursalId) {
-            sucursalEntity = await this.sucursalRepo.findOne({ where: { id: Number(sucursalId) } });
+        const parsedSucursalId = sucursalId ? Number(sucursalId) : undefined;
+
+        if (nombreLimpio) {
+            await this.validarNombreUnico(nombreLimpio, parsedSucursalId);
+            data.nombre = nombreLimpio;
+        }
+
+        let sucursalEntity: Sucursal | null = null;
+        if (parsedSucursalId) {
+            sucursalEntity = await this.sucursalRepo.findOne({ where: { id: parsedSucursalId } });
         }
 
         let vendedorEntity: Personal | null = null;
@@ -72,15 +102,27 @@ export class RutasService {
         const clienteIds = data.clienteIds;
         delete data.clienteIds;
 
+        const nuevoNombre = data.nombre !== undefined ? data.nombre?.trim() : entity.nombre;
+        let nuevoSucursalId: number | undefined;
+
         if (data.sucursal !== undefined) {
             const sucursalId = typeof data.sucursal === 'object' ? data.sucursal?.id : data.sucursal;
-            if (sucursalId) {
-                entity.sucursal = (await this.sucursalRepo.findOne({ where: { id: Number(sucursalId) } })) as any;
+            nuevoSucursalId = sucursalId ? Number(sucursalId) : undefined;
+            if (nuevoSucursalId) {
+                entity.sucursal = (await this.sucursalRepo.findOne({ where: { id: nuevoSucursalId } })) as any;
             } else {
                 entity.sucursal = null as any;
             }
             delete data.sucursal;
+        } else {
+            nuevoSucursalId = entity.sucursal?.id;
         }
+
+        if (data.nombre !== undefined) {
+            data.nombre = nuevoNombre;
+        }
+
+        await this.validarNombreUnico(nuevoNombre, nuevoSucursalId, id);
 
         if (data.vendedor !== undefined) {
             const vendedorId = typeof data.vendedor === 'object' ? data.vendedor?.id : data.vendedor;

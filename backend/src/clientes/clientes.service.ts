@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository, DataSource } from 'typeorm';
 import { Cliente } from './cliente.entity';
@@ -84,9 +84,56 @@ export class ClientesService {
         return res || c;
     }
 
+    private async validarCodigoUnicoPorSucursal(
+        codigo?: string | null,
+        sucursalId?: number | null,
+        excludeClienteId?: number
+    ): Promise<void> {
+        if (!codigo || !codigo.trim()) {
+            return;
+        }
+
+        const codigoLimpio = codigo.trim();
+        const qb = this.repo.createQueryBuilder('cliente')
+            .leftJoinAndSelect('cliente.sucursal', 'sucursal')
+            .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
+            .leftJoinAndSelect('cliente.persona', 'persona')
+            .where('LOWER(TRIM(cliente.codigo)) = LOWER(:codigo)', { codigo: codigoLimpio });
+
+        if (sucursalId) {
+            qb.andWhere('sucursal.id = :sucursalId', { sucursalId: Number(sucursalId) });
+        } else {
+            qb.andWhere('sucursal.id IS NULL');
+        }
+
+        if (excludeClienteId) {
+            qb.andWhere('cliente.id != :excludeClienteId', { excludeClienteId });
+        }
+
+        const duplicado = await qb.getOne();
+
+        if (duplicado) {
+            const nombreSucursal = duplicado.sucursal
+                ? `${duplicado.sucursal.nombre}${duplicado.sucursal.ciudad?.nombre ? ` (${duplicado.sucursal.ciudad.nombre})` : ''}`
+                : 'Sin Sucursal';
+            const detalleCliente = duplicado.nombreTienda
+                ? ` [Tienda: "${duplicado.nombreTienda}"]`
+                : duplicado.persona
+                    ? ` [Cliente: "${duplicado.persona.nombres} ${duplicado.persona.apellidos}"]`
+                    : '';
+            throw new BadRequestException(
+                `Ya existe un cliente con el código "${codigoLimpio}" en la sucursal "${nombreSucursal}"${detalleCliente}. No se permite repetir el código dentro de la misma sucursal.`
+            );
+        }
+    }
+
     async create(data: any) {
-        let sucursalEntity: Sucursal | null = null;
         const sucursalId = typeof data.sucursal === 'object' ? data.sucursal?.id : data.sucursal;
+        const codigo = data.codigo ? String(data.codigo).trim() : null;
+
+        await this.validarCodigoUnicoPorSucursal(codigo, sucursalId ? Number(sucursalId) : null);
+
+        let sucursalEntity: Sucursal | null = null;
         if (sucursalId) {
             sucursalEntity = await this.sucursalRepo.findOne({ where: { id: Number(sucursalId) } });
         }
@@ -99,6 +146,7 @@ export class ClientesService {
 
         const cliente = this.repo.create({
             ...data,
+            codigo,
             sucursal: sucursalEntity as any,
             ruta: rutaEntity as any
         });
@@ -108,10 +156,22 @@ export class ClientesService {
     async update(id: number, data: any) {
         const entity = await this.findOne(id);
 
+        let nuevoSucursalId = entity.sucursal ? entity.sucursal.id : null;
         if (data.sucursal !== undefined) {
-            const sucursalId = typeof data.sucursal === 'object' ? data.sucursal?.id : data.sucursal;
-            if (sucursalId) {
-                entity.sucursal = (await this.sucursalRepo.findOne({ where: { id: Number(sucursalId) } })) as any;
+            const sId = typeof data.sucursal === 'object' ? data.sucursal?.id : data.sucursal;
+            nuevoSucursalId = sId ? Number(sId) : null;
+        }
+
+        let nuevoCodigo = entity.codigo;
+        if (data.codigo !== undefined) {
+            nuevoCodigo = data.codigo ? String(data.codigo).trim() : null;
+        }
+
+        await this.validarCodigoUnicoPorSucursal(nuevoCodigo, nuevoSucursalId, id);
+
+        if (data.sucursal !== undefined) {
+            if (nuevoSucursalId) {
+                entity.sucursal = (await this.sucursalRepo.findOne({ where: { id: nuevoSucursalId } })) as any;
             } else {
                 entity.sucursal = null as any;
             }
@@ -126,6 +186,10 @@ export class ClientesService {
                 entity.ruta = null as any;
             }
             delete data.ruta;
+        }
+
+        if (data.codigo !== undefined) {
+            data.codigo = nuevoCodigo;
         }
 
         const merged = this.repo.merge(entity, data);

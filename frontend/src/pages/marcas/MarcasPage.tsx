@@ -61,8 +61,8 @@ const MarcasPage: React.FC = () => {
             setCurrentMarca({});
             toast.success('Marca creada con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al crear la marca');
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Ocurrió un error al crear la marca');
         }
     });
 
@@ -72,11 +72,19 @@ const MarcasPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['marcasList'] });
             setIsEditing(false);
             setCurrentMarca({});
+            toast.success('Marca actualizada con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al actualizar la marca');
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Ocurrió un error al actualizar la marca');
         }
     });
+
+    const duplicateMarcaNombre = useMemo(() => {
+        if (!isEditing || !marcasList) return null;
+        const nom = currentMarca.nombre?.trim().toLowerCase();
+        if (!nom) return null;
+        return marcasList.find(m => m.id !== currentMarca.id && m.nombre?.trim().toLowerCase() === nom);
+    }, [isEditing, currentMarca.nombre, currentMarca.id, marcasList]);
 
     const deleteMutation = useMutation({
         mutationFn: marcaService.delete,
@@ -84,21 +92,31 @@ const MarcasPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['marcasList'] });
             toast.error('Marca desactivada');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al desactivar la marca');
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Ocurrió un error al desactivar la marca');
         }
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        const nombreLimpio = currentMarca.nombre?.trim();
+        if (!nombreLimpio) {
+            toast.error('El nombre de la marca es obligatorio');
+            return;
+        }
+
+        if (duplicateMarcaNombre) {
+            toast.error(`Ya existe una marca registrada con el nombre "${nombreLimpio}".`);
+            return;
+        }
         
         // Remove relations before sending to avoid TypeORM update errors
         const { submarcas, padre, ...safeData } = currentMarca as any;
+        safeData.nombre = nombreLimpio;
 
         if (currentMarca.id) {
-            updateMutation.mutate(safeData as Marca, {
-                onSuccess: () => toast.success('Marca actualizada con éxito')
-            });
+            updateMutation.mutate(safeData as Marca);
         } else {
             createMutation.mutate(safeData);
         }
@@ -225,10 +243,19 @@ const MarcasPage: React.FC = () => {
                                     placeholder="Ej. Bebidas, Snacks..."
                                     value={currentMarca.nombre || ''}
                                     onChange={(e) => setCurrentMarca({ ...currentMarca, nombre: e.target.value })}
-                                    className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                    className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 outline-none transition-all text-sm ${
+                                        duplicateMarcaNombre 
+                                            ? 'border-destructive focus:ring-destructive/20 focus:border-destructive text-destructive font-semibold' 
+                                            : 'focus:ring-primary/20 hover:border-primary/50'
+                                    }`}
                                     required
                                 />
                             </div>
+                            {duplicateMarcaNombre && (
+                                <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                    <span>⚠️ Ya existe una marca registrada con el nombre "{duplicateMarcaNombre.nombre}".</span>
+                                </p>
+                            )}
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-semibold text-foreground">Descripción</label>

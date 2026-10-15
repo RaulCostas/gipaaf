@@ -98,7 +98,7 @@ const SucursalesPage: React.FC = () => {
             resetForm();
             toast.success('Sucursal creada con éxito');
         },
-        onError: () => toast.error('Error al crear sucursal')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al crear sucursal')
     });
 
     const updateMutation = useMutation({
@@ -107,9 +107,17 @@ const SucursalesPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['sucursales'] });
             setIsEditing(false);
             resetForm();
+            toast.success('Sucursal actualizada con éxito');
         },
-        onError: () => toast.error('Error al actualizar sucursal')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al actualizar sucursal')
     });
+
+    const duplicateSucursalNombre = useMemo(() => {
+        if (!isEditing || !sucursales) return null;
+        const nom = currentSucursal.nombre?.trim().toLowerCase();
+        if (!nom) return null;
+        return sucursales.find(s => s.id !== currentSucursal.id && s.nombre?.trim().toLowerCase() === nom);
+    }, [isEditing, currentSucursal.nombre, currentSucursal.id, sucursales]);
 
     const deleteMutation = useMutation({
         mutationFn: sucursalService.delete,
@@ -117,7 +125,7 @@ const SucursalesPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['sucursales'] });
             toast.error('Sucursal desactivada');
         },
-        onError: () => toast.error('Error al desactivar sucursal')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al desactivar sucursal')
     });
 
     const resetForm = () => {
@@ -136,8 +144,19 @@ const SucursalesPage: React.FC = () => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        const nombreLimpio = currentSucursal.nombre?.trim();
+        if (!nombreLimpio) {
+            toast.error('El nombre de la sucursal es obligatorio');
+            return;
+        }
+
+        if (duplicateSucursalNombre) {
+            toast.error(`Ya existe una sucursal registrada con el nombre "${nombreLimpio}".`);
+            return;
+        }
         
-        const payload: any = { ...currentSucursal };
+        const payload: any = { ...currentSucursal, nombre: nombreLimpio };
         if (ciudadId) {
             payload.ciudad = { id: Number(ciudadId) };
         } else {
@@ -146,10 +165,7 @@ const SucursalesPage: React.FC = () => {
         }
 
         if (currentSucursal.id) {
-            updateMutation.mutate(
-                { id: currentSucursal.id, sucursal: payload },
-                { onSuccess: () => toast.success('Sucursal actualizada con éxito') }
-            );
+            updateMutation.mutate({ id: currentSucursal.id, sucursal: payload });
         } else {
             createMutation.mutate(payload);
         }
@@ -259,11 +275,18 @@ const SucursalesPage: React.FC = () => {
                                     type="text"
                                     value={currentSucursal.nombre || ''}
                                     onChange={(e) => setCurrentSucursal({ ...currentSucursal, nombre: e.target.value })}
-                                    className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                    className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm ${
+                                        duplicateSucursalNombre ? 'border-destructive focus:ring-destructive/20' : ''
+                                    }`}
                                     placeholder="Ej: Sucursal Central"
                                     required
                                 />
                             </div>
+                            {duplicateSucursalNombre && (
+                                <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                    <span>⚠️ Ya existe una sucursal registrada con el nombre "{duplicateSucursalNombre.nombre}".</span>
+                                </p>
+                            )}
                         </div>
 
                         <div className="space-y-1.5">

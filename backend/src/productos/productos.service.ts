@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import { Producto } from './producto.entity';
@@ -51,10 +51,35 @@ export class ProductosService implements OnModuleInit {
         return p;
     }
 
+    private async validarCodigoUnico(codigo?: string | null, excludeProductoId?: number): Promise<void> {
+        if (!codigo || !codigo.trim()) {
+            throw new BadRequestException('El código del producto es obligatorio.');
+        }
+
+        const codigoLimpio = codigo.trim();
+        const qb = this.repo.createQueryBuilder('producto')
+            .where('LOWER(TRIM(producto.codigo)) = LOWER(:codigo)', { codigo: codigoLimpio });
+
+        if (excludeProductoId) {
+            qb.andWhere('producto.id != :excludeProductoId', { excludeProductoId });
+        }
+
+        const duplicado = await qb.select(['producto.id', 'producto.codigo', 'producto.nombre']).getOne();
+
+        if (duplicado) {
+            throw new BadRequestException(
+                `Ya existe un producto registrado con el código "${codigoLimpio}" (Producto: "${duplicado.nombre}").`
+            );
+        }
+    }
+
     async create(data: Partial<Producto>) {
+        const codigo = data.codigo ? String(data.codigo).trim() : null;
+        await this.validarCodigoUnico(codigo);
+
         const createData: any = {
-            codigo: data.codigo,
-            nombre: data.nombre,
+            codigo,
+            nombre: data.nombre ? String(data.nombre).trim() : data.nombre,
             descripcion: data.descripcion,
             precioCompra: data.precioCompra !== undefined && data.precioCompra !== null ? Number(data.precioCompra) : 0,
             precioVenta: data.precioVenta !== undefined && data.precioVenta !== null ? Number(data.precioVenta) : 0,
@@ -72,8 +97,12 @@ export class ProductosService implements OnModuleInit {
         await this.findOne(id);
 
         const updateData: any = {};
-        if (data.codigo !== undefined) updateData.codigo = data.codigo;
-        if (data.nombre !== undefined) updateData.nombre = data.nombre;
+        if (data.codigo !== undefined) {
+            const nuevoCodigo = data.codigo ? String(data.codigo).trim() : null;
+            await this.validarCodigoUnico(nuevoCodigo, id);
+            updateData.codigo = nuevoCodigo;
+        }
+        if (data.nombre !== undefined) updateData.nombre = String(data.nombre).trim();
         if (data.descripcion !== undefined) updateData.descripcion = data.descripcion;
         if (data.precioCompra !== undefined && data.precioCompra !== null) updateData.precioCompra = Number(data.precioCompra) || 0;
         if (data.precioVenta !== undefined && data.precioVenta !== null) updateData.precioVenta = Number(data.precioVenta) || 0;

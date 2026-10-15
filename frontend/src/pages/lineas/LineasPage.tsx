@@ -55,7 +55,7 @@ const LineasPage: React.FC = () => {
             setCurrentLinea({});
             toast.success('Línea creada con éxito');
         },
-        onError: () => toast.error('Ocurrió un error al crear la línea')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Ocurrió un error al crear la línea')
     });
 
     const updateMutation = useMutation({
@@ -64,9 +64,17 @@ const LineasPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['lineasList'] });
             setIsEditing(false);
             setCurrentLinea({});
+            toast.success('Línea actualizada con éxito');
         },
-        onError: () => toast.error('Ocurrió un error al actualizar la línea')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Ocurrió un error al actualizar la línea')
     });
+
+    const duplicateLineaNombre = useMemo(() => {
+        if (!isEditing || !lineasList) return null;
+        const nom = currentLinea.nombre?.trim().toLowerCase();
+        if (!nom) return null;
+        return lineasList.find(l => l.id !== currentLinea.id && l.nombre?.trim().toLowerCase() === nom);
+    }, [isEditing, currentLinea.nombre, currentLinea.id, lineasList]);
 
     const deleteMutation = useMutation({
         mutationFn: lineaService.delete,
@@ -74,16 +82,28 @@ const LineasPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['lineasList'] });
             toast.error('Línea desactivada');
         },
-        onError: () => toast.error('Ocurrió un error al desactivar la línea')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Ocurrió un error al desactivar la línea')
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        const nombreLimpio = currentLinea.nombre?.trim();
+        if (!nombreLimpio) {
+            toast.error('El nombre de la línea es obligatorio');
+            return;
+        }
+
+        if (duplicateLineaNombre) {
+            toast.error(`Ya existe una línea registrada con el nombre "${nombreLimpio}".`);
+            return;
+        }
+
         const { productos, marca, sublineas, padre, ...safeData } = currentLinea as any;
+        safeData.nombre = nombreLimpio;
+
         if (currentLinea.id) {
-            updateMutation.mutate(safeData as Linea, {
-                onSuccess: () => toast.success('Línea actualizada con éxito')
-            });
+            updateMutation.mutate(safeData as Linea);
         } else {
             createMutation.mutate(safeData);
         }
@@ -190,10 +210,19 @@ const LineasPage: React.FC = () => {
                                     placeholder="Ej. Duco, Barnices, Masillas..."
                                     value={currentLinea.nombre || ''}
                                     onChange={(e) => setCurrentLinea({ ...currentLinea, nombre: e.target.value })}
-                                    className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                    className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 outline-none transition-all text-sm ${
+                                        duplicateLineaNombre 
+                                            ? 'border-destructive focus:ring-destructive/20 focus:border-destructive text-destructive font-semibold' 
+                                            : 'focus:ring-primary/20 hover:border-primary/50'
+                                    }`}
                                     required
                                 />
                             </div>
+                            {duplicateLineaNombre && (
+                                <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                    <span>⚠️ Ya existe una línea registrada con el nombre "{duplicateLineaNombre.nombre}".</span>
+                                </p>
+                            )}
                         </div>
                         
                         <div className="space-y-1.5">

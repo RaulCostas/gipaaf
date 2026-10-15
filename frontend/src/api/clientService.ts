@@ -37,6 +37,9 @@ const cleanPayload = (data: any) => {
         if (payload.persona.ci === '') payload.persona.ci = null;
         if (payload.persona.email === '') payload.persona.email = null;
     }
+    if (typeof payload.codigo === 'string') {
+        payload.codigo = payload.codigo.trim();
+    }
     return payload;
 };
 

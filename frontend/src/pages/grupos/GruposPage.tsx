@@ -61,9 +61,7 @@ const GruposPage: React.FC = () => {
             setCurrentGrupo({});
             toast.success('Grupo creado con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al crear el grupo');
-        }
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Ocurrió un error al crear el grupo')
     });
 
     const updateMutation = useMutation({
@@ -72,11 +70,17 @@ const GruposPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['gruposList'] });
             setIsEditing(false);
             setCurrentGrupo({});
+            toast.success('Grupo actualizado con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al actualizar el grupo');
-        }
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Ocurrió un error al actualizar el grupo')
     });
+
+    const duplicateGrupoNombre = useMemo(() => {
+        if (!isEditing || !gruposList) return null;
+        const nom = currentGrupo.nombre?.trim().toLowerCase();
+        if (!nom) return null;
+        return gruposList.find(g => g.id !== currentGrupo.id && g.nombre?.trim().toLowerCase() === nom);
+    }, [isEditing, currentGrupo.nombre, currentGrupo.id, gruposList]);
 
     const deleteMutation = useMutation({
         mutationFn: grupoService.delete,
@@ -84,21 +88,29 @@ const GruposPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['gruposList'] });
             toast.error('Grupo desactivado');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al desactivar el grupo');
-        }
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Ocurrió un error al desactivar el grupo')
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        const nombreLimpio = currentGrupo.nombre?.trim();
+        if (!nombreLimpio) {
+            toast.error('El nombre del grupo es obligatorio');
+            return;
+        }
+
+        if (duplicateGrupoNombre) {
+            toast.error(`Ya existe un grupo registrado con el nombre "${nombreLimpio}".`);
+            return;
+        }
         
         // Remove relations before sending to avoid TypeORM update errors
         const { subgrupos, padre, categoria, ...safeData } = currentGrupo as any;
+        safeData.nombre = nombreLimpio;
 
         if (currentGrupo.id) {
-            updateMutation.mutate(safeData as Grupo, {
-                onSuccess: () => toast.success('Grupo actualizado con éxito')
-            });
+            updateMutation.mutate(safeData as Grupo);
         } else {
             createMutation.mutate(safeData);
         }
@@ -222,10 +234,17 @@ const GruposPage: React.FC = () => {
                                     placeholder="Ej. Primarios, Diluyentes..."
                                     value={currentGrupo.nombre || ''}
                                     onChange={(e) => setCurrentGrupo({ ...currentGrupo, nombre: e.target.value })}
-                                    className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                    className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm ${
+                                        duplicateGrupoNombre ? 'border-destructive focus:ring-destructive/20' : ''
+                                    }`}
                                     required
                                 />
                             </div>
+                            {duplicateGrupoNombre && (
+                                <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                    <span>⚠️ Ya existe un grupo registrado con el nombre "{duplicateGrupoNombre.nombre}".</span>
+                                </p>
+                            )}
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-semibold text-foreground">Descripción</label>

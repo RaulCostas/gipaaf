@@ -82,7 +82,7 @@ const ProveedoresPage: React.FC = () => {
             resetForm();
             toast.success('Proveedor creado con éxito');
         },
-        onError: () => toast.error('Error al crear proveedor')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al crear proveedor')
     });
 
     const updateMutation = useMutation({
@@ -91,9 +91,24 @@ const ProveedoresPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['suppliers'] });
             setIsEditing(false);
             resetForm();
+            toast.success('Proveedor actualizado con éxito');
         },
-        onError: () => toast.error('Error al actualizar proveedor')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al actualizar proveedor')
     });
+
+    const duplicateSupplierRuc = useMemo(() => {
+        if (!isEditing || !suppliers) return null;
+        const ruc = currentSupplier.ruc?.trim().toLowerCase();
+        if (!ruc) return null;
+        return suppliers.find(s => s.id !== currentSupplier.id && s.ruc?.trim().toLowerCase() === ruc);
+    }, [isEditing, currentSupplier.ruc, currentSupplier.id, suppliers]);
+
+    const duplicateSupplierEmpresa = useMemo(() => {
+        if (!isEditing || !suppliers) return null;
+        const emp = currentSupplier.empresa?.trim().toLowerCase();
+        if (!emp) return null;
+        return suppliers.find(s => s.id !== currentSupplier.id && s.empresa?.trim().toLowerCase() === emp);
+    }, [isEditing, currentSupplier.empresa, currentSupplier.id, suppliers]);
 
     const deleteMutation = useMutation({
         mutationFn: supplierService.delete,
@@ -101,7 +116,7 @@ const ProveedoresPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['suppliers'] });
             toast.error('Proveedor desactivado');
         },
-        onError: () => toast.error('Error al desactivar proveedor')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al desactivar proveedor')
     });
 
     const resetForm = () => {
@@ -118,12 +133,27 @@ const ProveedoresPage: React.FC = () => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (duplicateSupplierEmpresa) {
+            toast.error(`Ya existe un proveedor registrado con la empresa "${currentSupplier.empresa?.trim()}".`);
+            return;
+        }
+
+        if (duplicateSupplierRuc) {
+            toast.error(`El NIT/RUC "${currentSupplier.ruc?.trim()}" ya pertenece al proveedor "${duplicateSupplierRuc.empresa || `${duplicateSupplierRuc.persona?.nombres} ${duplicateSupplierRuc.persona?.apellidos}`}".`);
+            return;
+        }
+
+        const submitData = {
+            ...currentSupplier,
+            empresa: currentSupplier.empresa?.trim(),
+            ruc: currentSupplier.ruc?.trim() || null
+        };
+
         if (currentSupplier.id) {
-            updateMutation.mutate(currentSupplier as Proveedor, {
-                onSuccess: () => toast.success('Proveedor actualizado con éxito')
-            });
+            updateMutation.mutate(submitData as Proveedor);
         } else {
-            createMutation.mutate(currentSupplier);
+            createMutation.mutate(submitData);
         }
     };
 
@@ -224,10 +254,19 @@ const ProveedoresPage: React.FC = () => {
                                     placeholder="Ej: Distribuidora Automotriz S.A."
                                     value={currentSupplier.empresa || ''}
                                     onChange={(e) => setCurrentSupplier({ ...currentSupplier, empresa: e.target.value })}
-                                    className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                    className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 outline-none transition-all text-sm ${
+                                        duplicateSupplierEmpresa 
+                                            ? 'border-destructive focus:ring-destructive/20 focus:border-destructive text-destructive font-semibold' 
+                                            : 'focus:ring-primary/20 hover:border-primary/50'
+                                    }`}
                                     required
                                 />
                             </div>
+                            {duplicateSupplierEmpresa && (
+                                <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                    <span>⚠️ Ya existe un proveedor registrado con el nombre de empresa "{duplicateSupplierEmpresa.empresa}".</span>
+                                </p>
+                            )}
                         </div>
 
                         <div className="space-y-1.5">
@@ -239,9 +278,18 @@ const ProveedoresPage: React.FC = () => {
                                     placeholder="Ej: 1029384756"
                                     value={currentSupplier.ruc || ''}
                                     onChange={(e) => setCurrentSupplier({ ...currentSupplier, ruc: e.target.value })}
-                                    className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                    className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 outline-none transition-all text-sm ${
+                                        duplicateSupplierRuc 
+                                            ? 'border-destructive focus:ring-destructive/20 focus:border-destructive text-destructive font-semibold' 
+                                            : 'focus:ring-primary/20 hover:border-primary/50'
+                                    }`}
                                 />
                             </div>
+                            {duplicateSupplierRuc && (
+                                <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                    <span>⚠️ Este NIT/RUC ya pertenece al proveedor: {duplicateSupplierRuc.empresa || `${duplicateSupplierRuc.persona?.nombres} ${duplicateSupplierRuc.persona?.apellidos}`}.</span>
+                                </p>
+                            )}
                         </div>
 
                         <div className="pt-4 mt-2 border-t">

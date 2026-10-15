@@ -38,6 +38,8 @@ const UsuariosPage: React.FC = () => {
     const [formDireccion, setFormDireccion] = useState('');
     const [formSucursalId, setFormSucursalId] = useState('');
     const [selectedPersonalId, setSelectedPersonalId] = useState('');
+    const [formEmail, setFormEmail] = useState('');
+    const [formUsername, setFormUsername] = useState('');
     const [formFoto, setFormFoto] = useState<string>('');
     const [isUploadingFoto, setIsUploadingFoto] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,6 +48,20 @@ const UsuariosPage: React.FC = () => {
         queryKey: ['users'],
         queryFn: userService.getAll,
     });
+
+    const duplicateEmail = useMemo(() => {
+        if (!isModalOpen || !users) return null;
+        const em = formEmail.trim().toLowerCase();
+        if (!em) return null;
+        return users.find(u => u.id !== editingUsuario?.id && u.email?.trim().toLowerCase() === em);
+    }, [isModalOpen, formEmail, editingUsuario?.id, users]);
+
+    const duplicateUsername = useMemo(() => {
+        if (!isModalOpen || !users) return null;
+        const un = formUsername.trim().toLowerCase();
+        if (!un) return null;
+        return users.find(u => u.id !== editingUsuario?.id && u.username?.trim().toLowerCase() === un);
+    }, [isModalOpen, formUsername, editingUsuario?.id, users]);
 
     const { data: roles } = useQuery({
         queryKey: ['roles'],
@@ -130,6 +146,8 @@ const UsuariosPage: React.FC = () => {
     const handleOpenCreate = () => {
         setEditingUsuario(null);
         setSelectedPersonalId('');
+        setFormEmail('');
+        setFormUsername('');
         setFormNombres('');
         setFormApellidos('');
         setFormCi('');
@@ -143,6 +161,8 @@ const UsuariosPage: React.FC = () => {
     const handleOpenEdit = (u: Usuario) => {
         setEditingUsuario(u);
         setSelectedPersonalId(u.personal?.id ? String(u.personal.id) : '');
+        setFormEmail(u.email || '');
+        setFormUsername(u.username || '');
         setFormNombres(u.persona?.nombres || '');
         setFormApellidos(u.persona?.apellidos || '');
         setFormCi(u.persona?.ci || '');
@@ -205,11 +225,34 @@ const UsuariosPage: React.FC = () => {
         const formData = new FormData(e.currentTarget);
         const rolesIds = formData.getAll('roles').map(id => ({ id: Number(id) }));
 
+        const emailLimpio = formEmail.trim().toLowerCase();
+        const usernameLimpio = formUsername.trim();
+
+        if (!emailLimpio) {
+            toast.error('El correo electrónico es obligatorio');
+            return;
+        }
+
+        if (!usernameLimpio) {
+            toast.error('El nombre de usuario es obligatorio');
+            return;
+        }
+
+        if (duplicateEmail) {
+            toast.error(`El correo electrónico "${emailLimpio}" ya está registrado en otro usuario.`);
+            return;
+        }
+
+        if (duplicateUsername) {
+            toast.error(`El nombre de usuario "${usernameLimpio}" ya está en uso.`);
+            return;
+        }
+
         const sucursalIdVal = formSucursalId || formData.get('sucursalId');
 
         const userData: any = {
-            username: (formData.get('username') as string)?.trim(),
-            email: (formData.get('email') as string)?.trim().toLowerCase(),
+            username: usernameLimpio,
+            email: emailLimpio,
             foto: formFoto || null,
             activo: formData.get('activo') === 'on',
             sucursal: sucursalIdVal ? { id: Number(sucursalIdVal) } : null,
@@ -221,7 +264,7 @@ const UsuariosPage: React.FC = () => {
                 ci: formCi.trim(),
                 telefono: formTelefono.trim(),
                 direccion: formDireccion.trim(),
-                email: (formData.get('email') as string)?.trim().toLowerCase() || '',
+                email: emailLimpio,
             }
         };
 
@@ -538,12 +581,20 @@ const UsuariosPage: React.FC = () => {
                                         <input 
                                             name="email" 
                                             type="email" 
-                                            defaultValue={editingUsuario?.email} 
+                                            value={formEmail}
+                                            onChange={(e) => setFormEmail(e.target.value)}
                                             required 
-                                            className="w-full pl-10 pr-3 py-2.5 bg-background border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50" 
+                                            className={`w-full pl-10 pr-3 py-2.5 bg-background border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 ${
+                                                duplicateEmail ? 'border-destructive focus:ring-destructive/20' : ''
+                                            }`}
                                             placeholder="correo@empresa.com" 
                                         />
                                     </div>
+                                    {duplicateEmail && (
+                                        <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                            <span>⚠️ Ya existe un usuario con el correo "{duplicateEmail.email}".</span>
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-muted-foreground uppercase">Nombre de Usuario <span className="text-destructive">*</span></label>
@@ -551,12 +602,20 @@ const UsuariosPage: React.FC = () => {
                                         <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                                         <input 
                                             name="username" 
-                                            defaultValue={editingUsuario?.username} 
+                                            value={formUsername}
+                                            onChange={(e) => setFormUsername(e.target.value)}
                                             required 
-                                            className="w-full pl-10 pr-3 py-2.5 bg-background border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50" 
+                                            className={`w-full pl-10 pr-3 py-2.5 bg-background border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 ${
+                                                duplicateUsername ? 'border-destructive focus:ring-destructive/20' : ''
+                                            }`}
                                             placeholder="ej. santiago.costas" 
                                         />
                                     </div>
+                                    {duplicateUsername && (
+                                        <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                            <span>⚠️ Ya existe un usuario con el nombre de usuario "{duplicateUsername.username}".</span>
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-muted-foreground uppercase">

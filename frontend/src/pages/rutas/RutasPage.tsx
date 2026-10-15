@@ -138,8 +138,8 @@ const RutasPage: React.FC = () => {
             setSelectedClientIds([]);
             toast.success('Ruta y cartera de clientes creadas con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al crear la ruta');
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Ocurrió un error al crear la ruta');
         }
     });
 
@@ -153,10 +153,22 @@ const RutasPage: React.FC = () => {
             setSelectedClientIds([]);
             toast.success('Ruta y cartera de clientes actualizadas con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al actualizar la ruta');
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Ocurrió un error al actualizar la ruta');
         }
     });
+
+    const duplicateRutaNombre = useMemo(() => {
+        if (!isEditing || !rutasList) return null;
+        const nom = currentRuta.nombre?.trim().toLowerCase();
+        if (!nom) return null;
+        const sucId = currentRuta.sucursal?.id ? Number(currentRuta.sucursal.id) : null;
+        return rutasList.find(r =>
+            r.id !== currentRuta.id &&
+            r.nombre?.trim().toLowerCase() === nom &&
+            (r.sucursal?.id ? Number(r.sucursal.id) : null) === sucId
+        );
+    }, [isEditing, currentRuta.nombre, currentRuta.sucursal?.id, currentRuta.id, rutasList]);
 
     const deleteMutation = useMutation({
         mutationFn: rutaService.delete,
@@ -165,16 +177,29 @@ const RutasPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['clients'] });
             toast.error('Ruta desactivada');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al desactivar la ruta');
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Ocurrió un error al desactivar la ruta');
         }
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        const nombreLimpio = currentRuta.nombre?.trim();
+        if (!nombreLimpio) {
+            toast.error('El nombre de la ruta es obligatorio');
+            return;
+        }
+
+        if (duplicateRutaNombre) {
+            const sufijoSucursal = currentRuta.sucursal?.nombre ? ` en la sucursal "${currentRuta.sucursal.nombre}"` : '';
+            toast.error(`Ya existe una ruta registrada con el nombre "${nombreLimpio}"${sufijoSucursal}.`);
+            return;
+        }
         
         const submitData = {
             ...currentRuta,
+            nombre: nombreLimpio,
             vendedor: currentRuta.vendedor?.id ? { id: Number(currentRuta.vendedor.id) } : null,
             sucursal: currentRuta.sucursal?.id ? { id: Number(currentRuta.sucursal.id) } : null,
             clienteIds: selectedClientIds
@@ -759,10 +784,17 @@ const RutasPage: React.FC = () => {
                                     placeholder="Ej. Ruta Norte - Clínicas, Zona Sur - Farmacias..."
                                     value={currentRuta.nombre || ''}
                                     onChange={(e) => setCurrentRuta({ ...currentRuta, nombre: e.target.value })}
-                                    className="w-full pl-10 pr-3 py-2 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                    className={`w-full pl-10 pr-3 py-2 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm ${
+                                        duplicateRutaNombre ? 'border-destructive focus:ring-destructive/20' : ''
+                                    }`}
                                     required
                                 />
                             </div>
+                            {duplicateRutaNombre && (
+                                <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                    <span>⚠️ Ya existe una ruta registrada con el nombre "{duplicateRutaNombre.nombre}"{currentRuta.sucursal?.nombre ? ` en la sucursal "${currentRuta.sucursal.nombre}"` : ''}.</span>
+                                </p>
+                            )}
                         </div>
 
                         {/* Sucursal */}

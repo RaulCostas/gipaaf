@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Personal } from './personal.entity';
@@ -23,8 +23,33 @@ export class PersonalService {
         if (!personal) throw new NotFoundException('Personal no encontrado');
         return personal;
     }
+
+    private async validarCiUnico(ci?: string | null, excludePersonalId?: number): Promise<void> {
+        if (!ci || !ci.trim()) {
+            return;
+        }
+
+        const ciLimpio = ci.trim();
+        const qb = this.repo.createQueryBuilder('personal')
+            .where('LOWER(TRIM(personal.ci)) = LOWER(:ci)', { ci: ciLimpio });
+
+        if (excludePersonalId) {
+            qb.andWhere('personal.id != :excludePersonalId', { excludePersonalId });
+        }
+
+        const duplicado = await qb.select(['personal.id', 'personal.ci', 'personal.nombres', 'personal.apellidos']).getOne();
+
+        if (duplicado) {
+            throw new BadRequestException(
+                `Ya existe un personal/empleado registrado con el CI "${ciLimpio}" (${duplicado.nombres} ${duplicado.apellidos}).`
+            );
+        }
+    }
     
     async create(data: any) {
+        const ci = data.ci ? String(data.ci).trim() : null;
+        await this.validarCiUnico(ci);
+
         let sucursalEntity: Sucursal | null = null;
         const sucursalId = typeof data.sucursal === 'object' ? data.sucursal?.id : data.sucursal;
         if (sucursalId) {
@@ -33,6 +58,7 @@ export class PersonalService {
         
         const personal = this.repo.create({
             ...data,
+            ci,
             sucursal: sucursalEntity as any
         });
         return this.repo.save(personal);
@@ -40,6 +66,12 @@ export class PersonalService {
     
     async update(id: number, data: any) {
         const entity = await this.findOne(id);
+
+        if (data.ci !== undefined) {
+            const nuevoCi = data.ci ? String(data.ci).trim() : null;
+            await this.validarCiUnico(nuevoCi, id);
+            data.ci = nuevoCi;
+        }
         
         if (data.sucursal !== undefined) {
             const sucursalId = typeof data.sucursal === 'object' ? data.sucursal?.id : data.sucursal;

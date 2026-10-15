@@ -48,6 +48,13 @@ const ProductosPage: React.FC = () => {
         queryFn: lineaService.getAll,
     });
 
+    const duplicateProductCode = useMemo(() => {
+        if (!isEditing || !products) return null;
+        const cod = currentProduct.codigo?.trim().toLowerCase();
+        if (!cod) return null;
+        return products.find(p => p.id !== currentProduct.id && p.codigo?.trim().toLowerCase() === cod);
+    }, [isEditing, currentProduct.codigo, currentProduct.id, products]);
+
     const formatFechaCompra = (fecha?: string | Date) => {
         if (!fecha) return 'Sin compras';
         try {
@@ -203,9 +210,20 @@ const ProductosPage: React.FC = () => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        const codigoLimpio = currentProduct.codigo?.trim();
+        if (!codigoLimpio) {
+            toast.error('El código del producto es obligatorio');
+            return;
+        }
+
+        if (duplicateProductCode) {
+            toast.error(`El código "${codigoLimpio}" ya está registrado en el producto "${duplicateProductCode.nombre}".`);
+            return;
+        }
         
         const payload: Partial<Producto> = {
-            codigo: currentProduct.codigo?.trim(),
+            codigo: codigoLimpio,
             nombre: currentProduct.nombre?.trim(),
             descripcion: currentProduct.descripcion?.trim() || undefined,
             precioCompra: currentProduct.precioCompra !== undefined && currentProduct.precioCompra !== null && !isNaN(Number(currentProduct.precioCompra))
@@ -431,10 +449,19 @@ const ProductosPage: React.FC = () => {
                                         placeholder="SKU..."
                                         value={currentProduct.codigo || ''}
                                         onChange={(e) => setCurrentProduct({ ...currentProduct, codigo: e.target.value })}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                        className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 outline-none transition-all text-sm ${
+                                            duplicateProductCode 
+                                                ? 'border-destructive focus:ring-destructive/20 focus:border-destructive text-destructive font-semibold' 
+                                                : 'focus:ring-primary/20 hover:border-primary/50'
+                                        }`}
                                         required
                                     />
                                 </div>
+                                {duplicateProductCode && (
+                                    <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                        <span>⚠️ Este código ya pertenece a: "{duplicateProductCode.nombre}".</span>
+                                    </p>
+                                )}
                             </div>
                             
                             <div className="space-y-1.5">

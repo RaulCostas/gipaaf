@@ -142,7 +142,10 @@ const ClientesPage: React.FC = () => {
             resetForm();
             toast.success('Cliente creado con éxito');
         },
-        onError: () => toast.error('Error al crear cliente')
+        onError: (err: any) => {
+            const message = err.response?.data?.message || 'Error al crear cliente';
+            toast.error(message);
+        }
     });
 
     const updateMutation = useMutation({
@@ -151,9 +154,26 @@ const ClientesPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['clients'] });
             setIsEditing(false);
             resetForm();
+            toast.success('Cliente actualizado con éxito');
         },
-        onError: () => toast.error('Error al actualizar cliente')
+        onError: (err: any) => {
+            const message = err.response?.data?.message || 'Error al actualizar cliente';
+            toast.error(message);
+        }
     });
+
+    const duplicateClient = useMemo(() => {
+        if (!isEditing || !clients) return null;
+        const cod = currentClient.codigo?.trim().toLowerCase();
+        const sucId = currentClient.sucursal?.id ? Number(currentClient.sucursal.id) : null;
+        if (!cod || !sucId) return null;
+
+        return clients.find(c => 
+            c.id !== currentClient.id &&
+            c.sucursal?.id === sucId &&
+            c.codigo?.trim().toLowerCase() === cod
+        );
+    }, [isEditing, currentClient.codigo, currentClient.sucursal?.id, currentClient.id, clients]);
 
     const deleteMutation = useMutation({
         mutationFn: clientService.delete,
@@ -248,8 +268,25 @@ const ClientesPage: React.FC = () => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
+        const codigoLimpio = currentClient.codigo?.trim();
+        if (!codigoLimpio) {
+            toast.error('El código de cliente es obligatorio');
+            return;
+        }
+
+        if (!currentClient.sucursal?.id) {
+            toast.error('Debe seleccionar una sucursal para el cliente');
+            return;
+        }
+
+        if (duplicateClient) {
+            const sucNombre = currentClient.sucursal?.nombre || 'la misma sucursal';
+            toast.error(`El código "${codigoLimpio}" ya existe en ${sucNombre}. Por favor usa un código diferente.`);
+            return;
+        }
+
         // Extract ID for relations
-        const submitData = { ...currentClient } as any;
+        const submitData = { ...currentClient, codigo: codigoLimpio } as any;
         if (submitData.ruta?.id) {
             submitData.ruta = submitData.ruta.id;
         } else {
@@ -263,9 +300,7 @@ const ClientesPage: React.FC = () => {
         }
 
         if (currentClient.id) {
-            updateMutation.mutate(submitData as Cliente, {
-                onSuccess: () => toast.success('Cliente actualizado con éxito')
-            });
+            updateMutation.mutate(submitData as Cliente);
         } else {
             createMutation.mutate(submitData);
         }
@@ -554,11 +589,20 @@ const ClientesPage: React.FC = () => {
                                         type="text"
                                         value={currentClient.codigo || ''}
                                         onChange={(e) => setCurrentClient({ ...currentClient, codigo: e.target.value })}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                        className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 outline-none transition-all text-sm ${
+                                            duplicateClient 
+                                                ? 'border-destructive focus:ring-destructive/20 focus:border-destructive text-destructive font-semibold' 
+                                                : 'focus:ring-primary/20 hover:border-primary/50'
+                                        }`}
                                         placeholder="Ej: C-001"
                                         required
                                     />
                                 </div>
+                                {duplicateClient && (
+                                    <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                        <span>⚠️ Este código ya está en uso en esta sucursal por {duplicateClient.nombreTienda || `${duplicateClient.persona?.nombres} ${duplicateClient.persona?.apellidos}`}.</span>
+                                    </p>
+                                )}
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-foreground">Plazo de Crédito (Días)</label>
@@ -590,11 +634,12 @@ const ClientesPage: React.FC = () => {
                                 </div>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-sm font-semibold text-foreground">Sucursal Asignada</label>
+                                <label className="text-sm font-semibold text-foreground">Sucursal Asignada <span className="text-destructive">*</span></label>
                                 <div className="relative group">
                                     <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                                     <select
                                         disabled={isRestrictedToBranch}
+                                        required
                                         value={currentClient.sucursal?.id || ''}
                                         onChange={(e) => {
                                             const val = e.target.value;
@@ -606,7 +651,7 @@ const ClientesPage: React.FC = () => {
                                         }}
                                         className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer text-sm ${isRestrictedToBranch ? 'opacity-80 bg-muted/50 cursor-not-allowed' : ''}`}
                                     >
-                                        <option value="">-- Sin Sucursal Asignada --</option>
+                                        <option value="">-- Seleccionar Sucursal --</option>
                                         {sucursales?.filter(s => s.activo !== false || s.id === currentClient.sucursal?.id).map(s => (
                                             <option key={s.id} value={s.id}>
                                                 {s.nombre}{s.ciudad?.nombre ? ` (${s.ciudad.nombre})` : ''}
@@ -704,7 +749,13 @@ const ClientesPage: React.FC = () => {
                                 <tr key={client.id} className="hover:bg-accent/30 transition-colors group">
                                     <td className="p-4 text-sm font-mono text-muted-foreground">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                                     <td className="p-4 text-sm font-bold text-foreground">
-                                        {client.codigo || '-'}
+                                        <div>{client.codigo || '-'}</div>
+                                        {client.sucursal && (
+                                            <span className="text-[11px] font-normal text-muted-foreground flex items-center gap-1 mt-0.5" title={`Sucursal: ${client.sucursal.nombre}`}>
+                                                <Building2 className="w-3 h-3 shrink-0 text-muted-foreground/70" />
+                                                <span className="truncate max-w-[130px]">{client.sucursal.nombre}</span>
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="p-4">
                                         {client.nombreTienda ? (

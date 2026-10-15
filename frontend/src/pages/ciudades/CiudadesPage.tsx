@@ -70,7 +70,7 @@ const CiudadesPage: React.FC = () => {
             resetForm();
             toast.success('Ciudad creada con éxito');
         },
-        onError: () => toast.error('Error al crear ciudad')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al crear ciudad')
     });
 
     const updateMutation = useMutation({
@@ -79,9 +79,17 @@ const CiudadesPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['ciudades'] });
             setIsEditing(false);
             resetForm();
+            toast.success('Ciudad actualizada con éxito');
         },
-        onError: () => toast.error('Error al actualizar ciudad')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al actualizar ciudad')
     });
+
+    const duplicateCiudadNombre = useMemo(() => {
+        if (!isEditing || !ciudades) return null;
+        const nom = currentCiudad.nombre?.trim().toLowerCase();
+        if (!nom) return null;
+        return ciudades.find(c => c.id !== currentCiudad.id && c.nombre?.trim().toLowerCase() === nom);
+    }, [isEditing, currentCiudad.nombre, currentCiudad.id, ciudades]);
 
     const deleteMutation = useMutation({
         mutationFn: deleteCiudad,
@@ -89,7 +97,7 @@ const CiudadesPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['ciudades'] });
             toast.error('Ciudad desactivada');
         },
-        onError: () => toast.error('Error al desactivar ciudad')
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Error al desactivar ciudad')
     });
 
     const resetForm = () => {
@@ -101,13 +109,27 @@ const CiudadesPage: React.FC = () => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        const nombreLimpio = currentCiudad.nombre?.trim();
+        if (!nombreLimpio) {
+            toast.error('El nombre de la ciudad es obligatorio');
+            return;
+        }
+
+        if (duplicateCiudadNombre) {
+            toast.error(`Ya existe una ciudad registrada con el nombre "${nombreLimpio}".`);
+            return;
+        }
+
+        const payload = {
+            ...currentCiudad,
+            nombre: nombreLimpio
+        };
+
         if (currentCiudad.id) {
-            updateMutation.mutate(
-                { id: currentCiudad.id, ciudad: currentCiudad },
-                { onSuccess: () => toast.success('Ciudad actualizada con éxito') }
-            );
+            updateMutation.mutate({ id: currentCiudad.id, ciudad: payload });
         } else {
-            createMutation.mutate(currentCiudad as any);
+            createMutation.mutate(payload as any);
         }
     };
 
@@ -208,11 +230,18 @@ const CiudadesPage: React.FC = () => {
                                     type="text"
                                     value={currentCiudad.nombre || ''}
                                     onChange={(e) => setCurrentCiudad({ ...currentCiudad, nombre: e.target.value })}
-                                    className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                    className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm ${
+                                        duplicateCiudadNombre ? 'border-destructive focus:ring-destructive/20' : ''
+                                    }`}
                                     placeholder="Ej: Santa Cruz"
                                     required
                                 />
                             </div>
+                            {duplicateCiudadNombre && (
+                                <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                    <span>⚠️ Ya existe una ciudad registrada con el nombre "{duplicateCiudadNombre.nombre}".</span>
+                                </p>
+                            )}
                         </div>
 
                         <div className="flex items-center justify-between p-4 border rounded-lg bg-background hover:border-primary/50 transition-colors">

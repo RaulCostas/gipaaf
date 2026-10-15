@@ -151,8 +151,8 @@ const PersonalPage: React.FC = () => {
             resetForm();
             toast.success('Personal registrado con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al registrar el personal');
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Ocurrió un error al registrar el personal');
         }
     });
 
@@ -164,10 +164,17 @@ const PersonalPage: React.FC = () => {
             resetForm();
             toast.success('Personal actualizado con éxito');
         },
-        onError: () => {
-            toast.error('Ocurrió un error al actualizar el personal');
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Ocurrió un error al actualizar el personal');
         }
     });
+
+    const duplicatePersonalCi = useMemo(() => {
+        if (!isEditing || !personalList) return null;
+        const ciLimpio = currentPersonal.ci?.trim().toLowerCase();
+        if (!ciLimpio) return null;
+        return personalList.find(p => p.id !== currentPersonal.id && p.ci?.trim().toLowerCase() === ciLimpio);
+    }, [isEditing, currentPersonal.ci, currentPersonal.id, personalList]);
 
     const darDeBajaMutation = useMutation({
         mutationFn: ({ id, fechaBaja, motivoBaja }: { id: number; fechaBaja: string; motivoBaja: string }) => 
@@ -278,8 +285,14 @@ const PersonalPage: React.FC = () => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
+        if (duplicatePersonalCi) {
+            toast.error(`El CI "${currentPersonal.ci?.trim()}" ya está registrado para ${duplicatePersonalCi.nombres} ${duplicatePersonalCi.apellidos}.`);
+            return;
+        }
+
         const submitData = {
             ...currentPersonal,
+            ci: currentPersonal.ci?.trim() || null,
             sucursal: currentPersonal.sucursal?.id ? { id: Number(currentPersonal.sucursal.id) } : null,
             fechaIngreso: currentPersonal.fechaIngreso || null,
             fechaBaja: currentPersonal.activo ? null : (currentPersonal.fechaBaja || null),
@@ -418,9 +431,18 @@ const PersonalPage: React.FC = () => {
                                         placeholder="Ej: 5892341 LP"
                                         value={currentPersonal.ci || ''}
                                         onChange={(e) => setCurrentPersonal({ ...currentPersonal, ci: e.target.value })}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                        className={`w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 outline-none transition-all text-sm ${
+                                            duplicatePersonalCi 
+                                                ? 'border-destructive focus:ring-destructive/20 focus:border-destructive text-destructive font-semibold' 
+                                                : 'focus:ring-primary/20 hover:border-primary/50'
+                                        }`}
                                     />
                                 </div>
+                                {duplicatePersonalCi && (
+                                    <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                                        <span>⚠️ Este CI ya está registrado para: {duplicatePersonalCi.nombres} {duplicatePersonalCi.apellidos}.</span>
+                                    </p>
+                                )}
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-foreground">Celular</label>
