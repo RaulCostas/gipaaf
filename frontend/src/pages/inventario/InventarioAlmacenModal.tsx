@@ -179,8 +179,8 @@ const InventarioAlmacenModal: React.FC<InventarioAlmacenModalProps> = ({ isOpen,
     const printColumns = [
         { header: 'N°', dataKey: 'numero' },
         { header: 'Cód.', dataKey: 'codigo' },
-        { header: 'Producto', dataKey: 'producto' },
         { header: 'Marca', dataKey: 'marca' },
+        { header: 'Producto', dataKey: 'producto' },
         { header: 'Stock Sist.', dataKey: 'stockCorteFormatted' },
         { header: 'Físico', dataKey: 'conteoFisico' },
         { header: 'Dif.', dataKey: 'diferencia' }
@@ -189,8 +189,8 @@ const InventarioAlmacenModal: React.FC<InventarioAlmacenModalProps> = ({ isOpen,
     const excelColumns = [
         { header: 'N°', dataKey: 'numero' },
         { header: 'Código', dataKey: 'codigo' },
-        { header: 'Producto', dataKey: 'producto' },
         { header: 'Marca', dataKey: 'marca' },
+        { header: 'Producto', dataKey: 'producto' },
         { header: 'Línea', dataKey: 'linea' },
         { header: 'Unidad', dataKey: 'unidadMedida' },
         { header: 'Stock Sistema (Al Corte)', dataKey: 'stockCorte' },
@@ -423,8 +423,8 @@ const InventarioAlmacenModal: React.FC<InventarioAlmacenModalProps> = ({ isOpen,
                                 <tr>
                                     <th className="p-3 w-12 text-center">#</th>
                                     <th className="p-3 w-28">Código</th>
-                                    <th className="p-3">Producto</th>
                                     <th className="p-3 w-32">Marca</th>
+                                    <th className="p-3">Producto</th>
                                     <th className="p-3 w-28">Línea</th>
                                     <th className="p-3 w-28 text-right bg-primary/5 font-bold text-foreground">Stock Sistema</th>
                                     <th className="p-3 w-24 text-right text-muted-foreground">Hoy</th>
@@ -464,6 +464,9 @@ const InventarioAlmacenModal: React.FC<InventarioAlmacenModalProps> = ({ isOpen,
                                                 <td className="p-3 font-mono text-xs font-semibold text-primary">
                                                     {item.codigo}
                                                 </td>
+                                                <td className="p-3 text-xs text-muted-foreground font-medium">
+                                                    {item.marca}
+                                                </td>
                                                 <td className="p-3">
                                                     <div className="font-medium text-foreground text-xs sm:text-sm">
                                                         {item.nombre}
@@ -471,9 +474,6 @@ const InventarioAlmacenModal: React.FC<InventarioAlmacenModalProps> = ({ isOpen,
                                                     <span className="text-[10px] text-muted-foreground">
                                                         Unidad: {item.unidadMedida}
                                                     </span>
-                                                </td>
-                                                <td className="p-3 text-xs text-muted-foreground">
-                                                    {item.marca}
                                                 </td>
                                                 <td className="p-3 text-xs text-muted-foreground">
                                                     {item.linea}
