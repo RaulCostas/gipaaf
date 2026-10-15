@@ -542,7 +542,8 @@ const ProductosPage: React.FC = () => {
                                         placeholder="0.00"
                                         value={currentProduct.precioCompra !== undefined && currentProduct.precioCompra !== null ? currentProduct.precioCompra : ''}
                                         onChange={(e) => setCurrentProduct({ ...currentProduct, precioCompra: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm"
+                                        onWheel={(e) => e.currentTarget.blur()}
+                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                 </div>
                             </div>
@@ -556,7 +557,8 @@ const ProductosPage: React.FC = () => {
                                         placeholder="0.00"
                                         value={currentProduct.precioVenta || ''}
                                         onChange={(e) => setCurrentProduct({ ...currentProduct, precioVenta: parseFloat(e.target.value) })}
-                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all font-semibold text-sm"
+                                        onWheel={(e) => e.currentTarget.blur()}
+                                        className="w-full pl-10 pr-3 py-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all font-semibold text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         required
                                     />
                                 </div>
