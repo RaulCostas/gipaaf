@@ -1249,15 +1249,6 @@ const VentasPage: React.FC = () => {
                                         >
                                             <Eye className="w-3.5 h-3.5 text-primary" />
                                         </button>
-                                        {canEditVenta && s.estado !== EstadoNota.ANULADA && (
-                                            <button
-                                                onClick={() => handleEdit(s)}
-                                                className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                                                title="Editar Venta"
-                                            >
-                                                <Edit className="w-3.5 h-3.5 text-amber-500" />
-                                            </button>
-                                        )}
                                         <button
                                             onClick={() => handleOpenWhatsAppModal(s)}
                                             className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1272,6 +1263,15 @@ const VentasPage: React.FC = () => {
                                                 title="Confirmar Venta (Cerrar)"
                                             >
                                                 <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                                            </button>
+                                        )}
+                                        {canEditVenta && s.estado !== EstadoNota.ANULADA && (
+                                            <button
+                                                onClick={() => handleEdit(s)}
+                                                className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                title="Editar Venta"
+                                            >
+                                                <Edit className="w-3.5 h-3.5 text-amber-500" />
                                             </button>
                                         )}
                                         {canAnularVenta && s.estado !== EstadoNota.ANULADA && (

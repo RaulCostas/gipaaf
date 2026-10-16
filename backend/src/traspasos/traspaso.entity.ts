@@ -11,7 +11,6 @@ import {
 import { Sucursal } from '../sucursales/sucursal.entity';
 import { Usuario } from '../usuarios/usuario.entity';
 import { DetalleTraspaso } from './detalle-traspaso.entity';
-import { Egreso } from '../egresos/egreso.entity';
 
 export enum EstadoTraspaso {
     COMPLETADO = 'COMPLETADO',
@@ -49,10 +48,6 @@ export class Traspaso {
         default: CargoCostoTraspaso.ORIGEN,
     })
     sucursalCargoCosto: CargoCostoTraspaso; // Sucursal que asume el costo de transporte (ORIGEN o DESTINO)
-
-    @ManyToOne(() => Egreso, { nullable: true, onDelete: 'SET NULL' })
-    @JoinColumn()
-    egreso: Egreso;
 
     @Column({ type: 'text', nullable: true })
     motivo: string;

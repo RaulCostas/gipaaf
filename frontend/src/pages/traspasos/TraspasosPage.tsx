@@ -1171,15 +1171,6 @@ const TraspasosPage: React.FC = () => {
                                                 >
                                                     <Eye className="w-3.5 h-3.5 text-primary" />
                                                 </button>
-                                                {!isAnulado && (
-                                                    <button
-                                                        onClick={() => handleOpenEdit(t)}
-                                                        className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                                                        title="Editar Traspaso"
-                                                    >
-                                                        <Edit className="w-3.5 h-3.5 text-amber-500" />
-                                                    </button>
-                                                )}
                                                 <button
                                                     onClick={() => handlePrintIndividualTraspaso(t)}
                                                     className="px-2.5 py-1.5 bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1195,13 +1186,22 @@ const TraspasosPage: React.FC = () => {
                                                     <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                                 </button>
                                                 {!isAnulado && (
-                                                    <button
-                                                        onClick={() => setAnularConfirmId(t.id)}
-                                                        className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                                                        title="Anular Traspaso (Revertir Stock)"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleOpenEdit(t)}
+                                                            className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                            title="Editar Traspaso"
+                                                        >
+                                                            <Edit className="w-3.5 h-3.5 text-amber-500" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setAnularConfirmId(t.id)}
+                                                            className="px-2.5 py-1.5 bg-card border hover:border-red-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                            title="Anular Traspaso (Revertir Stock)"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                                        </button>
+                                                    </>
                                                 )}
                                             </div>
                                         </td>

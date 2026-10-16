@@ -79,7 +79,13 @@ const EgresosPage: React.FC = () => {
 
     const mappedExportData = useMemo(() => {
         if (!egresosList) return [];
-        return egresosList.map(e => {
+        return egresosList
+            .filter(e => 
+                !e.codigo?.startsWith('EGR-TRASP') &&
+                !e.nroComprobante?.startsWith('TRASP-') &&
+                !e.detalle?.toLowerCase().includes('costo de transporte por traspaso')
+            )
+            .map(e => {
             const montoFormatted = Number(e.monto || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const fechaFormatted = e.fecha ? format(new Date(e.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-';
             const sucursalNombre = e.sucursal?.nombre ? `${e.sucursal.nombre}${e.sucursal.ciudad?.nombre ? ` (${e.sucursal.ciudad.nombre})` : ''}` : '-';
@@ -211,7 +217,12 @@ const EgresosPage: React.FC = () => {
     // Filter Logic
     const filteredEgresos = useMemo(() => {
         if (!egresosList) return [];
-        let filtered = egresosList;
+        // Excluir costos de transporte de traspasos para no mezclar con egresos operativos diarios
+        let filtered = egresosList.filter(e => 
+            !e.codigo?.startsWith('EGR-TRASP') &&
+            !e.nroComprobante?.startsWith('TRASP-') &&
+            !e.detalle?.toLowerCase().includes('costo de transporte por traspaso')
+        );
 
         if (selectedSucursal) {
             filtered = filtered.filter(e => e.sucursal?.id === Number(selectedSucursal) || e.sucursalId === Number(selectedSucursal));

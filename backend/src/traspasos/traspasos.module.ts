@@ -6,7 +6,6 @@ import { Inventario } from '../inventario/inventario.entity';
 import { Sucursal } from '../sucursales/sucursal.entity';
 import { Producto } from '../productos/producto.entity';
 import { Lote } from '../inventario/lote.entity';
-import { Egreso } from '../egresos/egreso.entity';
 import { MovimientoInventario } from '../movimientos-inventario/movimiento_inventario.entity';
 import { TraspasosService } from './traspasos.service';
 import { TraspasosController } from './traspasos.controller';
@@ -20,7 +19,6 @@ import { TraspasosController } from './traspasos.controller';
             Sucursal,
             Producto,
             Lote,
-            Egreso,
             MovimientoInventario,
         ]),
     ],

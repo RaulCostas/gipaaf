@@ -1157,15 +1157,6 @@ const ProformasPage: React.FC = () => {
                                         >
                                             <Eye className="w-3.5 h-3.5 text-primary" />
                                         </button>
-                                        {canEditProforma && s.estado === EstadoNota.PENDIENTE && (
-                                            <button
-                                                onClick={() => handleEdit(s)}
-                                                className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                                                title="Editar Proforma"
-                                            >
-                                                <Edit className="w-3.5 h-3.5 text-amber-500" />
-                                            </button>
-                                        )}
                                         <button
                                             onClick={() => handleOpenWhatsAppModal(s)}
                                             className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1181,6 +1172,15 @@ const ProformasPage: React.FC = () => {
                                                 title="Convertir a Venta Confirmada"
                                             >
                                                 <Calculator className="w-3.5 h-3.5 text-green-600" />
+                                            </button>
+                                        )}
+                                        {canEditProforma && s.estado === EstadoNota.PENDIENTE && (
+                                            <button
+                                                onClick={() => handleEdit(s)}
+                                                className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                title="Editar Proforma"
+                                            >
+                                                <Edit className="w-3.5 h-3.5 text-amber-500" />
                                             </button>
                                         )}
                                         {canAnularProforma && s.estado !== EstadoNota.ANULADA && s.estado !== EstadoNota.CONVERTIDA && (

@@ -1154,15 +1154,6 @@ const CobranzasPage: React.FC = () => {
                                         </td>
                                         <td className="p-4 text-right">
                                             <div className="flex justify-end gap-1.5 items-center">
-                                                {p.activo && canEdit && (
-                                                    <button
-                                                        onClick={() => openEditModal(p)}
-                                                        className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                                                        title="Editar Cobranza"
-                                                    >
-                                                        <Edit className="w-3.5 h-3.5 text-amber-500" />
-                                                    </button>
-                                                )}
                                                 {p.activo && (
                                                     <button
                                                         onClick={() => handleOpenWhatsAppModal(p)}
@@ -1170,6 +1161,15 @@ const CobranzasPage: React.FC = () => {
                                                         title="Enviar Recibo de Cobranza en PDF por WhatsApp"
                                                     >
                                                         <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                                    </button>
+                                                )}
+                                                {p.activo && canEdit && (
+                                                    <button
+                                                        onClick={() => openEditModal(p)}
+                                                        className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                        title="Editar Cobranza"
+                                                    >
+                                                        <Edit className="w-3.5 h-3.5 text-amber-500" />
                                                     </button>
                                                 )}
                                                 {p.activo && canAnular && (

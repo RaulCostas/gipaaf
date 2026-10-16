@@ -863,15 +863,6 @@ const ComprasPage: React.FC = () => {
                                         >
                                             <Eye className="w-3.5 h-3.5 text-primary" />
                                         </button>
-                                        {p.estado !== EstadoNota.ANULADA && (
-                                            <button
-                                                onClick={() => openEditModal(p)}
-                                                className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                                                title="Editar Compra"
-                                            >
-                                                <Edit className="w-3.5 h-3.5 text-amber-500" />
-                                            </button>
-                                        )}
                                         <button
                                             onClick={() => handleOpenWhatsAppModal(p)}
                                             className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -916,6 +907,15 @@ const ComprasPage: React.FC = () => {
                                                 title="Confirmar Compra (Ingresar stock)"
                                             >
                                                 <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                                            </button>
+                                        )}
+                                        {p.estado !== EstadoNota.ANULADA && (
+                                            <button
+                                                onClick={() => openEditModal(p)}
+                                                className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                title="Editar Compra"
+                                            >
+                                                <Edit className="w-3.5 h-3.5 text-amber-500" />
                                             </button>
                                         )}
                                         {canAnular && p.estado !== EstadoNota.ANULADA && (

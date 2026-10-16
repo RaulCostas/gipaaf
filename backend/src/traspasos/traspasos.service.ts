@@ -7,7 +7,6 @@ import { Inventario } from '../inventario/inventario.entity';
 import { Sucursal } from '../sucursales/sucursal.entity';
 import { Producto } from '../productos/producto.entity';
 import { Lote } from '../inventario/lote.entity';
-import { Egreso, MonedaEgreso } from '../egresos/egreso.entity';
 import { MovimientoInventario } from '../movimientos-inventario/movimiento_inventario.entity';
 
 @Injectable()
@@ -25,8 +24,6 @@ export class TraspasosService {
         private productoRepo: Repository<Producto>,
         @InjectRepository(Lote)
         private loteRepo: Repository<Lote>,
-        @InjectRepository(Egreso)
-        private egresoRepo: Repository<Egreso>,
         private dataSource: DataSource,
     ) {}
 
@@ -37,7 +34,6 @@ export class TraspasosService {
             .leftJoinAndSelect('traspaso.sucursalDestino', 'sucursalDestino')
             .leftJoinAndSelect('sucursalDestino.ciudad', 'destinoCiudad')
             .leftJoinAndSelect('traspaso.usuario', 'usuario')
-            .leftJoinAndSelect('traspaso.egreso', 'egreso')
             .leftJoinAndSelect('traspaso.detalles', 'detalles')
             .leftJoinAndSelect('detalles.producto', 'producto')
             .orderBy('traspaso.fecha', 'DESC')
@@ -52,7 +48,6 @@ export class TraspasosService {
             .leftJoinAndSelect('traspaso.sucursalDestino', 'sucursalDestino')
             .leftJoinAndSelect('sucursalDestino.ciudad', 'destinoCiudad')
             .leftJoinAndSelect('traspaso.usuario', 'usuario')
-            .leftJoinAndSelect('traspaso.egreso', 'egreso')
             .leftJoinAndSelect('traspaso.detalles', 'detalles')
             .leftJoinAndSelect('detalles.producto', 'producto')
             .where('traspaso.id = :id', { id })
@@ -329,28 +324,6 @@ export class TraspasosService {
                 detallesToSave.push(detalle);
             }
 
-            // 2.5 Registrar Egreso automático si existe costo de transporte
-            const sucursalCargo = sucursalCargoCosto === CargoCostoTraspaso.DESTINO ? sucursalDestino : sucursalOrigen;
-            let egresoSaved: Egreso | undefined;
-
-            if (Number(costoTransporte) > 0) {
-                const egreso = manager.create(Egreso, {
-                    codigo: `EGR-TRASP-${Date.now().toString().slice(-6)}`,
-                    fecha,
-                    detalle: `Costo de transporte por Traspaso [${codigo}] (${sucursalOrigen.nombre} -> ${sucursalDestino.nombre})`,
-                    monto: Number(costoTransporte),
-                    moneda: MonedaEgreso.BOB,
-                    tipoCambio: 6.96,
-                    montoEquivalente: Number((Number(costoTransporte) / 6.96).toFixed(2)),
-                    formaPago: 'Efectivo',
-                    nroComprobante: codigo,
-                    observaciones: `Gasto de transporte asumido por ${sucursalCargo.nombre}`,
-                    sucursal: sucursalCargo,
-                    usuario: usuarioId ? ({ id: usuarioId } as any) : undefined,
-                });
-                egresoSaved = await manager.save(egreso);
-            }
-
             // 3. Crear cabecera de Traspaso
             const traspaso = manager.create(Traspaso, {
                 codigo,
@@ -359,7 +332,6 @@ export class TraspasosService {
                 sucursalDestino,
                 costoTransporte: Number(costoTransporte) || 0,
                 sucursalCargoCosto,
-                egreso: egresoSaved,
                 motivo,
                 observaciones,
                 estado: EstadoTraspaso.COMPLETADO,
@@ -376,7 +348,7 @@ export class TraspasosService {
         return await this.dataSource.transaction(async (manager) => {
             const traspaso = await manager.findOne(Traspaso, {
                 where: { id },
-                relations: ['sucursalOrigen', 'sucursalDestino', 'egreso', 'detalles', 'detalles.producto'],
+                relations: ['sucursalOrigen', 'sucursalDestino', 'detalles', 'detalles.producto'],
             });
 
             if (!traspaso) {
@@ -399,7 +371,7 @@ export class TraspasosService {
                 const stockDestino = invDestino ? Number(invDestino.stockActual) : 0;
                 if (stockDestino < Number(det.cantidad)) {
                     throw new BadRequestException(
-                        `No se puede anular el traspaso: La sucursal de destino "${traspaso.sucursalDestino.nombre}" solo dispone de ${stockDestino} unidades de "${det.producto.nombre}" (se requieren ${det.cantidad} para la reversión).`,
+                        `No se puede anular el traspaso: La sucursal destino "${traspaso.sucursalDestino.nombre}" solo dispone de ${stockDestino} unidad(es) de "${det.producto.nombre}" en stock (se transfirieron ${det.cantidad}). No es posible anular el traspaso porque los productos ya fueron vendidos o utilizados en destino.`,
                     );
                 }
             }
@@ -497,16 +469,6 @@ export class TraspasosService {
                 }
             }
 
-            // Anular Egreso asociado si existe
-            if (traspaso.egreso) {
-                const egreso = await manager.findOne(Egreso, { where: { id: traspaso.egreso.id } });
-                if (egreso) {
-                    egreso.activo = false;
-                    egreso.observaciones = `${egreso.observaciones || ''} [ANULADO por anulación del Traspaso ${traspaso.codigo}]`.trim();
-                    await manager.save(egreso);
-                }
-            }
-
             traspaso.estado = EstadoTraspaso.ANULADO;
             traspaso.activo = false;
             return await manager.save(traspaso);
@@ -535,7 +497,7 @@ export class TraspasosService {
         return await this.dataSource.transaction(async (manager) => {
             const traspaso = await manager.findOne(Traspaso, {
                 where: { id },
-                relations: ['sucursalOrigen', 'sucursalDestino', 'egreso', 'detalles', 'detalles.producto'],
+                relations: ['sucursalOrigen', 'sucursalDestino', 'detalles', 'detalles.producto'],
             });
 
             if (!traspaso) {
@@ -569,7 +531,61 @@ export class TraspasosService {
                 throw new BadRequestException('Debe incluir al menos un producto en el traspaso');
             }
 
-            // 1. Validar que la sucursal de destino anterior tenga stock suficiente para revertir el traspaso anterior
+            const fecha = data.fecha || (traspaso.fecha ? String(traspaso.fecha).substring(0, 10) : new Date().toISOString().substring(0, 10));
+
+            // Determinar si cambiaron las sucursales, productos, cantidades o lotes
+            const sameSucursales = 
+                Number(sucursalOrigenId) === Number(traspaso.sucursalOrigen?.id) &&
+                Number(sucursalDestinoId) === Number(traspaso.sucursalDestino?.id);
+
+            let itemsInventoryChanged = !sameSucursales || detalles.length !== (traspaso.detalles?.length || 0);
+
+            if (!itemsInventoryChanged && traspaso.detalles) {
+                const existingItems = [...traspaso.detalles].sort((a, b) => a.producto.id - b.producto.id || Number(a.cantidad) - Number(b.cantidad));
+                const newItems = [...detalles].sort((a, b) => a.productoId - b.productoId || Number(a.cantidad) - Number(b.cantidad));
+
+                for (let i = 0; i < existingItems.length; i++) {
+                    const ex = existingItems[i];
+                    const nw = newItems[i];
+                    const exLote = (ex.numeroLote || '').trim().toLowerCase();
+                    const nwLote = (nw.numeroLote || '').trim().toLowerCase();
+                    if (
+                        Number(ex.producto.id) !== Number(nw.productoId) ||
+                        Number(ex.cantidad) !== Number(nw.cantidad) ||
+                        exLote !== nwLote
+                    ) {
+                        itemsInventoryChanged = true;
+                        break;
+                    }
+                }
+            }
+
+            // Si NO cambiaron las sucursales ni productos/cantidades/lotes, solo actualizamos datos informativos sin tocar inventario
+            if (!itemsInventoryChanged) {
+                traspaso.fecha = fecha;
+                traspaso.costoTransporte = Number(costoTransporte) || 0;
+                traspaso.sucursalCargoCosto = sucursalCargoCosto;
+                traspaso.motivo = motivo;
+                traspaso.observaciones = observaciones;
+
+                // Actualizar observaciones en detalles si cambiaron
+                if (traspaso.detalles) {
+                    for (const detDto of detalles) {
+                        const match = traspaso.detalles.find(d => 
+                            Number(d.producto.id) === Number(detDto.productoId) && 
+                            (d.numeroLote || '').trim().toLowerCase() === (detDto.numeroLote || '').trim().toLowerCase()
+                        );
+                        if (match && detDto.observacion !== undefined && match.observacion !== detDto.observacion) {
+                            match.observacion = detDto.observacion;
+                            await manager.save(match);
+                        }
+                    }
+                }
+
+                return await manager.save(traspaso);
+            }
+
+            // 1. Si cambiaron productos o cantidades, validar que la sucursal de destino anterior tenga stock suficiente para revertir el traspaso anterior
             for (const det of traspaso.detalles) {
                 const invDestino = await manager.findOne(Inventario, {
                     where: {
@@ -580,7 +596,7 @@ export class TraspasosService {
                 const stockDestino = invDestino ? Number(invDestino.stockActual) : 0;
                 if (stockDestino < Number(det.cantidad)) {
                     throw new BadRequestException(
-                        `No se puede editar el traspaso: La sucursal destino "${traspaso.sucursalDestino.nombre}" solo dispone de ${stockDestino} unidades de "${det.producto.nombre}" (se requieren ${det.cantidad} para revertir antes de aplicar los cambios).`,
+                        `No se pueden modificar los productos o cantidades del traspaso: La sucursal destino "${traspaso.sucursalDestino.nombre}" solo dispone de ${stockDestino} unidad(es) de "${det.producto.nombre}" en stock (se transfirieron ${det.cantidad}). No es posible modificar las cantidades porque los productos ya fueron vendidos o utilizados en destino.`,
                     );
                 }
             }
@@ -672,7 +688,6 @@ export class TraspasosService {
             if (!sucursalDestino) throw new NotFoundException('Sucursal de destino no encontrada');
 
             const codigo = traspaso.codigo;
-            const fecha = data.fecha || (traspaso.fecha ? String(traspaso.fecha).substring(0, 10) : new Date().toISOString().substring(0, 10));
 
             // 5. Aplicar nuevos productos y cantidades
             const detallesToSave: DetalleTraspaso[] = [];
@@ -879,50 +894,12 @@ export class TraspasosService {
 
             await manager.save(detallesToSave);
 
-            // 6. Manejo de Egreso por Costo de Transporte
-            const sucursalCargo = sucursalCargoCosto === CargoCostoTraspaso.DESTINO ? sucursalDestino : sucursalOrigen;
-            let egresoSaved: Egreso | null = traspaso.egreso || null;
-
-            if (Number(costoTransporte) > 0) {
-                if (egresoSaved) {
-                    egresoSaved.fecha = fecha;
-                    egresoSaved.detalle = `Costo de transporte por Traspaso [${codigo}] (${sucursalOrigen.nombre} -> ${sucursalDestino.nombre})`;
-                    egresoSaved.monto = Number(costoTransporte);
-                    egresoSaved.montoEquivalente = Number((Number(costoTransporte) / 6.96).toFixed(2));
-                    egresoSaved.sucursal = sucursalCargo;
-                    egresoSaved.observaciones = `Gasto de transporte asumido por ${sucursalCargo.nombre}`;
-                    egresoSaved.activo = true;
-                    egresoSaved = await manager.save(egresoSaved);
-                } else {
-                    const egreso = manager.create(Egreso, {
-                        codigo: `EGR-TRASP-${Date.now().toString().slice(-6)}`,
-                        fecha,
-                        detalle: `Costo de transporte por Traspaso [${codigo}] (${sucursalOrigen.nombre} -> ${sucursalDestino.nombre})`,
-                        monto: Number(costoTransporte),
-                        moneda: MonedaEgreso.BOB,
-                        tipoCambio: 6.96,
-                        montoEquivalente: Number((Number(costoTransporte) / 6.96).toFixed(2)),
-                        formaPago: 'Efectivo',
-                        nroComprobante: codigo,
-                        observaciones: `Gasto de transporte asumido por ${sucursalCargo.nombre}`,
-                        sucursal: sucursalCargo,
-                        usuario: usuarioId ? ({ id: usuarioId } as any) : undefined,
-                    });
-                    egresoSaved = await manager.save(egreso);
-                }
-            } else if (egresoSaved) {
-                egresoSaved.activo = false;
-                await manager.save(egresoSaved);
-                egresoSaved = null;
-            }
-
-            // 7. Actualizar campos cabecera
+            // 6. Actualizar campos cabecera
             traspaso.fecha = fecha;
             traspaso.sucursalOrigen = sucursalOrigen;
             traspaso.sucursalDestino = sucursalDestino;
             traspaso.costoTransporte = Number(costoTransporte) || 0;
             traspaso.sucursalCargoCosto = sucursalCargoCosto;
-            traspaso.egreso = egresoSaved as any;
             traspaso.motivo = motivo;
             traspaso.observaciones = observaciones;
             traspaso.detalles = detallesToSave;
