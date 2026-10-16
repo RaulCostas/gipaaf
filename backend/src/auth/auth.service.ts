@@ -18,10 +18,21 @@ export class AuthService {
 
     async login(loginDto: LoginDto) {
         const { email, password } = loginDto;
-        const usuario = await this.usuarioRepository.findOne({
-            where: { email, activo: true },
-            relations: ['roles', 'roles.permisos', 'persona', 'sucursal', 'sucursal.ciudad', 'personal', 'personal.sucursal', 'personal.sucursal.ciudad'],
-        });
+        const identifier = (email || '').trim();
+
+        const usuario = await this.usuarioRepository
+            .createQueryBuilder('u')
+            .leftJoinAndSelect('u.roles', 'roles')
+            .leftJoinAndSelect('roles.permisos', 'permisos')
+            .leftJoinAndSelect('u.persona', 'persona')
+            .leftJoinAndSelect('u.sucursal', 'sucursal')
+            .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
+            .leftJoinAndSelect('u.personal', 'personal')
+            .leftJoinAndSelect('personal.sucursal', 'personalSucursal')
+            .leftJoinAndSelect('personalSucursal.ciudad', 'personalCiudad')
+            .where('u.activo = :activo', { activo: true })
+            .andWhere('(LOWER(TRIM(u.email)) = LOWER(:id) OR LOWER(TRIM(u.username)) = LOWER(:id))', { id: identifier })
+            .getOne();
 
         if (!usuario) throw new UnauthorizedException('Credenciales incorrectas');
         const esValido = await bcrypt.compare(password, usuario.password);

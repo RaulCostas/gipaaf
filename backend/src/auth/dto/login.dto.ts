@@ -1,9 +1,10 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class LoginDto {
     @ApiProperty({ example: 'admin@gipaaf.com' })
-    @IsEmail()
+    @IsNotEmpty({ message: 'El correo o nombre de usuario es requerido' })
+    @IsString()
     email: string;
 
     @ApiProperty({ example: 'Admin123!' })
