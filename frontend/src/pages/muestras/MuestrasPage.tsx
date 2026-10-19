@@ -608,7 +608,13 @@ const MuestrasPage: React.FC = () => {
     ];
 
     const getExportData = () => {
-        return filteredMuestras.map(m => {
+        const sortedAsc = [...filteredMuestras].sort((a, b) => {
+            const dateA = a.fecha ? (typeof a.fecha === 'string' ? a.fecha.substring(0, 10) : '') : '';
+            const dateB = b.fecha ? (typeof b.fecha === 'string' ? b.fecha.substring(0, 10) : '') : '';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (a.id || 0) - (b.id || 0);
+        });
+        return sortedAsc.map(m => {
             const sucursalNombre = m.sucursal ? `${m.sucursal.nombre}${(m.sucursal.ciudad as any)?.nombre ? ` (${(m.sucursal.ciudad as any).nombre})` : ''}` : '-';
             return {
                 numero: m.numero,

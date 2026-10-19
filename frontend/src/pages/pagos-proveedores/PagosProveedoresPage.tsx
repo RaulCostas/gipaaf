@@ -485,7 +485,14 @@ const PagosProveedoresPage: React.FC = () => {
     }, [pagosList, selectedSucursal, selectedCiudad, searchTerm, filtroProveedor, filtroEstado, filtroMetodo, filtroMoneda, fechaDesde, fechaHasta]);
 
     const mappedExportData = useMemo(() => {
-        return filteredPagos.map(p => {
+        const sortedAsc = [...filteredPagos].sort((a, b) => {
+            const dateA = a.fecha ? (typeof a.fecha === 'string' ? a.fecha.substring(0, 10) : '') : '';
+            const dateB = b.fecha ? (typeof b.fecha === 'string' ? b.fecha.substring(0, 10) : '') : '';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (a.id || 0) - (b.id || 0);
+        });
+
+        return sortedAsc.map(p => {
             const montoFormateado = Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const saldoFormateado = p.nota ? Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
             const totalCompraFormateado = p.nota ? Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';

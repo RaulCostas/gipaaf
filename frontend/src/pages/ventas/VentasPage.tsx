@@ -857,7 +857,14 @@ const VentasPage: React.FC = () => {
     };
 
     const getFormattedData = () => {
-        return filteredventas.map(s => {
+        const sortedAsc = [...filteredventas].sort((a, b) => {
+            const dateA = a.fecha ? (typeof a.fecha === 'string' ? a.fecha.substring(0, 10) : '') : '';
+            const dateB = b.fecha ? (typeof b.fecha === 'string' ? b.fecha.substring(0, 10) : '') : '';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (a.id || 0) - (b.id || 0);
+        });
+
+        return sortedAsc.map(s => {
             const desc1Calc = Number(s.descuento) || 0;
             const descFijoCalc = Number(s.descuentoFijo) || 0;
             const desc2Calc = Number(s.descuentoPromocion) || 0;

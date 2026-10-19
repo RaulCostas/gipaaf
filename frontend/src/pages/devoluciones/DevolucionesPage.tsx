@@ -806,7 +806,13 @@ const DevolucionesPage: React.FC = () => {
     ];
 
     const getExportData = () => {
-        return (filteredReturns || []).map(r => {
+        const sortedAsc = [...(filteredReturns || [])].sort((a, b) => {
+            const dateA = a.fecha ? (typeof a.fecha === 'string' ? a.fecha.substring(0, 10) : '') : '';
+            const dateB = b.fecha ? (typeof b.fecha === 'string' ? b.fecha.substring(0, 10) : '') : '';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (a.id || 0) - (b.id || 0);
+        });
+        return sortedAsc.map(r => {
             const devueltos = (r.detalles || []).filter((d: any) => d.tipoMovimiento !== 'SALIDA_REPOSICION');
             const repuestos = (r.detalles || []).filter((d: any) => d.tipoMovimiento === 'SALIDA_REPOSICION');
             const totalDevCant = devueltos.reduce((s: number, d: any) => s + Number(d.cantidad || 0), 0);

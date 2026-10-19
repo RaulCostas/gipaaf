@@ -761,7 +761,14 @@ const ProformasPage: React.FC = () => {
     };
 
     const getFormattedData = () => {
-        return filteredProformas.map(s => {
+        const sortedAsc = [...filteredProformas].sort((a, b) => {
+            const dateA = a.fecha ? (typeof a.fecha === 'string' ? a.fecha.substring(0, 10) : '') : '';
+            const dateB = b.fecha ? (typeof b.fecha === 'string' ? b.fecha.substring(0, 10) : '') : '';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (a.id || 0) - (b.id || 0);
+        });
+
+        return sortedAsc.map(s => {
             const descCalc = (Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0);
             const subTotalCalc = (Number(s.total) || 0) + descCalc;
             const descPct = Number(s.descuentoPorcentaje) || 0;

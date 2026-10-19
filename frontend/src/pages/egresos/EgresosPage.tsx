@@ -266,7 +266,13 @@ const EgresosPage: React.FC = () => {
 
     const filteredEgresosMapped = useMemo(() => {
         const ids = new Set(filteredEgresos.map(e => e.id));
-        return mappedExportData.filter(m => ids.has(m.id));
+        const matched = mappedExportData.filter(m => ids.has(m.id));
+        return matched.sort((a, b) => {
+            const dateA = a.fecha ? (typeof a.fecha === 'string' ? a.fecha.substring(0, 10) : '') : '';
+            const dateB = b.fecha ? (typeof b.fecha === 'string' ? b.fecha.substring(0, 10) : '') : '';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (a.id || 0) - (b.id || 0);
+        });
     }, [filteredEgresos, mappedExportData]);
 
     // KPI Totals

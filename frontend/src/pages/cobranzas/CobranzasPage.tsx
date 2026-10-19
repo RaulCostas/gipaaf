@@ -539,8 +539,8 @@ const CobranzasPage: React.FC = () => {
 
     const mappedExportData = useMemo(() => {
         const sortedAsc = [...filteredPagos].sort((a, b) => {
-            const dateA = a.fecha ? a.fecha.split('T')[0] : '';
-            const dateB = b.fecha ? b.fecha.split('T')[0] : '';
+            const dateA = a.fecha ? (typeof a.fecha === 'string' ? a.fecha.substring(0, 10) : '') : '';
+            const dateB = b.fecha ? (typeof b.fecha === 'string' ? b.fecha.substring(0, 10) : '') : '';
             if (dateA !== dateB) return dateA.localeCompare(dateB);
             return (a.id || 0) - (b.id || 0);
         });
