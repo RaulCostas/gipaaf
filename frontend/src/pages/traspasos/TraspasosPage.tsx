@@ -390,13 +390,36 @@ const TraspasosPage: React.FC = () => {
         }
     });
 
+    const getSucursalCodePreview = (sucId?: string): string => {
+        if (!sucId || !sucursales) return 'LP';
+        const suc = sucursales.find(s => String(s.id) === String(sucId));
+        if (!suc) return 'LP';
+        const ciudad = (suc.ciudad?.nombre || '').toUpperCase().trim();
+        const nombre = (suc.nombre || '').toUpperCase().trim();
+
+        if (ciudad.includes('COCHABAMBA') || nombre.includes('COCHABAMBA') || nombre.includes('CBBA')) return 'CBBA';
+        if (ciudad.includes('LA PAZ') || nombre.includes('LA PAZ') || nombre.includes('LPZ') || nombre.includes('LP')) return 'LP';
+        if (ciudad.includes('SANTA CRUZ') || nombre.includes('SANTA CRUZ') || nombre.includes('SCZ') || nombre.includes('SC')) return 'SCZ';
+        if (ciudad.includes('ORURO') || nombre.includes('ORURO')) return 'ORU';
+        if (ciudad.includes('POTOSI') || ciudad.includes('POTOSÍ') || nombre.includes('POTOSI')) return 'PTS';
+        if (ciudad.includes('TARIJA') || nombre.includes('TARIJA')) return 'TJA';
+        if (ciudad.includes('CHUQUISACA') || ciudad.includes('SUCRE') || nombre.includes('SUCRE')) return 'CHQ';
+        if (ciudad.includes('BENI') || nombre.includes('BENI')) return 'BEN';
+        if (ciudad.includes('PANDO') || nombre.includes('PANDO')) return 'PAN';
+
+        const clean = (ciudad || nombre).replace(/[^A-Z0-9]/g, '');
+        return clean ? clean.substring(0, 4) : `SUC${suc.id}`;
+    };
+
     const resetForm = () => {
         setEditingId(null);
         setEditingItemIndex(null);
+        const firstSucInCiudad = selectedCiudad ? sucursales?.find((s: any) => s.ciudad?.id === Number(selectedCiudad))?.id?.toString() : '';
+        const defaultOrigenId = selectedSucursal ? String(selectedSucursal) : (firstSucInCiudad || '');
         setFormData({
             codigo: '',
             fecha: format(new Date(), 'yyyy-MM-dd'),
-            sucursalOrigenId: '',
+            sucursalOrigenId: defaultOrigenId,
             sucursalDestinoId: '',
             costoTransporte: '',
             sucursalCargoCosto: 'ORIGEN',
@@ -1267,7 +1290,7 @@ const TraspasosPage: React.FC = () => {
                                 <label className="text-xs font-semibold text-foreground">Código de Traspaso</label>
                                 <input
                                     type="text"
-                                    placeholder="Autogenerado (Ej. TRASP-0001)"
+                                    placeholder={`Autogenerado (Ej. TRASP-${getSucursalCodePreview(formData.sucursalOrigenId)}-0001)`}
                                     value={formData.codigo}
                                     onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
                                     className="w-full p-2.5 border rounded-lg bg-background text-sm font-mono outline-none focus:ring-2 focus:ring-primary/20"

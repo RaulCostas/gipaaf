@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, MoreThan } from 'typeorm';
 import { Traspaso, EstadoTraspaso, CargoCostoTraspaso } from './traspaso.entity';
@@ -10,7 +10,7 @@ import { Lote } from '../inventario/lote.entity';
 import { MovimientoInventario } from '../movimientos-inventario/movimiento_inventario.entity';
 
 @Injectable()
-export class TraspasosService {
+export class TraspasosService implements OnModuleInit {
     constructor(
         @InjectRepository(Traspaso)
         private traspasoRepo: Repository<Traspaso>,
@@ -26,6 +26,44 @@ export class TraspasosService {
         private loteRepo: Repository<Lote>,
         private dataSource: DataSource,
     ) {}
+
+    async onModuleInit() {
+        try {
+            const legacyTraspasos = await this.traspasoRepo
+                .createQueryBuilder('traspaso')
+                .leftJoinAndSelect('traspaso.sucursalOrigen', 'sucursalOrigen')
+                .leftJoinAndSelect('sucursalOrigen.ciudad', 'origenCiudad')
+                .where("traspaso.codigo ~ '^TRASP-[0-9]+$'")
+                .orderBy('traspaso.fecha', 'ASC')
+                .addOrderBy('traspaso.id', 'ASC')
+                .getMany();
+
+            if (legacyTraspasos.length > 0) {
+                for (const t of legacyTraspasos) {
+                    const oldCode = t.codigo;
+                    const newCode = await this.generateCodigo(t.sucursalOrigen);
+                    if (newCode && newCode !== oldCode) {
+                        t.codigo = newCode;
+                        await this.traspasoRepo.save(t);
+                        await this.dataSource
+                            .createQueryBuilder()
+                            .update(MovimientoInventario)
+                            .set({
+                                numeroDocumento: newCode,
+                                motivo: () => `REPLACE(motivo, '[${oldCode}]', '[${newCode}]')`,
+                            })
+                            .where('numeroDocumento = :oldCode OR motivo LIKE :likeOld', {
+                                oldCode,
+                                likeOld: `%[${oldCode}]%`,
+                            })
+                            .execute();
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error auto-migrating traspaso codes by branch:', e);
+        }
+    }
 
     async findAll(): Promise<Traspaso[]> {
         return this.traspasoRepo.createQueryBuilder('traspaso')
@@ -59,17 +97,60 @@ export class TraspasosService {
         return traspaso;
     }
 
-    private async generateCodigo(): Promise<string> {
-        const count = await this.traspasoRepo.count();
-        const nextNum = count + 1;
-        const formatted = nextNum.toString().padStart(4, '0');
-        let code = `TRASP-${formatted}`;
+    private getSucursalCode(sucursal?: Sucursal | null): string {
+        if (!sucursal) return '';
+        const ciudad = (sucursal.ciudad?.nombre || '').toUpperCase().trim();
+        const nombre = (sucursal.nombre || '').toUpperCase().trim();
 
-        const existing = await this.traspasoRepo.findOne({ where: { codigo: code } });
-        if (existing) {
-            code = `TRASP-${Date.now().toString().slice(-6)}`;
+        if (ciudad.includes('COCHABAMBA') || nombre.includes('COCHABAMBA') || nombre.includes('CBBA')) return 'CBBA';
+        if (ciudad.includes('LA PAZ') || nombre.includes('LA PAZ') || nombre.includes('LPZ') || nombre.includes('LP')) return 'LP';
+        if (ciudad.includes('SANTA CRUZ') || nombre.includes('SANTA CRUZ') || nombre.includes('SCZ') || nombre.includes('SC')) return 'SCZ';
+        if (ciudad.includes('ORURO') || nombre.includes('ORURO')) return 'ORU';
+        if (ciudad.includes('POTOSI') || ciudad.includes('POTOSÍ') || nombre.includes('POTOSI')) return 'PTS';
+        if (ciudad.includes('TARIJA') || nombre.includes('TARIJA')) return 'TJA';
+        if (ciudad.includes('CHUQUISACA') || ciudad.includes('SUCRE') || nombre.includes('SUCRE')) return 'CHQ';
+        if (ciudad.includes('BENI') || nombre.includes('BENI')) return 'BEN';
+        if (ciudad.includes('PANDO') || nombre.includes('PANDO')) return 'PAN';
+
+        const clean = (ciudad || nombre).replace(/[^A-Z0-9]/g, '');
+        return clean ? clean.substring(0, 4) : `SUC${sucursal.id}`;
+    }
+
+    private async generateCodigo(sucursalOrigen?: Sucursal | null): Promise<string> {
+        let sucursal = sucursalOrigen;
+        if (sucursal?.id && !sucursal.ciudad) {
+            sucursal = await this.sucursalRepo.findOne({ where: { id: sucursal.id }, relations: ['ciudad'] });
         }
-        return code;
+
+        const sucCode = this.getSucursalCode(sucursal);
+        const prefix = sucCode ? `TRASP-${sucCode}` : 'TRASP';
+
+        const traspasos = await this.traspasoRepo
+            .createQueryBuilder('traspaso')
+            .where('traspaso.codigo LIKE :prefix', { prefix: `${prefix}-%` })
+            .select(['traspaso.codigo'])
+            .getMany();
+
+        let maxNum = 0;
+        for (const t of traspasos) {
+            if (t.codigo) {
+                const parts = t.codigo.split('-');
+                const lastPart = parts[parts.length - 1];
+                const parsed = parseInt(lastPart, 10);
+                if (!isNaN(parsed) && parsed > maxNum) {
+                    maxNum = parsed;
+                }
+            }
+        }
+
+        let next = maxNum + 1;
+        let candidate = `${prefix}-${String(next).padStart(4, '0')}`;
+        while (await this.traspasoRepo.findOne({ where: { codigo: candidate } })) {
+            next++;
+            candidate = `${prefix}-${String(next).padStart(4, '0')}`;
+        }
+
+        return candidate;
     }
 
     async create(data: {
@@ -114,13 +195,13 @@ export class TraspasosService {
             throw new BadRequestException('Debe incluir al menos un producto en el traspaso');
         }
 
-        const sucursalOrigen = await this.sucursalRepo.findOne({ where: { id: Number(sucursalOrigenId) } });
+        const sucursalOrigen = await this.sucursalRepo.findOne({ where: { id: Number(sucursalOrigenId) }, relations: ['ciudad'] });
         if (!sucursalOrigen) throw new NotFoundException('Sucursal de origen no encontrada');
 
-        const sucursalDestino = await this.sucursalRepo.findOne({ where: { id: Number(sucursalDestinoId) } });
+        const sucursalDestino = await this.sucursalRepo.findOne({ where: { id: Number(sucursalDestinoId) }, relations: ['ciudad'] });
         if (!sucursalDestino) throw new NotFoundException('Sucursal de destino no encontrada');
 
-        const codigo = data.codigo?.trim() || (await this.generateCodigo());
+        const codigo = data.codigo?.trim() || (await this.generateCodigo(sucursalOrigen));
         const fecha = data.fecha || new Date().toISOString().substring(0, 10);
 
         return await this.dataSource.transaction(async (manager) => {
@@ -681,13 +762,20 @@ export class TraspasosService {
             await manager.delete(DetalleTraspaso, { traspaso: { id: traspaso.id } });
 
             // 4. Buscar nuevas sucursales
-            const sucursalOrigen = await manager.findOne(Sucursal, { where: { id: Number(sucursalOrigenId) } });
+            const sucursalOrigen = await manager.findOne(Sucursal, { where: { id: Number(sucursalOrigenId) }, relations: ['ciudad'] });
             if (!sucursalOrigen) throw new NotFoundException('Sucursal de origen no encontrada');
 
-            const sucursalDestino = await manager.findOne(Sucursal, { where: { id: Number(sucursalDestinoId) } });
+            const sucursalDestino = await manager.findOne(Sucursal, { where: { id: Number(sucursalDestinoId) }, relations: ['ciudad'] });
             if (!sucursalDestino) throw new NotFoundException('Sucursal de destino no encontrada');
 
-            const codigo = traspaso.codigo;
+            let codigo = data.codigo?.trim() || traspaso.codigo;
+            if (Number(sucursalOrigenId) !== Number(traspaso.sucursalOrigen?.id) && (!data.codigo || data.codigo.trim() === traspaso.codigo)) {
+                codigo = await this.generateCodigo(sucursalOrigen);
+                traspaso.codigo = codigo;
+            } else if (data.codigo?.trim() && data.codigo.trim() !== traspaso.codigo) {
+                codigo = data.codigo.trim();
+                traspaso.codigo = codigo;
+            }
 
             // 5. Aplicar nuevos productos y cantidades
             const detallesToSave: DetalleTraspaso[] = [];
