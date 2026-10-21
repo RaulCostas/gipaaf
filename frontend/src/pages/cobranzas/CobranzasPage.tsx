@@ -503,8 +503,9 @@ const CobranzasPage: React.FC = () => {
                 const ventaNum = (p.nota?.numero || '').toLowerCase();
                 const ref = (p.referencia || '').toLowerCase();
                 const metodo = (p.metodoPago || '').toLowerCase();
+                const obs = (p.observaciones || '').toLowerCase();
 
-                return clienteNombre.toLowerCase().includes(s) || clienteCodigo.includes(s) || vendedorNombre.includes(s) || ventaNum.includes(s) || ref.includes(s) || metodo.includes(s);
+                return clienteNombre.toLowerCase().includes(s) || clienteCodigo.includes(s) || vendedorNombre.includes(s) || ventaNum.includes(s) || ref.includes(s) || metodo.includes(s) || obs.includes(s);
             });
         }
 
@@ -956,6 +957,7 @@ const CobranzasPage: React.FC = () => {
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Método</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nro. Recibo</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Comprobante</th>
+                                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Observaciones / Glosa</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Venta</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Monto Pagado</th>
                                 <th className="p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Saldo Pendiente</th>
@@ -966,7 +968,7 @@ const CobranzasPage: React.FC = () => {
                         <tbody className="divide-y">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={14 + (!selectedSucursal && !selectedCiudad ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
+                                    <td colSpan={15 + (!selectedSucursal && !selectedCiudad ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         <div className="flex items-center justify-center gap-2">
                                             <Loader2 className="w-5 h-5 animate-spin text-primary" />
                                             <span>Cargando cobranzas de clientes...</span>
@@ -975,7 +977,7 @@ const CobranzasPage: React.FC = () => {
                                 </tr>
                             ) : paginatedPagos.length === 0 ? (
                                 <tr>
-                                    <td colSpan={14 + (!selectedSucursal && !selectedCiudad ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
+                                    <td colSpan={15 + (!selectedSucursal && !selectedCiudad ? 1 : 0)} className="p-8 text-center text-muted-foreground text-sm">
                                         No se encontraron cobranzas registradas.
                                     </td>
                                 </tr>
@@ -988,7 +990,8 @@ const CobranzasPage: React.FC = () => {
                                 const vendedorLabel = p.nota?.vendedor
                                     ? `${p.nota.vendedor.nombres || ''} ${p.nota.vendedor.apellidos || ''}`.trim()
                                     : '-';
-                                const notaVentaLabel = p.nota?.observaciones || p.observaciones || '';
+                                const notaVentaLabel = p.nota?.observaciones || '';
+                                const glosaLabel = p.observaciones || '';
                                 const sucursalLabel = p.nota?.sucursal?.nombre || p.cliente?.sucursal?.nombre || '-';
                                 const isUSD = p.moneda === 'USD';
                                 const simbolo = isUSD ? '$us' : 'Bs.';
@@ -1101,6 +1104,15 @@ const CobranzasPage: React.FC = () => {
                                                 )
                                             ) : (
                                                 <span className="text-xs text-muted-foreground">-</span>
+                                            )}
+                                        </td>
+                                        <td className="p-4 max-w-[180px]">
+                                            {glosaLabel ? (
+                                                <span className="text-xs text-muted-foreground line-clamp-2" title={glosaLabel}>
+                                                    {glosaLabel}
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground/50 font-mono">-</span>
                                             )}
                                         </td>
                                         <td className="p-4 text-right font-medium">
