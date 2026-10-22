@@ -99,24 +99,41 @@ const ClientesPage: React.FC = () => {
 
     const excelColumns = [
         { header: 'ID', dataKey: 'id' },
-        ...exportColumns
+        { header: 'CI/NIT', dataKey: 'ci' },
+        { header: 'Tienda / Negocio', dataKey: 'nombreTiendaExcel' },
+        { header: 'Nombres', dataKey: 'nombres' },
+        { header: 'Apellidos', dataKey: 'apellidos' },
+        { header: 'Celular', dataKey: 'telefono' },
+        { header: 'Dirección', dataKey: 'direccion' },
+        { header: 'Ruta / Vendedor', dataKey: 'rutaVendedor' },
+        { header: 'Límite Crédito', dataKey: 'limiteCredito' },
+        { header: 'Deuda Actual', dataKey: 'deudaActual' },
+        { header: 'Crédito Disp.', dataKey: 'creditoDisponible' },
+        { header: 'Estado', dataKey: 'activo' }
     ];
 
     const getFormattedData = () => {
-        return filteredClients.map(c => ({
-            id: c.id,
-            ci: c.persona?.ci || '-',
-            nombreTienda: c.nombreTienda || '-',
-            nombres: c.persona?.nombres || '-',
-            apellidos: c.persona?.apellidos || '-',
-            telefono: c.persona?.telefono || '-',
-            direccion: c.persona?.direccion || '-',
-            rutaVendedor: c.ruta ? `${c.ruta.nombre}${c.ruta.vendedor ? ` (${c.ruta.vendedor.nombres} ${c.ruta.vendedor.apellidos})` : ''}` : 'Sin Ruta',
-            limiteCredito: c.limiteCredito,
-            deudaActual: c.deudaActual || 0,
-            creditoDisponible: c.creditoDisponible || 0,
-            activo: c.activo
-        }));
+        return filteredClients.map(c => {
+            const cleanCodigo = (c.codigo ? c.codigo.replace(/\./g, '') : '').trim();
+            const tienda = (c.nombreTienda || '').trim();
+            const nombreTiendaExcel = [cleanCodigo, tienda].filter(Boolean).join(' ') || '-';
+
+            return {
+                id: c.id,
+                ci: c.persona?.ci || '-',
+                nombreTienda: c.nombreTienda || '-',
+                nombreTiendaExcel,
+                nombres: c.persona?.nombres || '-',
+                apellidos: c.persona?.apellidos || '-',
+                telefono: c.persona?.telefono || '-',
+                direccion: c.persona?.direccion || '-',
+                rutaVendedor: c.ruta ? `${c.ruta.nombre}${c.ruta.vendedor ? ` (${c.ruta.vendedor.nombres} ${c.ruta.vendedor.apellidos})` : ''}` : 'Sin Ruta',
+                limiteCredito: c.limiteCredito,
+                deudaActual: c.deudaActual || 0,
+                creditoDisponible: c.creditoDisponible || 0,
+                activo: c.activo
+            };
+        });
     };
 
     const handlePrint = () => {
