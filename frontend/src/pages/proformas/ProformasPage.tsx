@@ -15,7 +15,7 @@ import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { MultiSelectVendedores } from '../../components/ui/MultiSelectVendedores';
-import { Search, Plus, Trash2, CheckCircle, Check, Calculator, User, Package, Calendar, X, ShoppingCart, Eye, Edit, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, Receipt, CreditCard, Clock } from 'lucide-react';
+import { Search, Plus, Trash2, CheckCircle, Check, Calculator, User, Package, Calendar, X, ShoppingCart, Eye, Edit, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Lock, MessageCircle, Send, ExternalLink, Loader2, Store, Receipt, CreditCard, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useFilters } from '../../context/FilterContext';
@@ -43,6 +43,8 @@ const ProformasPage: React.FC = () => {
     const [selectedVendedores, setSelectedVendedores] = useState<string[]>([]);
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
     const [error, setError] = useState<string | null>(null);
     const [selectedProdIdToAdd, setSelectedProdIdToAdd] = useState<string>('');
 
@@ -724,6 +726,17 @@ const ProformasPage: React.FC = () => {
         return filtered;
     }, [proformas, search, selectedSucursal, selectedCiudad, selectedVendedores, fechaDesde, fechaHasta, isRestrictedVendor, userPersonal, clients]);
 
+    const totalPages = Math.ceil(filteredProformas.length / itemsPerPage) || 1;
+
+    const paginatedProformas = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredProformas.slice(start, start + itemsPerPage);
+    }, [filteredProformas, currentPage]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search, selectedSucursal, selectedCiudad, selectedVendedores, fechaDesde, fechaHasta]);
+
     const getExportColumns = () => {
         let cols = [
             { header: 'Fecha', dataKey: 'fechaFormatted' },
@@ -1034,8 +1047,8 @@ const ProformasPage: React.FC = () => {
                                     </div>
                                 </td>
                             </tr>
-                        ) : filteredProformas.length > 0 ? (
-                            filteredProformas.map((s) => {
+                        ) : paginatedProformas.length > 0 ? (
+                            paginatedProformas.map((s) => {
                             const descCalc = (Number(s.descuento) || 0) + (Number(s.descuentoPromocion) || 0);
                             const subTotalCalc = (Number(s.total) || 0) + descCalc;
                             const descPct = Number(s.descuentoPorcentaje) || 0;
@@ -1213,6 +1226,34 @@ const ProformasPage: React.FC = () => {
                 )}
             </tbody>
                 </table>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between p-4 border-t bg-muted/20">
+                        <span className="text-sm text-muted-foreground">
+                            Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredProformas.length)} de {filteredProformas.length}
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                                disabled={currentPage === 1} 
+                                className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors cursor-pointer disabled:cursor-not-allowed"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <span className="text-sm font-medium px-2">
+                                Página {currentPage} de {totalPages}
+                            </span>
+                            <button 
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                                disabled={currentPage === totalPages} 
+                                className="p-2 border rounded-lg hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors cursor-pointer disabled:cursor-not-allowed"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <Sheet
