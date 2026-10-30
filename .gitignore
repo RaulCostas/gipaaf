@@ -25,4 +25,5 @@ backend/whatsapp_config*.json
 Thumbs.db
 .vscode/
 .idea/
+*.xlsx
 

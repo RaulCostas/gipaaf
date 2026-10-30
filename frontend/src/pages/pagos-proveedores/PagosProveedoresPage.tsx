@@ -182,9 +182,9 @@ const PagosProveedoresPage: React.FC = () => {
         if (!todasLasDeudas) return [];
         let filtered = todasLasDeudas;
         if (selectedSucursal) {
-            filtered = filtered.filter(d => (d.sucursal as any)?.id === Number(selectedSucursal));
+            filtered = filtered.filter(d => ((d.sucursalPago || d.sucursal) as any)?.id === Number(selectedSucursal));
         } else if (selectedCiudad) {
-            filtered = filtered.filter(d => (d.sucursal as any)?.ciudad?.id === Number(selectedCiudad));
+            filtered = filtered.filter(d => ((d.sucursalPago || d.sucursal) as any)?.ciudad?.id === Number(selectedCiudad));
         }
         return filtered;
     }, [todasLasDeudas, selectedSucursal, selectedCiudad]);
@@ -455,9 +455,9 @@ const PagosProveedoresPage: React.FC = () => {
         let filtered = pagosList;
 
         if (selectedSucursal) {
-            filtered = filtered.filter(p => (p.nota?.sucursal as any)?.id === Number(selectedSucursal));
+            filtered = filtered.filter(p => ((p.nota?.sucursalPago || p.nota?.sucursal) as any)?.id === Number(selectedSucursal));
         } else if (selectedCiudad) {
-            filtered = filtered.filter(p => (p.nota?.sucursal as any)?.ciudad?.id === Number(selectedCiudad));
+            filtered = filtered.filter(p => ((p.nota?.sucursalPago || p.nota?.sucursal) as any)?.ciudad?.id === Number(selectedCiudad));
         }
 
         if (filtroProveedor) filtered = filtered.filter(p => String(p.proveedor?.id) === filtroProveedor);

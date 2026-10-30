@@ -58,11 +58,11 @@ const EstadoCuentaProveedoresPage: React.FC = () => {
         if (!purchasesList) return [];
         let filtered = purchasesList.filter(p => p.tipo === 'COMPRA' && p.estado === 'CONFIRMADA');
 
-        // Global branch and city filter
+        // Global branch and city filter (según sucursal de pago de la compra)
         if (selectedSucursal) {
-            filtered = filtered.filter(p => (p.sucursal as any)?.id === Number(selectedSucursal));
+            filtered = filtered.filter(p => ((p.sucursalPago || p.sucursal) as any)?.id === Number(selectedSucursal));
         } else if (selectedCiudad) {
-            filtered = filtered.filter(p => (p.sucursal as any)?.ciudad?.id === Number(selectedCiudad));
+            filtered = filtered.filter(p => ((p.sucursalPago || p.sucursal) as any)?.ciudad?.id === Number(selectedCiudad));
         }
 
         // Specific Supplier filter

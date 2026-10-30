@@ -225,11 +225,11 @@ const UtilidadesPage: React.FC = () => {
     };
 
     const isSucursalMatch = (sucId?: number, ciudadId?: number) => {
-        if (selectedSucursal && sucId) {
-            return sucId === Number(selectedSucursal);
+        if (selectedSucursal) {
+            return sucId != null ? Number(sucId) === Number(selectedSucursal) : false;
         }
-        if (selectedCiudad && ciudadId) {
-            return ciudadId === Number(selectedCiudad);
+        if (selectedCiudad) {
+            return ciudadId != null ? Number(ciudadId) === Number(selectedCiudad) : false;
         }
         return true;
     };
@@ -331,8 +331,8 @@ const UtilidadesPage: React.FC = () => {
         pagosProveedores.forEach((p: PagoProveedor) => {
             if (!p.activo) return;
             if (!isDateInRange(p.fecha)) return;
-            const sucId = (p.nota?.sucursal as any)?.id;
-            const ciuId = (p.nota?.sucursal as any)?.ciudad?.id;
+            const sucId = (p.nota?.sucursalPago || p.nota?.sucursal as any)?.id;
+            const ciuId = (p.nota?.sucursalPago || p.nota?.sucursal as any)?.ciudad?.id;
             if (!isSucursalMatch(sucId, ciuId)) return;
 
             const monto = Number(p.monto) || 0;
@@ -429,8 +429,10 @@ const UtilidadesPage: React.FC = () => {
         costosImportacion.forEach((imp: CostoImportacionData) => {
             const fechaImport = imp.fecha || (imp as any)?.nota?.fecha;
             if (!isDateInRange(fechaImport)) return;
-            const sucId = imp.sucursalId || imp.sucursal?.id;
-            if (!isSucursalMatch(sucId, undefined)) return;
+            const sucId = imp.sucursalId || imp.sucursal?.id || (imp as any)?.nota?.sucursal?.id;
+            const sucursalObj = sucursales?.find((s: any) => s.id === Number(sucId));
+            const ciuId = (imp.sucursal as any)?.ciudad?.id || (imp as any)?.nota?.sucursal?.ciudad?.id || sucursalObj?.ciudad?.id;
+            if (!isSucursalMatch(sucId, ciuId)) return;
 
             const gastosList = imp.gastos || [];
             const montoBob = Number(imp.totalGastosBob) || gastosList.reduce((acc, g) => acc + (Number(g.montoBob) || 0), 0);
@@ -466,7 +468,7 @@ const UtilidadesPage: React.FC = () => {
                 comprobanteUrl: imp.comprobanteUrl,
                 monto: isGastoUSD ? montoUsd : montoBob,
                 moneda: isGastoUSD ? 'USD' : 'BOB',
-                sucursal: imp.sucursal?.nombre
+                sucursal: imp.sucursal?.nombre || (imp as any)?.nota?.sucursal?.nombre || '-'
             };
 
             if (isGastoUSD) {
@@ -557,7 +559,7 @@ const UtilidadesPage: React.FC = () => {
             totalEgresos,
             totalUtilidades,
         };
-    }, [cobranzas, pagosProveedores, egresos, costosImportacion, traspasos, dateRangeStart, dateRangeEnd, selectedSucursal, selectedCiudad]);
+    }, [cobranzas, pagosProveedores, egresos, costosImportacion, traspasos, dateRangeStart, dateRangeEnd, selectedSucursal, selectedCiudad, sucursales]);
 
     // Manejador del modal de detalle
     const handleOpenDetail = (cat: BaseStatCategory<any>, currency: 'Bolivianos' | 'Dólares') => {

@@ -31,8 +31,9 @@ export class NotasController {
     @Post()
     create(@Body() body: any, @Req() req: any) {
         body.usuario = { id: req.user.id };
-        if (req.user.usuario?.sucursal?.id) {
+        if (!body.sucursal && !body.sucursalId && req.user.usuario?.sucursal?.id) {
             body.sucursal = { id: req.user.usuario.sucursal.id };
+            body.sucursalId = req.user.usuario.sucursal.id;
         }
         return this.service.create(body);
     }

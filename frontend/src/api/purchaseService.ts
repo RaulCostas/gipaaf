@@ -80,6 +80,8 @@ export interface Nota {
     vendedor?: any;
     usuario?: any;
     sucursal?: any;
+    sucursalPagoId?: number;
+    sucursalPago?: any;
     detalles: DetalleNota[];
     costoImportacion?: any;
     creadoEn: string;

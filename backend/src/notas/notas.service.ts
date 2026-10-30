@@ -114,6 +114,8 @@ export class NotasService implements OnModuleInit {
             .leftJoinAndSelect('cliente.persona', 'cliPersona')
             .leftJoinAndSelect('nota.sucursal', 'sucursal')
             .leftJoinAndSelect('sucursal.ciudad', 'sucursalCiudad')
+            .leftJoinAndSelect('nota.sucursalPago', 'sucursalPago')
+            .leftJoinAndSelect('sucursalPago.ciudad', 'sucursalPagoCiudad')
             .leftJoinAndSelect('nota.vendedor', 'vendedor')
             .leftJoinAndSelect('nota.usuario', 'usuario')
             .leftJoinAndSelect('nota.detalles', 'detalles')
@@ -142,6 +144,8 @@ export class NotasService implements OnModuleInit {
             .leftJoinAndSelect('cliente.persona', 'cliPersona')
             .leftJoinAndSelect('nota.sucursal', 'sucursal')
             .leftJoinAndSelect('sucursal.ciudad', 'sucursalCiudad')
+            .leftJoinAndSelect('nota.sucursalPago', 'sucursalPago')
+            .leftJoinAndSelect('sucursalPago.ciudad', 'sucursalPagoCiudad')
             .leftJoinAndSelect('nota.vendedor', 'vendedor')
             .leftJoinAndSelect('nota.usuario', 'usuario')
             .leftJoinAndSelect('nota.detalles', 'detalles')
@@ -161,7 +165,16 @@ export class NotasService implements OnModuleInit {
             return await this.dataSource.transaction(async (manager) => {
                 // Generate unique number per branch
                 const targetSucursalInput = (data as any).sucursal?.id || (data as any).sucursalId || (data as any).sucursal || (data as any).almacenId;
+                const targetSucursalPagoInput = (data as any).sucursalPago?.id || (data as any).sucursalPagoId || (data as any).sucursalPago || targetSucursalInput;
                 const numero = await this.generarSiguienteNumero(manager, data.tipo || TipoNota.VENTA, targetSucursalInput);
+                let targetSucursalObj: Sucursal | null = null;
+                if (targetSucursalInput) {
+                    targetSucursalObj = await manager.findOne(Sucursal, { where: { id: Number(targetSucursalInput) } });
+                }
+                let targetSucursalPagoObj: Sucursal | null = null;
+                if (targetSucursalPagoInput) {
+                    targetSucursalPagoObj = await manager.findOne(Sucursal, { where: { id: Number(targetSucursalPagoInput) } });
+                }
 
                                 let subtotalGeneral = 0;
                 const detallesConSubtotal = (data.detalles || []).map(det => {
@@ -234,7 +247,11 @@ export class NotasService implements OnModuleInit {
                     descuentoPromocionPorcentaje: descPorc2,
                     diasCredito: Number(data.diasCredito || 0),
                     fechaVencimiento: fechaVencimiento as any,
-                    tipoPago: data.tipoPago || 'CONTADO'
+                    tipoPago: data.tipoPago || 'CONTADO',
+                    sucursal: targetSucursalObj || undefined,
+                    sucursalId: targetSucursalObj ? targetSucursalObj.id : undefined,
+                    sucursalPago: targetSucursalPagoObj || targetSucursalObj || undefined,
+                    sucursalPagoId: (targetSucursalPagoObj || targetSucursalObj) ? (targetSucursalPagoObj?.id || targetSucursalObj?.id) : undefined
                 });
                 
                 return await manager.save(nota);
@@ -269,17 +286,29 @@ export class NotasService implements OnModuleInit {
                     }
                 }
 
-                // Resolver Sucursal
+                // Resolver Sucursal Destino
                 let targetSucursal: Sucursal | null = null;
-                const sucursalId = data.sucursal?.id || data.sucursalId || nota.sucursal?.id;
+                const sucursalId = (data as any).sucursal?.id || (data as any).sucursalId || ((data as any).sucursal !== undefined ? (data as any).sucursal : nota.sucursal?.id);
                 if (sucursalId) {
                     targetSucursal = await manager.findOne(Sucursal, { where: { id: Number(sucursalId) } });
                 }
-                if (!targetSucursal) {
-                    targetSucursal = await manager.findOne(Sucursal, { where: { activo: true } });
+                if (!targetSucursal && nota.sucursal) {
+                    targetSucursal = nota.sucursal;
                 }
                 if (targetSucursal) {
                     nota.sucursal = targetSucursal;
+                    nota.sucursalId = targetSucursal.id;
+                }
+
+                // Resolver Sucursal de Pago
+                let targetSucursalPago: Sucursal | null = null;
+                const sucursalPagoId = (data as any).sucursalPago?.id || (data as any).sucursalPagoId || ((data as any).sucursalPago !== undefined ? (data as any).sucursalPago : (nota.sucursalPago?.id || nota.sucursal?.id));
+                if (sucursalPagoId) {
+                    targetSucursalPago = await manager.findOne(Sucursal, { where: { id: Number(sucursalPagoId) } });
+                }
+                if (targetSucursalPago) {
+                    nota.sucursalPago = targetSucursalPago;
+                    nota.sucursalPagoId = targetSucursalPago.id;
                 }
 
                 // Resolver Cliente / Proveedor / Vendedor
@@ -1426,6 +1455,8 @@ export class NotasService implements OnModuleInit {
                 .leftJoin('pago.nota', 'nota')
                 .leftJoin('nota.sucursal', 'notaSucursal')
                 .leftJoin('notaSucursal.ciudad', 'notaSucursalCiudad')
+                .leftJoin('nota.sucursalPago', 'notaSucursalPago')
+                .leftJoin('notaSucursalPago.ciudad', 'notaSucursalPagoCiudad')
                 .leftJoin('nota.vendedor', 'vendedor')
                 .leftJoin('nota.usuario', 'usuario')
                 .leftJoin('usuario.persona', 'usuarioPersona')
@@ -1489,6 +1520,9 @@ export class NotasService implements OnModuleInit {
                     'notaSucursal.id',
                     'notaSucursal.nombre',
                     'notaSucursalCiudad.id',
+                    'notaSucursalPago.id',
+                    'notaSucursalPago.nombre',
+                    'notaSucursalPagoCiudad.id',
                     'proveedor.id',
                     'proveedor.empresa',
                     'proveedorPersona.nombres',
@@ -1526,9 +1560,12 @@ export class NotasService implements OnModuleInit {
             this.dataSource.getRepository(CostoImportacion)
                 .createQueryBuilder('costo')
                 .leftJoin('costo.nota', 'nota')
+                .leftJoin('nota.sucursal', 'notaSucursal')
+                .leftJoin('notaSucursal.ciudad', 'notaSucursalCiudad')
                 .leftJoin('nota.proveedor', 'proveedor')
                 .leftJoin('proveedor.persona', 'proveedorPersona')
                 .leftJoin('costo.sucursal', 'sucursal')
+                .leftJoin('sucursal.ciudad', 'sucursalCiudad')
                 .select([
                     'costo.id',
                     'costo.notaId',
@@ -1543,9 +1580,13 @@ export class NotasService implements OnModuleInit {
                     'costo.sucursalId',
                     'sucursal.id',
                     'sucursal.nombre',
+                    'sucursalCiudad.id',
                     'nota.id',
                     'nota.numero',
                     'nota.fecha',
+                    'notaSucursal.id',
+                    'notaSucursal.nombre',
+                    'notaSucursalCiudad.id',
                     'proveedor.id',
                     'proveedor.empresa',
                     'proveedorPersona.nombres',
@@ -1623,7 +1664,7 @@ export class NotasService implements OnModuleInit {
             const totalGastosBob = Number(data.totalGastosBob) || 0;
             const costoTotalBob = Number(data.costoTotalBob) || (costoFobBob + totalGastosBob);
             const porcentajeGastos = Number(data.porcentajeGastos) || (costoFobBob > 0 ? (totalGastosBob * 100) / costoFobBob : 0);
-            const sucursalId = data.sucursalId ? Number(data.sucursalId) : (nota.sucursal?.id || null);
+            const sucursalId = (data.sucursalId ? Number(data.sucursalId) : null) || (nota.sucursal?.id || null);
             const fecha = (data.fecha ? (typeof data.fecha === 'string' ? data.fecha.substring(0, 10) : data.fecha) : new Date().toISOString().substring(0, 10)) as any;
 
             const monedaGastos = data.monedaGastos || 'BOB';
@@ -1651,7 +1692,7 @@ export class NotasService implements OnModuleInit {
                     comprobanteUrl,
                 });
             } else {
-                costoImp.sucursalId = sucursalId || costoImp.sucursalId;
+                costoImp.sucursalId = (sucursalId || costoImp.sucursalId || nota.sucursal?.id || null) as any;
                 if (usuarioId) costoImp.usuarioId = usuarioId;
                 costoImp.fecha = fecha;
                 costoImp.tipoCambio = tipoCambio;

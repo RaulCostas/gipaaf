@@ -7,11 +7,12 @@ import { supplierService } from '../../api/supplierService';
 import { productService } from '../../api/productService';
 import { sucursalService } from '../../api/sucursalService';
 import { getCiudades } from '../../api/ciudadService';
+import { marcaService } from '../../api/marcaService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
 import { CostoImportacionModal } from '../../components/compras/CostoImportacionModal';
-import { X, Search, Plus, Trash2, CheckCircle, CheckCircle2, Check, Package, Calculator, Calendar, ChevronRight, Eye, Edit, Ban, Printer, AlertTriangle, Building2, FileText, FileSpreadsheet, Filter, Users, Lock, Info, MessageSquare, Send, Loader2, ExternalLink, Globe, MessageCircle, ShoppingCart } from 'lucide-react';
+import { X, Search, Plus, Trash2, CheckCircle, CheckCircle2, Check, Package, Calculator, Calendar, ChevronRight, Eye, Edit, Ban, Printer, AlertTriangle, Building2, CreditCard, Truck, FileText, FileSpreadsheet, Filter, Users, Lock, Info, MessageSquare, Send, Loader2, ExternalLink, Globe, MessageCircle, ShoppingCart } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData, printJsPdf } from '../../utils/exportUtils';
@@ -97,6 +98,7 @@ const ComprasPage: React.FC = () => {
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [selectedProductId, setSelectedProductId] = useState<string>('');
+    const [selectedMarcaModal, setSelectedMarcaModal] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
 
     // WhatsApp State & Mutations
@@ -158,6 +160,7 @@ const ComprasPage: React.FC = () => {
     const [newNota, setNewNota] = useState<any>({
         proveedorId: '',
         sucursalId: '',
+        sucursalPagoId: '',
         moneda: 'BOB',
         tipoCambio: '6.96',
         fecha: format(new Date(), 'yyyy-MM-dd'),
@@ -182,9 +185,36 @@ const ComprasPage: React.FC = () => {
         queryFn: () => productService.getAll(),
     });
 
+    const { data: marcas } = useQuery({
+        queryKey: ['marcas'],
+        queryFn: marcaService.getAll,
+    });
+
+    const selectedMarcaNombre = useMemo(() => {
+        if (!selectedMarcaModal || !marcas) return '';
+        return marcas.find((m: any) => m.id.toString() === selectedMarcaModal)?.nombre || '';
+    }, [selectedMarcaModal, marcas]);
+
     const productOptions: SearchableOption[] = useMemo(() => {
         if (!products) return [];
-        return products.filter(p => p.activo).map(p => ({
+        let list = products.filter(p => p.activo);
+        if (selectedMarcaModal) {
+            const targetId = Number(selectedMarcaModal);
+            list = list.filter(p => {
+                if (p.marcaId && Number(p.marcaId) === targetId) return true;
+                if (p.marca && typeof p.marca === 'object' && Number(p.marca.id) === targetId) return true;
+                if (marcas) {
+                    const found = marcas.find((m: any) => m.id === targetId);
+                    if (found) {
+                        const mNombre = found.nombre.trim().toLowerCase();
+                        if (typeof p.marca === 'string' && p.marca.trim().toLowerCase() === mNombre) return true;
+                        if (p.marca?.nombre && p.marca.nombre.trim().toLowerCase() === mNombre) return true;
+                    }
+                }
+                return false;
+            });
+        }
+        return list.map(p => ({
             value: String(p.id),
             label: p.nombre,
             code: p.codigo,
@@ -193,7 +223,7 @@ const ComprasPage: React.FC = () => {
                 p.marca?.nombre ? `Marca: ${p.marca.nombre}` : ''
             ].filter(Boolean).join(' • ') || undefined
         }));
-    }, [products]);
+    }, [products, selectedMarcaModal, marcas]);
 
     const { data: sucursales } = useQuery({
         queryKey: ['sucursales'],
@@ -246,6 +276,7 @@ const ComprasPage: React.FC = () => {
         setNewNota({
             proveedorId: '',
             sucursalId: selectedSucursal || '',
+            sucursalPagoId: selectedSucursal || '',
             moneda: 'BOB',
             tipoCambio: '6.96',
             fecha: format(new Date(), 'yyyy-MM-dd'),
@@ -255,6 +286,7 @@ const ComprasPage: React.FC = () => {
             detalles: []
         });
         setSelectedProductId('');
+        setSelectedMarcaModal('');
         setError(null);
         setIsCreating(false);
         setIsViewing(false);
@@ -409,6 +441,7 @@ const ComprasPage: React.FC = () => {
             estado: nota.estado,
             proveedorId: nota.proveedor?.id || '',
             sucursalId: nota.sucursal?.id || (nota.almacen?.sucursal?.id || nota.almacenId || ''),
+            sucursalPagoId: nota.sucursalPago?.id || nota.sucursal?.id || (nota.almacen?.sucursal?.id || nota.almacenId || ''),
             moneda: nota.moneda || 'BOB',
             tipoCambio: nota.tipoCambio != null ? String(nota.tipoCambio) : '6.96',
             fecha: nota.fecha ? nota.fecha.split('T')[0] : '',
@@ -426,6 +459,7 @@ const ComprasPage: React.FC = () => {
                 subtotal: Number(d.subtotal) || (Number(d.cantidad || 0) * Number(d.precioUnitario || 0))
             }))
         });
+        setSelectedMarcaModal('');
         setIsEditing(true);
         setIsViewing(false);
         setIsCreating(true);
@@ -437,6 +471,7 @@ const ComprasPage: React.FC = () => {
             estado: nota.estado,
             proveedorId: nota.proveedor?.id || '',
             sucursalId: nota.sucursal?.id || (nota.almacen?.sucursal?.id || nota.almacenId || ''),
+            sucursalPagoId: nota.sucursalPago?.id || nota.sucursal?.id || (nota.almacen?.sucursal?.id || nota.almacenId || ''),
             moneda: nota.moneda || 'BOB',
             tipoCambio: nota.tipoCambio != null ? String(nota.tipoCambio) : '6.96',
             fecha: nota.fecha ? nota.fecha.split('T')[0] : '',
@@ -454,6 +489,7 @@ const ComprasPage: React.FC = () => {
                 subtotal: Number(d.subtotal) || (Number(d.cantidad || 0) * Number(d.precioUnitario || 0))
             }))
         });
+        setSelectedMarcaModal('');
         setIsViewing(true);
         setIsEditing(false);
         setIsCreating(true);
@@ -482,6 +518,9 @@ const ComprasPage: React.FC = () => {
             moneda: newNota.moneda,
             tipoCambio: newNota.moneda === 'USD' ? (parseFloat(String(newNota.tipoCambio).replace(',', '.')) || 6.96) : 1,
             sucursal: newNota.sucursalId ? { id: Number(newNota.sucursalId) } : (selectedSucursal ? { id: Number(selectedSucursal) } : null),
+            sucursalId: newNota.sucursalId ? Number(newNota.sucursalId) : (selectedSucursal ? Number(selectedSucursal) : null),
+            sucursalPago: newNota.sucursalPagoId ? { id: Number(newNota.sucursalPagoId) } : (newNota.sucursalId ? { id: Number(newNota.sucursalId) } : (selectedSucursal ? { id: Number(selectedSucursal) } : null)),
+            sucursalPagoId: newNota.sucursalPagoId ? Number(newNota.sucursalPagoId) : (newNota.sucursalId ? Number(newNota.sucursalId) : (selectedSucursal ? Number(selectedSucursal) : null)),
             descuentoPorcentaje: newNota.descuentoPorcentaje,
             descuentoPromocionPorcentaje: 0,
             detalles: newNota.detalles.map((d: any) => ({
@@ -516,9 +555,9 @@ const ComprasPage: React.FC = () => {
         let filtered = purchases;
 
         if (selectedSucursal) {
-            filtered = filtered.filter(p => p.sucursal?.id === Number(selectedSucursal) || (p.almacen as any)?.sucursal?.id === Number(selectedSucursal));
+            filtered = filtered.filter(p => p.sucursal?.id === Number(selectedSucursal) || p.sucursalPago?.id === Number(selectedSucursal) || (p.almacen as any)?.sucursal?.id === Number(selectedSucursal));
         } else if (selectedCiudad) {
-            filtered = filtered.filter(p => (p.sucursal as any)?.ciudad?.id === Number(selectedCiudad) || (p.almacen as any)?.sucursal?.ciudad?.id === Number(selectedCiudad));
+            filtered = filtered.filter(p => (p.sucursal as any)?.ciudad?.id === Number(selectedCiudad) || (p.sucursalPago as any)?.ciudad?.id === Number(selectedCiudad) || (p.almacen as any)?.sucursal?.ciudad?.id === Number(selectedCiudad));
         }
 
         if (selectedSupplier !== 'all') {
@@ -820,13 +859,20 @@ const ComprasPage: React.FC = () => {
                                 </td>
                                 <td className="p-4">
                                     {p.sucursal || (p.almacen as any)?.sucursal ? (
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                                                {(p.sucursal || (p.almacen as any)?.sucursal)?.ciudad?.nombre || ''}
-                                            </span>
-                                            <span className="text-sm font-semibold">
-                                                {(p.sucursal || (p.almacen as any)?.sucursal)?.nombre}
-                                            </span>
+                                        <div className="flex flex-col gap-0.5">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+                                                    {(p.sucursal || (p.almacen as any)?.sucursal)?.ciudad?.nombre || ''}
+                                                </span>
+                                                <span className="text-sm font-semibold">
+                                                    {(p.sucursal || (p.almacen as any)?.sucursal)?.nombre}
+                                                </span>
+                                            </div>
+                                            {p.sucursalPago && p.sucursalPago.id !== (p.sucursal?.id || (p.almacen as any)?.sucursal?.id) && (
+                                                <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1 mt-0.5" title="Sucursal a cargo del pago">
+                                                    <CreditCard className="w-3 h-3 shrink-0" /> Pago: {p.sucursalPago.nombre}
+                                                </span>
+                                            )}
                                         </div>
                                     ) : (
                                         <span className="text-sm text-muted-foreground font-medium">-</span>
@@ -970,7 +1016,7 @@ const ComprasPage: React.FC = () => {
                     {error && <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-lg border border-destructive/20">{error}</div>}
 
                     <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium flex items-center gap-2 italic">
                                     <Calendar className="w-3 h-3 text-primary" /> Fecha
@@ -985,7 +1031,9 @@ const ComprasPage: React.FC = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-medium flex items-center gap-2 italic">Proveedor</label>
+                                <label className="text-sm font-medium flex items-center gap-2 italic">
+                                    <Truck className="w-3 h-3 text-primary" /> Proveedor
+                                </label>
                                 <select
                                     value={newNota.proveedorId}
                                     onChange={(e) => setNewNota({ ...newNota, proveedorId: Number(e.target.value) })}
@@ -999,18 +1047,43 @@ const ComprasPage: React.FC = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-medium flex items-center gap-2 italic">
+                                <label className="text-sm font-medium flex items-center gap-2 italic" title="Sucursal donde ingresa físicamente la mercadería (afecta inventario)">
                                     <Building2 className="w-3 h-3 text-primary" /> Sucursal Destino
                                 </label>
                                 <select
                                     value={newNota.sucursalId}
-                                    onChange={(e) => setNewNota({ ...newNota, sucursalId: Number(e.target.value) })}
+                                    onChange={(e) => {
+                                        const newDestino = e.target.value ? Number(e.target.value) : '';
+                                        setNewNota((prev: any) => ({
+                                            ...prev,
+                                            sucursalId: newDestino,
+                                            sucursalPagoId: (!prev.sucursalPagoId || prev.sucursalPagoId === prev.sucursalId) ? newDestino : prev.sucursalPagoId
+                                        }));
+                                    }}
+                                    disabled={isViewing}
+                                    className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50"
+                                    required
+                                >
+                                    <option value="">Seleccione sucursal destino...</option>
+                                    {sucursales?.map(s => <option key={s.id} value={s.id}>{s.nombre} {s.ciudad?.nombre ? `(${s.ciudad.nombre})` : ''}</option>)}
+                                </select>
+                                <span className="text-[10px] text-muted-foreground block -mt-1 font-medium">Llegada productos (inventario)</span>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium flex items-center gap-2 italic" title="Sucursal que asumirá la deuda y pagos a proveedores">
+                                    <CreditCard className="w-3 h-3 text-primary" /> Sucursal de Pago
+                                </label>
+                                <select
+                                    value={newNota.sucursalPagoId || newNota.sucursalId || ''}
+                                    onChange={(e) => setNewNota({ ...newNota, sucursalPagoId: e.target.value ? Number(e.target.value) : '' })}
                                     disabled={isViewing}
                                     className="w-full p-2.5 border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all hover:border-primary/50"
                                 >
-                                    <option value="">Seleccione sucursal...</option>
-                                    {filteredSucursales?.map(s => <option key={s.id} value={s.id}>{s.nombre} {s.ciudad?.nombre ? `(${s.ciudad.nombre})` : ''}</option>)}
+                                    <option value="">Misma que Sucursal Destino</option>
+                                    {sucursales?.map(s => <option key={s.id} value={s.id}>{s.nombre} {s.ciudad?.nombre ? `(${s.ciudad.nombre})` : ''}</option>)}
                                 </select>
+                                <span className="text-[10px] text-muted-foreground block -mt-1 font-medium">A cargo del monto a pagar</span>
                             </div>
                         </div>
 
@@ -1050,9 +1123,49 @@ const ComprasPage: React.FC = () => {
                     </div>
 
                     <div className="border rounded-xl shadow-sm bg-card">
-                        <div className="p-4 bg-muted/30 border-b flex items-center gap-3 rounded-t-xl">
-                            <Package className="w-4 h-4 text-primary" />
-                            <h3 className="font-semibold text-sm">Productos en esta Nota</h3>
+                        <div className="p-4 bg-muted/30 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-t-xl">
+                            <div className="flex items-center gap-2.5">
+                                <Package className="w-4 h-4 text-primary" />
+                                <h3 className="font-semibold text-sm">Productos en esta Nota</h3>
+                            </div>
+                            {!isViewing && (
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs font-medium text-muted-foreground whitespace-nowrap flex items-center gap-1">
+                                        <Filter className="w-3.5 h-3.5 text-primary" />
+                                        Marca:
+                                    </label>
+                                    <div className="flex items-center gap-1.5">
+                                        <select
+                                            value={selectedMarcaModal}
+                                            onChange={(e) => {
+                                                setSelectedMarcaModal(e.target.value);
+                                                setSelectedProductId('');
+                                            }}
+                                            className="text-xs py-1.5 px-2.5 border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary/20 outline-none min-w-[150px] sm:min-w-[190px] cursor-pointer font-medium"
+                                        >
+                                            <option value="">Todas las marcas</option>
+                                            {marcas?.filter((m: any) => m.activo !== false).map((m: any) => (
+                                                <option key={m.id} value={m.id}>
+                                                    {m.nombre}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {selectedMarcaModal && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedMarcaModal('');
+                                                    setSelectedProductId('');
+                                                }}
+                                                title="Limpiar filtro de marca"
+                                                className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted text-xs transition-colors cursor-pointer"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="p-4 space-y-4">
                             {!isViewing && (
@@ -1062,8 +1175,8 @@ const ComprasPage: React.FC = () => {
                                             value={selectedProductId}
                                             onChange={(val) => setSelectedProductId(String(val || ''))}
                                             options={productOptions}
-                                            placeholder="Seleccione un producto para agregar..."
-                                            searchPlaceholder="Buscar producto por código, nombre, línea, marca..."
+                                            placeholder={selectedMarcaNombre ? `Buscar producto de ${selectedMarcaNombre}...` : "Seleccione un producto para agregar..."}
+                                            searchPlaceholder={selectedMarcaNombre ? `Filtrando por ${selectedMarcaNombre}...` : "Buscar producto por código, nombre, línea, marca..."}
                                         />
                                     </div>
                                     <button

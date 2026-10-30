@@ -5,6 +5,7 @@ import {
     ManyToOne,
     OneToMany,
     OneToOne,
+    JoinColumn,
     CreateDateColumn,
     UpdateDateColumn,
     DeleteDateColumn,
@@ -101,8 +102,19 @@ export class Nota {
     @ManyToOne(() => Usuario, { eager: true })
     usuario: Usuario;
 
-    @ManyToOne(() => Sucursal, { eager: true })
+    @Column({ nullable: true })
+    sucursalId: number;
+
+    @ManyToOne(() => Sucursal, { eager: true, nullable: true })
+    @JoinColumn({ name: 'sucursalId' })
     sucursal: Sucursal;
+
+    @Column({ nullable: true })
+    sucursalPagoId: number;
+
+    @ManyToOne(() => Sucursal, { eager: true, nullable: true })
+    @JoinColumn({ name: 'sucursalPagoId' })
+    sucursalPago: Sucursal;
 
     @OneToMany(() => DetalleNota, (det) => det.nota, { cascade: true, eager: true })
     detalles: DetalleNota[];

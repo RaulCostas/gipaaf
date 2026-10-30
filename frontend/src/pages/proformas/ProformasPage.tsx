@@ -10,6 +10,7 @@ import { inventoryService } from '../../api/inventoryService';
 import { sucursalService } from '../../api/sucursalService';
 import { personalService } from '../../api/personalService';
 import { getCiudades } from '../../api/ciudadService';
+import { marcaService } from '../../api/marcaService';
 import { EstadoNota } from '../../api/purchaseService';
 import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
@@ -47,6 +48,7 @@ const ProformasPage: React.FC = () => {
     const itemsPerPage = 10;
     const [error, setError] = useState<string | null>(null);
     const [selectedProdIdToAdd, setSelectedProdIdToAdd] = useState<string>('');
+    const [selectedMarcaModal, setSelectedMarcaModal] = useState<string>('');
 
     // Form State
     const [newProforma, setNewProforma] = useState<any>({
@@ -115,11 +117,17 @@ const ProformasPage: React.FC = () => {
     const { data: sucursales } = useQuery({ queryKey: ['sucursales'], queryFn: sucursalService.getAll });
     const { data: ciudades } = useQuery({ queryKey: ['ciudades'], queryFn: getCiudades });
     const { data: inventarios } = useQuery({ queryKey: ['inventarios'], queryFn: inventoryService.getAll });
+    const { data: marcas } = useQuery({ queryKey: ['marcas'], queryFn: marcaService.getAll });
 
     const { data: products } = useQuery({
         queryKey: ['products'],
         queryFn: () => productService.getAll(),
     });
+
+    const selectedMarcaNombre = useMemo(() => {
+        if (!selectedMarcaModal || !marcas) return '';
+        return marcas.find((m: any) => m.id.toString() === selectedMarcaModal)?.nombre || '';
+    }, [selectedMarcaModal, marcas]);
 
     const { data: vendedores } = useQuery({
         queryKey: ['vendedores'],
@@ -163,7 +171,24 @@ const ProformasPage: React.FC = () => {
 
     const productOptions: SearchableOption[] = useMemo(() => {
         if (!products) return [];
-        return products.filter(p => p.activo).map(p => {
+        let list = products.filter(p => p.activo);
+        if (selectedMarcaModal) {
+            const targetId = Number(selectedMarcaModal);
+            list = list.filter(p => {
+                if (p.marcaId && Number(p.marcaId) === targetId) return true;
+                if (p.marca && typeof p.marca === 'object' && Number(p.marca.id) === targetId) return true;
+                if (marcas) {
+                    const found = marcas.find((m: any) => m.id === targetId);
+                    if (found) {
+                        const mNombre = found.nombre.trim().toLowerCase();
+                        if (typeof p.marca === 'string' && p.marca.trim().toLowerCase() === mNombre) return true;
+                        if (p.marca?.nombre && p.marca.nombre.trim().toLowerCase() === mNombre) return true;
+                    }
+                }
+                return false;
+            });
+        }
+        return list.map(p => {
             const stock = getProductStock(p.id);
             const isOutOfStock = stock <= 0;
             return {
@@ -176,7 +201,7 @@ const ProformasPage: React.FC = () => {
                 disabled: isOutOfStock
             };
         });
-    }, [products, inventarios, newProforma.sucursalId]);
+    }, [products, inventarios, newProforma.sucursalId, selectedMarcaModal, marcas]);
 
     const updateMutation = useMutation({
         mutationFn: ({ id, payload }: { id: number; payload: any }) => proformaService.update(id, payload),
@@ -274,6 +299,7 @@ const ProformasPage: React.FC = () => {
         setEditingId(null);
         setIsViewing(false);
         setSelectedProdIdToAdd('');
+        setSelectedMarcaModal('');
         const firstSucInCiudad = selectedCiudad ? sucursales?.find((s: any) => s.ciudad?.id === Number(selectedCiudad))?.id?.toString() : '';
         const defaultSucId = selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : (userPersonal?.sucursal?.id ? String(userPersonal.sucursal.id) : (firstSucInCiudad || '')));
         const defaultSucNombre = sucursales?.find((s: any) => s.id.toString() === defaultSucId)?.nombre || userSucursal?.nombre || userPersonal?.sucursal?.nombre || '';
@@ -300,6 +326,7 @@ const ProformasPage: React.FC = () => {
     const handleEdit = (proforma: any) => {
         setEditingId(proforma.id);
         setIsViewing(false);
+        setSelectedMarcaModal('');
         setNewProforma({
             numero: proforma.numero || '',
             clienteId: proforma.cliente?.id?.toString() || '',
@@ -332,6 +359,7 @@ const ProformasPage: React.FC = () => {
     const handleView = (proforma: any) => {
         setEditingId(proforma.id);
         setIsViewing(true);
+        setSelectedMarcaModal('');
         setNewProforma({
             numero: proforma.numero || '',
             clienteId: proforma.cliente?.id?.toString() || '',
@@ -1475,9 +1503,49 @@ const ProformasPage: React.FC = () => {
                     </div>
 
                     <div className="border rounded-xl shadow-sm bg-card">
-                        <div className="p-4 bg-muted/30 border-b flex items-center gap-3 rounded-t-xl">
-                            <Package className="w-4 h-4 text-primary" />
-                            <h3 className="font-semibold text-sm">Detalle de Productos</h3>
+                        <div className="p-4 bg-muted/30 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-t-xl">
+                            <div className="flex items-center gap-2.5">
+                                <Package className="w-4 h-4 text-primary" />
+                                <h3 className="font-semibold text-sm">Detalle de Productos</h3>
+                            </div>
+                            {!isViewing && (
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs font-medium text-muted-foreground whitespace-nowrap flex items-center gap-1">
+                                        <Filter className="w-3.5 h-3.5 text-primary" />
+                                        Marca:
+                                    </label>
+                                    <div className="flex items-center gap-1.5">
+                                        <select
+                                            value={selectedMarcaModal}
+                                            onChange={(e) => {
+                                                setSelectedMarcaModal(e.target.value);
+                                                setSelectedProdIdToAdd('');
+                                            }}
+                                            className="text-xs py-1.5 px-2.5 border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary/20 outline-none min-w-[150px] sm:min-w-[190px] cursor-pointer font-medium"
+                                        >
+                                            <option value="">Todas las marcas</option>
+                                            {marcas?.filter((m: any) => m.activo !== false).map((m: any) => (
+                                                <option key={m.id} value={m.id}>
+                                                    {m.nombre}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {selectedMarcaModal && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedMarcaModal('');
+                                                    setSelectedProdIdToAdd('');
+                                                }}
+                                                title="Limpiar filtro de marca"
+                                                className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted text-xs transition-colors cursor-pointer"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="p-4 space-y-4">
                             {!isViewing && (
@@ -1487,8 +1555,8 @@ const ProformasPage: React.FC = () => {
                                             value={selectedProdIdToAdd}
                                             onChange={(val) => setSelectedProdIdToAdd(val)}
                                             options={productOptions}
-                                            placeholder="Buscar o seleccionar producto para agregar..."
-                                            searchPlaceholder="Escriba código o nombre de producto..."
+                                            placeholder={selectedMarcaNombre ? `Buscar producto de ${selectedMarcaNombre}...` : "Buscar o seleccionar producto para agregar..."}
+                                            searchPlaceholder={selectedMarcaNombre ? `Filtrando por ${selectedMarcaNombre}...` : "Escriba código o nombre de producto..."}
                                         />
                                     </div>
                                     <button

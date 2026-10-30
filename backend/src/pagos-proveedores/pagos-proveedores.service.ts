@@ -18,6 +18,8 @@ export class PagosProveedoresService {
                 'nota', 
                 'nota.sucursal', 
                 'nota.sucursal.ciudad', 
+                'nota.sucursalPago',
+                'nota.sucursalPago.ciudad',
                 'proveedor', 
                 'proveedor.persona'
             ],
@@ -40,6 +42,8 @@ export class PagosProveedoresService {
                 'nota', 
                 'nota.sucursal', 
                 'nota.sucursal.ciudad', 
+                'nota.sucursalPago',
+                'nota.sucursalPago.ciudad',
                 'proveedor', 
                 'proveedor.persona'
             ]
@@ -54,6 +58,8 @@ export class PagosProveedoresService {
             .leftJoinAndSelect('proveedor.persona', 'persona')
             .leftJoinAndSelect('nota.sucursal', 'sucursal')
             .leftJoinAndSelect('sucursal.ciudad', 'ciudad')
+            .leftJoinAndSelect('nota.sucursalPago', 'sucursalPago')
+            .leftJoinAndSelect('sucursalPago.ciudad', 'sucursalPagoCiudad')
             .where('nota.tipo = :tipo', { tipo: TipoNota.COMPRA })
             .andWhere('nota.saldo > 0')
             .andWhere('nota.estado = :estado', { estado: EstadoNota.CONFIRMADA });

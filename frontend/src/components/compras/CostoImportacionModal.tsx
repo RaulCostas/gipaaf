@@ -112,10 +112,15 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
         const loadData = async () => {
             setIsLoading(true);
             try {
+                const defaultSucId = compra?.sucursal?.id 
+                    ? String(compra.sucursal.id) 
+                    : (compra?.almacen?.sucursal?.id 
+                        ? String(compra.almacen.sucursal.id) 
+                        : (compra?.sucursalId ? String(compra.sucursalId) : ''));
                 const existing = await importacionService.getByNotaId(compra.id);
                 if (existing) {
                     setFecha(getLocalDateString(existing.fecha || compra.fecha));
-                    setSelectedSucursalId(existing.sucursalId ? String(existing.sucursalId) : '');
+                    setSelectedSucursalId(existing.sucursalId ? String(existing.sucursalId) : defaultSucId);
                     setTipoCambioFob(existing.tipoCambio != null ? String(existing.tipoCambio) : (compra.tipoCambio != null ? String(compra.tipoCambio) : '6.96'));
                     setMonedaGastos(existing.monedaGastos || 'BOB');
                     setMetodoPago(existing.metodoPago || 'Transferencia Bancaria');
@@ -123,9 +128,9 @@ export const CostoImportacionModal: React.FC<CostoImportacionModalProps> = ({
                     setComprobanteUrl(existing.comprobanteUrl || '');
                     setGastos(existing.gastos || []);
                 } else {
-                    // Por primera vez (sin registro): iniciar vacío para que el usuario use 'Cargar Plantilla'
+                    // Por primera vez (sin registro): iniciar con sucursal de la compra
                     setFecha(getLocalDateString(compra.fecha));
-                    setSelectedSucursalId('');
+                    setSelectedSucursalId(defaultSucId);
                     setTipoCambioFob(compra.tipoCambio != null ? String(compra.tipoCambio) : '6.96');
                     setMonedaGastos('BOB');
                     setMetodoPago('Transferencia Bancaria');
