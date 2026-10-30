@@ -233,8 +233,8 @@ export const isCodeOrIdColumn = (colKey?: string, header?: string): boolean => {
 const parsePossibleExcelNumber = (val: any, colKey?: string, header?: string): any => {
   if (val === null || val === undefined || val === '') return '';
   if (isCodeOrIdColumn(colKey, header)) {
-    // Preserve codes as text strings without thousands separator dots
-    return String(val).replace(/\./g, '').trim();
+    // Preserve codes exactly as text strings (including dots that are part of the code, e.g. 700889L.36)
+    return String(val).trim();
   }
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (typeof val === 'boolean') return val ? 'Activo' : 'Inactivo';
@@ -320,11 +320,11 @@ export const exportToExcel = (
     // Skip header row
     if (decoded.r === 0) return;
 
-    // For code columns (like client code), ensure they are treated as plain text without thousands grouping
+    // For code columns (like client code), ensure they are treated as plain text preserving dots (e.g. 700889L.36)
     if (colDef && isCodeOrIdColumn(colDef.dataKey, colDef.header)) {
       if (cell) {
         cell.t = 's';
-        cell.v = String(cell.v ?? '').replace(/\./g, '').trim();
+        cell.v = String(cell.v ?? '').trim();
         delete cell.z;
       }
       return;
