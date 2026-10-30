@@ -143,6 +143,56 @@ const CobranzasPage: React.FC = () => {
         return list;
     }, [vendedores, selectedSucursal, selectedCiudad]);
 
+    // Mapa de saldos progresivos/históricos tras cada pago para mostrar la evolución del saldo
+    const pagosSaldosMap = useMemo(() => {
+        const map = new Map<number, { saldoRestante: number; esLiquidacion: boolean }>();
+        if (!pagosList) return map;
+
+        // Agrupar pagos por notaId
+        const pagosPorNota = new Map<number, typeof pagosList>();
+        for (const p of pagosList) {
+            if (!p.nota?.id) continue;
+            const list = pagosPorNota.get(p.nota.id) || [];
+            list.push(p);
+            pagosPorNota.set(p.nota.id, list);
+        }
+
+        pagosPorNota.forEach((lista) => {
+            // Ordenar cronológicamente ascendente: fecha -> creadoEn -> id
+            const sorted = [...lista].sort((a, b) => {
+                const fA = a.fecha ? (typeof a.fecha === 'string' ? a.fecha.substring(0, 10) : '') : '';
+                const fB = b.fecha ? (typeof b.fecha === 'string' ? b.fecha.substring(0, 10) : '') : '';
+                if (fA !== fB) return fA.localeCompare(fB);
+                const cA = a.creadoEn ? new Date(a.creadoEn).getTime() : 0;
+                const cB = b.creadoEn ? new Date(b.creadoEn).getTime() : 0;
+                if (cA !== cB) return cA - cB;
+                return (a.id || 0) - (b.id || 0);
+            });
+
+            const primerPagoConNota = sorted.find(p => p.nota?.total !== undefined);
+            let saldoAcumulado = Number(primerPagoConNota?.nota?.total || 0);
+
+            for (const p of sorted) {
+                if (!p.activo) {
+                    map.set(p.id, {
+                        saldoRestante: saldoAcumulado,
+                        esLiquidacion: false
+                    });
+                    continue;
+                }
+
+                const abono = Number(p.montoEquivalente > 0 ? p.montoEquivalente : p.monto) || 0;
+                saldoAcumulado = Math.max(0, Number((saldoAcumulado - abono).toFixed(2)));
+                map.set(p.id, {
+                    saldoRestante: saldoAcumulado,
+                    esLiquidacion: saldoAcumulado <= 0.001
+                });
+            }
+        });
+
+        return map;
+    }, [pagosList]);
+
     const { data: sucursales } = useQuery({ queryKey: ['sucursales'], queryFn: sucursalService.getAll });
     const { data: ciudades } = useQuery({ queryKey: ['ciudades'], queryFn: getCiudades });
     const { data: clients } = useQuery({ queryKey: ['clients'], queryFn: () => clientService.getAll() });
@@ -549,7 +599,9 @@ const CobranzasPage: React.FC = () => {
         return sortedAsc.map(p => {
             const montoFormateado = Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const totalVentaFormateado = p.nota ? Number(p.nota.total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
-            const saldoFormateado = p.nota ? Number(p.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+            const infoSaldo = pagosSaldosMap.get(p.id);
+            const saldoVal = infoSaldo !== undefined ? infoSaldo.saldoRestante : Number(p.nota?.saldo || 0);
+            const saldoFormateado = p.nota ? saldoVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
             const vendedorNombre = p.nota?.vendedor
                 ? `${p.nota.vendedor.nombres || ''} ${p.nota.vendedor.apellidos || ''}`.trim()
                 : '-';
@@ -584,7 +636,7 @@ const CobranzasPage: React.FC = () => {
                 observaciones
             };
         });
-    }, [filteredPagos, clients]);
+    }, [filteredPagos, clients, pagosSaldosMap]);
 
     const getFiltersText = () => {
         const texts: string[] = [];
@@ -998,7 +1050,9 @@ const CobranzasPage: React.FC = () => {
                                 const ventaMoneda = p.nota?.moneda || 'BOB';
                                 const esMonedaCruzada = p.moneda !== ventaMoneda;
                                 const saldoSimbolo = ventaMoneda === 'USD' ? '$us' : 'Bs.';
-                                const saldoNota = Number(p.nota?.saldo || 0);
+                                const infoSaldo = pagosSaldosMap.get(p.id);
+                                const saldoNota = infoSaldo !== undefined ? infoSaldo.saldoRestante : Number(p.nota?.saldo || 0);
+                                const esLiquidada = infoSaldo !== undefined ? infoSaldo.esLiquidacion : (saldoNota <= 0.001);
                                 const totalVenta = Number(p.nota?.total || 0);
                                 const reciboNumero = p.referencia || (p.id ? `REC-${String(p.id).padStart(6, '0')}` : '-');
 
@@ -1154,7 +1208,7 @@ const CobranzasPage: React.FC = () => {
                                                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-100 text-red-700 uppercase tracking-wider">
                                                     Anulado
                                                 </span>
-                                            ) : saldoNota <= 0.001 ? (
+                                            ) : esLiquidada ? (
                                                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase tracking-wider">
                                                     Pagada
                                                 </span>
@@ -1729,12 +1783,16 @@ const CobranzasPage: React.FC = () => {
                                 <span>Cliente: {getClientDisplayName(whatsappModalData.pago.cliente)}</span>
                                 <span>{whatsappModalData.pago.fecha ? String(whatsappModalData.pago.fecha).split('T')[0].split('-').reverse().join('/') : '-'}</span>
                             </div>
-                            {whatsappModalData.pago.nota && (
-                                <div className="text-xs text-muted-foreground flex justify-between items-center pt-1 border-t border-border/40">
-                                    <span>Venta Asociada: <strong className="text-foreground">N° {whatsappModalData.pago.nota.numero}</strong></span>
-                                    <span>Saldo Venta: <strong className="text-amber-600">Bs. {Number(whatsappModalData.pago.nota.saldo || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}</strong></span>
-                                </div>
-                            )}
+                            {whatsappModalData.pago.nota && (() => {
+                                const modalSaldoInfo = whatsappModalData ? pagosSaldosMap.get(whatsappModalData.pago.id) : undefined;
+                                const modalSaldoVal = modalSaldoInfo !== undefined ? modalSaldoInfo.saldoRestante : Number(whatsappModalData.pago.nota.saldo || 0);
+                                return (
+                                    <div className="text-xs text-muted-foreground flex justify-between items-center pt-1 border-t border-border/40">
+                                        <span>Venta Asociada: <strong className="text-foreground">N° {whatsappModalData.pago.nota.numero}</strong></span>
+                                        <span>Saldo tras este cobro: <strong className={modalSaldoVal <= 0.001 ? "text-emerald-600" : "text-amber-600"}>Bs. {modalSaldoVal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}</strong></span>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Input de Teléfono */}
