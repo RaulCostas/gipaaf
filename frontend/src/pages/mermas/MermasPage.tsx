@@ -356,7 +356,7 @@ const MermasPage: React.FC = () => {
         ];
     };
 
-    const getFormattedData = () => {
+    const getFormattedData = (isExcel = false) => {
         return filteredMermas.map(m => {
             const cant = Math.abs(Number(m.cantidad) || 0);
             const costo = getCostoUnitario(m);
@@ -371,7 +371,7 @@ const MermasPage: React.FC = () => {
                 marca: getMarcaNombre(m.inventario?.producto),
                 linea: getLineaNombre(m.inventario?.producto),
                 sucursal: `${suc?.nombre || '-'} (${suc?.ciudad?.nombre || '-'})`,
-                cantidad: `${formatQuantity(cant)} ${m.inventario?.producto?.unidadMedida || 'u.'}`,
+                cantidad: isExcel ? cant : formatQuantity(cant),
                 costoUnitario: formatCurrency(costo),
                 costoTotal: formatCurrency(total),
                 motivo: m.motivo || '-',
@@ -429,7 +429,7 @@ const MermasPage: React.FC = () => {
 
     const handleExportExcel = () => {
         if (!mermasData.length) return;
-        exportToExcel(getExcelColumns(), getFormattedData(), 'mermas_reporte');
+        exportToExcel(getExcelColumns(), getFormattedData(true), 'mermas_reporte');
     };
 
     const totalPages = Math.ceil(filteredMermas.length / itemsPerPage) || 1;
