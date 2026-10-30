@@ -1455,8 +1455,6 @@ export class NotasService implements OnModuleInit {
                 .leftJoin('pago.nota', 'nota')
                 .leftJoin('nota.sucursal', 'notaSucursal')
                 .leftJoin('notaSucursal.ciudad', 'notaSucursalCiudad')
-                .leftJoin('nota.sucursalPago', 'notaSucursalPago')
-                .leftJoin('notaSucursalPago.ciudad', 'notaSucursalPagoCiudad')
                 .leftJoin('nota.vendedor', 'vendedor')
                 .leftJoin('nota.usuario', 'usuario')
                 .leftJoin('usuario.persona', 'usuarioPersona')
@@ -1503,6 +1501,8 @@ export class NotasService implements OnModuleInit {
                 .leftJoin('pago.nota', 'nota')
                 .leftJoin('nota.sucursal', 'notaSucursal')
                 .leftJoin('notaSucursal.ciudad', 'notaSucursalCiudad')
+                .leftJoin('nota.sucursalPago', 'notaSucursalPago')
+                .leftJoin('notaSucursalPago.ciudad', 'notaSucursalPagoCiudad')
                 .leftJoin('pago.proveedor', 'proveedor')
                 .leftJoin('proveedor.persona', 'proveedorPersona')
                 .select([
