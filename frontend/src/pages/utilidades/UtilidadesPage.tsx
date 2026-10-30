@@ -357,7 +357,7 @@ const UtilidadesPage: React.FC = () => {
                 comprobanteUrl: p.comprobanteUrl,
                 monto,
                 moneda: isSus ? 'USD' : 'BOB',
-                sucursal: p.nota?.sucursal?.nombre
+                sucursal: (p.nota?.sucursalPago || p.nota?.sucursal)?.nombre
             };
 
             if (isSus) itemsProvSus.push(item);

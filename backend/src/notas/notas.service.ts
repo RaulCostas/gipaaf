@@ -343,7 +343,158 @@ export class NotasService implements OnModuleInit {
                     return await manager.save(nota);
                 }
 
-                // Si se envían detalles:
+                // Para compras confirmadas: verificar si hubo un cambio real en los productos o inventario físico
+                if (nota.estado === EstadoNota.CONFIRMADA && nota.tipo === TipoNota.COMPRA) {
+                    const oldDetalles = nota.detalles || [];
+                    const newDetalles = data.detalles || [];
+                    const targetSucursalId = targetSucursal ? targetSucursal.id : (nota.sucursal ? nota.sucursal.id : null);
+                    const oldSucursalId = nota.sucursal ? nota.sucursal.id : null;
+
+                    let cambioInventarioCompra = targetSucursalId !== oldSucursalId;
+
+                    if (!cambioInventarioCompra) {
+                        if (oldDetalles.length !== newDetalles.length) {
+                            cambioInventarioCompra = true;
+                        } else {
+                            for (let i = 0; i < oldDetalles.length; i++) {
+                                const oldDet = oldDetalles[i];
+                                const newDet = newDetalles[i];
+                                const newProdId = Number((newDet.producto as any)?.id || (newDet as any).productoId || newDet.producto);
+                                const oldProdId = Number(oldDet.producto?.id);
+
+                                const newCant = Number(newDet.cantidad) || 0;
+                                const oldCant = Number(oldDet.cantidad) || 0;
+
+                                const newLote = String(newDet.numeroLote || '').trim();
+                                const oldLote = String(oldDet.numeroLote || '').trim();
+
+                                if (newProdId !== oldProdId || newCant !== oldCant || newLote !== oldLote) {
+                                    cambioInventarioCompra = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // Si NO hubo cambios en los productos ni cantidades ni lotes del inventario físico:
+                    // Se actualizan únicamente datos administrativos (sucursalPago, proveedor, fecha, observaciones, moneda, tipoCambio, etc.)
+                    if (!cambioInventarioCompra) {
+                        let subtotalGeneral = 0;
+                        for (let i = 0; i < oldDetalles.length; i++) {
+                            const oldDet = oldDetalles[i];
+                            const newDet = newDetalles[i];
+                            const cant = Number(oldDet.cantidad) || 0;
+                            const pu = Number(newDet.precioUnitario !== undefined ? newDet.precioUnitario : oldDet.precioUnitario) || 0;
+                            const descPorc = Number(newDet.descuentoPorcentaje !== undefined ? newDet.descuentoPorcentaje : (newDet.descuento !== undefined ? newDet.descuento : (oldDet.descuentoPorcentaje || 0)));
+                            const hasFijo = Boolean(newDet.aplicaDescuentoFijo !== undefined ? newDet.aplicaDescuentoFijo : oldDet.aplicaDescuentoFijo);
+                            const montoBase = cant * pu;
+                            let sub1 = montoBase;
+                            if (descPorc > 0) sub1 = montoBase * (1 - descPorc / 100);
+                            let subFinal = sub1;
+                            if (hasFijo) subFinal = sub1 * 0.97;
+                            const subtotal = Number(subFinal.toFixed(2));
+                            const descMonto = Number((montoBase - subFinal).toFixed(2));
+                            subtotalGeneral += subtotal;
+
+                            oldDet.precioUnitario = pu;
+                            oldDet.descuentoPorcentaje = descPorc;
+                            oldDet.descuentoMonto = descMonto;
+                            oldDet.subtotal = subtotal;
+                            if (newDet.fechaVencimiento !== undefined) {
+                                oldDet.fechaVencimiento = newDet.fechaVencimiento;
+                            }
+                            await manager.save(oldDet);
+                        }
+
+                        const descPorc1 = Number(data.descuentoPorcentaje !== undefined ? data.descuentoPorcentaje : (nota.descuentoPorcentaje || 0));
+                        const aplicaDescFijo = data.aplicaDescuentoFijo !== undefined ? Boolean(data.aplicaDescuentoFijo) : (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) > 0 : Boolean(nota.aplicaDescuentoFijo));
+                        const descPorcFijo = aplicaDescFijo ? (data.descuentoFijoPorcentaje !== undefined ? Number(data.descuentoFijoPorcentaje) : (Number(nota.descuentoFijoPorcentaje) || 3)) : 0;
+                        const descPorc2 = Number(data.descuentoPromocionPorcentaje !== undefined ? data.descuentoPromocionPorcentaje : (nota.descuentoPromocionPorcentaje || 0));
+
+                        const descuento1 = (subtotalGeneral * descPorc1) / 100;
+                        const subtotalDespuesDesc1 = subtotalGeneral - descuento1;
+
+                        const descuentoFijo = (subtotalDespuesDesc1 * descPorcFijo) / 100;
+                        const subtotalDespuesDescFijo = subtotalDespuesDesc1 - descuentoFijo;
+
+                        const descuento2 = (subtotalDespuesDescFijo * descPorc2) / 100;
+                        const nuevoTotal = subtotalDespuesDescFijo - descuento2;
+
+                        const totalAnterior = Number(nota.total) || 0;
+                        const saldoAnterior = nota.saldo !== undefined && nota.saldo !== null ? Number(nota.saldo) : totalAnterior;
+                        const montoPagado = Math.max(0, totalAnterior - saldoAnterior);
+
+                        if (montoPagado > 0 && nuevoTotal < montoPagado) {
+                            throw new BadRequestException(
+                                `El nuevo total (${nuevoTotal.toFixed(2)}) no puede ser menor a los pagos ya registrados (${montoPagado.toFixed(2)}).`
+                            );
+                        }
+
+                        nota.subtotal = subtotalGeneral;
+                        nota.descuentoPorcentaje = descPorc1;
+                        nota.descuento = descuento1;
+                        nota.descuentoFijo = descuentoFijo;
+                        nota.descuentoFijoPorcentaje = descPorcFijo;
+                        nota.aplicaDescuentoFijo = aplicaDescFijo;
+                        nota.descuentoPromocion = descuento2;
+                        nota.descuentoPromocionPorcentaje = descPorc2;
+                        if (data.moneda !== undefined) nota.moneda = data.moneda;
+                        if (data.tipoCambio !== undefined) {
+                            nota.tipoCambio = Number(data.tipoCambio) || (data.moneda === Moneda.USD ? 6.96 : 1);
+                        } else if (data.moneda === Moneda.BOB) {
+                            nota.tipoCambio = 1;
+                        }
+                        nota.total = nuevoTotal;
+                        nota.saldo = Math.max(0, nuevoTotal - montoPagado);
+
+                        const costoImp = await manager.findOne(CostoImportacion, { where: { notaId: nota.id } });
+                        let factorIncremento = 1;
+                        if (costoImp) {
+                            const tipoCambio = Number(data.tipoCambio) || Number(costoImp.tipoCambio) || Number(nota.tipoCambio) || 6.96;
+                            let nuevoFobUsd = 0;
+                            let nuevoFobBob = 0;
+                            const moneda = data.moneda || nota.moneda;
+                            if (moneda === Moneda.USD) {
+                                nuevoFobUsd = nuevoTotal;
+                                nuevoFobBob = Number((nuevoTotal * tipoCambio).toFixed(2));
+                            } else {
+                                nuevoFobBob = nuevoTotal;
+                                nuevoFobUsd = Number((nuevoTotal / tipoCambio).toFixed(2));
+                            }
+                            const totalGastosBob = Number(costoImp.totalGastosBob) || 0;
+                            const porcentajeGastos = nuevoFobBob > 0 ? (totalGastosBob * 100) / nuevoFobBob : 0;
+                            const costoTotalBob = nuevoFobBob + totalGastosBob;
+
+                            costoImp.costoFobUsd = nuevoFobUsd;
+                            costoImp.costoFobBob = nuevoFobBob;
+                            costoImp.porcentajeGastos = porcentajeGastos;
+                            costoImp.costoTotalBob = costoTotalBob;
+                            costoImp.tipoCambio = tipoCambio;
+                            await manager.save(costoImp);
+
+                            factorIncremento = 1 + (porcentajeGastos / 100);
+                        }
+
+                        for (const det of oldDetalles) {
+                            let precioUnitarioBob = Number(det.precioUnitario) || 0;
+                            if ((data.moneda || nota.moneda) === Moneda.USD) {
+                                const tc = Number(data.tipoCambio) || Number(nota.tipoCambio) || 6.96;
+                                precioUnitarioBob = precioUnitarioBob * tc;
+                            }
+                            const costoUnitarioFinal = Number((precioUnitarioBob * factorIncremento).toFixed(2));
+                            if (det.producto?.id) {
+                                await manager.update(Lote, { notaIngreso: { id: nota.id }, producto: { id: det.producto.id } }, {
+                                    costoUnitario: costoUnitarioFinal,
+                                    ...(det.fechaVencimiento ? { fechaVencimiento: det.fechaVencimiento } : {})
+                                });
+                            }
+                        }
+
+                        return await manager.save(nota);
+                    }
+                }
+
+                // Si se envían detalles y hay cambios en el inventario físico:
                 // Revertir impacto si la nota estaba CONFIRMADA
                 const totalAnterior = Number(nota.total) || 0;
                 const saldoAnterior = nota.saldo !== undefined && nota.saldo !== null ? Number(nota.saldo) : totalAnterior;

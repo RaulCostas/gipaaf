@@ -7,11 +7,17 @@ import {
     Shield, ShieldCheck, Plus, Pencil, Trash2, Search, CheckCircle2, 
     Lock, ListChecks, FileText, CheckSquare, Square, X,
     ShoppingCart, Users, TrendingUp, Settings, HelpCircle,
-    Boxes, PieChart, Power, PowerOff, ShieldAlert, ExternalLink
+    Boxes, PieChart, Power, PowerOff, ShieldAlert, ExternalLink,
+    LayoutDashboard
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SECTIONS_CONFIG = [
+    {
+        title: 'Inicio y Dashboard',
+        icon: LayoutDashboard,
+        recursos: ['DASHBOARD']
+    },
     {
         title: 'Existencias (Stock)',
         icon: Boxes,

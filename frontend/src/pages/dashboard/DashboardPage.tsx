@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { reportService } from '../../api/reportService';
 import { muestraService } from '../../api/muestraService';
 import { useFilters } from '../../context/FilterContext';
+import { useAuth } from '../../context/AuthContext';
 import { formatCurrency } from '../../utils/currencyUtils';
 import Modal from '../../components/ui/Modal';
 import {
@@ -18,14 +19,22 @@ import {
     Bar,
     Cell
 } from 'recharts';
-import { TrendingUp, Package, Users, AlertTriangle, ArrowUpRight, ArrowDownRight, Activity, ExternalLink, Search, RotateCcw } from 'lucide-react';
+import { 
+    TrendingUp, Package, Users, AlertTriangle, ArrowUpRight, ArrowDownRight, Activity, 
+    ExternalLink, Search, RotateCcw, Sparkles, ShoppingCart, Calculator, 
+    Wallet, Boxes, ArrowLeftRight, Tag, ShoppingBag, DollarSign, KeyRound, ArrowRight,
+    ShieldCheck, Calendar, MapPin, Building2, UserCircle
+} from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
     const navigate = useNavigate();
+    const { user, isAdmin, hasPermission } = useAuth();
     const { selectedCiudad, selectedSucursal } = useFilters();
     const [showLowStockModal, setShowLowStockModal] = useState(false);
     const [searchLowStock, setSearchLowStock] = useState('');
     
+    const canViewDashboard = isAdmin || hasPermission('DASHBOARD');
+
     // We pass the parameters to React Query
     const queryParams = { 
         ciudadId: selectedCiudad || undefined, 
@@ -34,28 +43,32 @@ const DashboardPage: React.FC = () => {
 
     const { data: stats, isLoading: loadingStats } = useQuery({
         queryKey: ['dashboard-stats', queryParams],
-        queryFn: () => reportService.getStats(queryParams)
+        queryFn: () => reportService.getStats(queryParams),
+        enabled: canViewDashboard
     });
 
     const { data: lowStockItems, isLoading: loadingLowStock } = useQuery({
         queryKey: ['dashboard-low-stock', queryParams],
         queryFn: () => reportService.getLowStock(queryParams),
-        enabled: showLowStockModal
+        enabled: canViewDashboard && showLowStockModal
     });
 
     const { data: trend, isLoading: loadingTrend } = useQuery({
         queryKey: ['dashboard-trend', queryParams],
-        queryFn: () => reportService.getTrend(queryParams)
+        queryFn: () => reportService.getTrend(queryParams),
+        enabled: canViewDashboard
     });
 
     const { data: topProducts, isLoading: loadingTop } = useQuery({
         queryKey: ['dashboard-top-products', queryParams],
-        queryFn: () => reportService.getTopProducts(queryParams)
+        queryFn: () => reportService.getTopProducts(queryParams),
+        enabled: canViewDashboard
     });
 
     const { data: muestrasList } = useQuery({
         queryKey: ['dashboard-muestras', queryParams],
-        queryFn: () => muestraService.getAll()
+        queryFn: () => muestraService.getAll(),
+        enabled: canViewDashboard
     });
 
     const pendingMuestras = useMemo(() => {
@@ -113,6 +126,241 @@ const DashboardPage: React.FC = () => {
     }));
 
     const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316'];
+
+    const displayName = useMemo(() => {
+        if (user?.persona) {
+            const nom = `${user.persona.nombres || ''} ${user.persona.apellidos || ''}`.trim();
+            if (nom) return nom;
+        }
+        return user?.username || 'Usuario';
+    }, [user]);
+
+    const userRoleNames = useMemo(() => {
+        if (!user?.roles || !Array.isArray(user.roles)) return 'Usuario';
+        return user.roles.map((r: any) => (typeof r === 'string' ? r : r.nombre)).filter(Boolean).join(', ') || 'Usuario';
+    }, [user]);
+
+    const userBranchName = useMemo(() => {
+        if (!user?.sucursal) return null;
+        const ciudad = user.sucursal.ciudad?.nombre ? ` - ${user.sucursal.ciudad.nombre}` : '';
+        return `${user.sucursal.nombre || 'Sucursal'}${ciudad}`;
+    }, [user]);
+
+    const formattedToday = useMemo(() => {
+        try {
+            return new Intl.DateTimeFormat('es-BO', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            }).format(new Date());
+        } catch {
+            return new Date().toLocaleDateString();
+        }
+    }, []);
+
+    const quickModules = useMemo(() => [
+        {
+            title: 'Proformas',
+            desc: 'Cotizaciones y proformas de ventas para clientes',
+            icon: Calculator,
+            path: '/proformas',
+            perm: 'PROFORMAS',
+            color: 'text-indigo-500 bg-indigo-500/10 hover:border-indigo-500/40',
+        },
+        {
+            title: 'Ventas',
+            desc: 'Emisión de notas de venta y facturación',
+            icon: ShoppingCart,
+            path: '/ventas',
+            perm: 'VENTAS',
+            color: 'text-emerald-500 bg-emerald-500/10 hover:border-emerald-500/40',
+        },
+        {
+            title: 'Cobranzas',
+            desc: 'Registro de pagos y cobros de clientes a crédito',
+            icon: Wallet,
+            path: '/cobranzas',
+            perm: 'COBRANZAS',
+            color: 'text-amber-500 bg-amber-500/10 hover:border-amber-500/40',
+        },
+        {
+            title: 'Clientes',
+            desc: 'Directorio y gestión de cartera de clientes',
+            icon: Users,
+            path: '/clientes',
+            perm: 'CLIENTES',
+            color: 'text-blue-500 bg-blue-500/10 hover:border-blue-500/40',
+        },
+        {
+            title: 'Existencias (Stock)',
+            desc: 'Consulta de stock actual e inventario por almacén',
+            icon: Boxes,
+            path: '/inventario',
+            perm: 'INVENTARIO',
+            color: 'text-purple-500 bg-purple-500/10 hover:border-purple-500/40',
+        },
+        {
+            title: 'Productos',
+            desc: 'Catálogo de medicamentos y productos registrados',
+            icon: Package,
+            path: '/productos',
+            perm: 'PRODUCTOS',
+            color: 'text-sky-500 bg-sky-500/10 hover:border-sky-500/40',
+        },
+        {
+            title: 'Traspasos',
+            desc: 'Transferencias de mercadería entre sucursales',
+            icon: ArrowLeftRight,
+            path: '/traspasos',
+            perm: 'TRASPASOS',
+            color: 'text-cyan-500 bg-cyan-500/10 hover:border-cyan-500/40',
+        },
+        {
+            title: 'Muestras Médicas',
+            desc: 'Entregas y seguimiento de muestras a médicos',
+            icon: Tag,
+            path: '/muestras',
+            perm: 'MUESTRAS',
+            color: 'text-pink-500 bg-pink-500/10 hover:border-pink-500/40',
+        },
+        {
+            title: 'Compras',
+            desc: 'Ingreso de mercancía y pedidos a proveedores',
+            icon: ShoppingBag,
+            path: '/compras',
+            perm: 'COMPRAS',
+            color: 'text-orange-500 bg-orange-500/10 hover:border-orange-500/40',
+        },
+        {
+            title: 'Egresos Diarios',
+            desc: 'Control de gastos diarios y egresos operativos',
+            icon: DollarSign,
+            path: '/egresos',
+            perm: 'EGRESOS',
+            color: 'text-rose-500 bg-rose-500/10 hover:border-rose-500/40',
+        },
+    ], []);
+
+    const availableModules = useMemo(() => {
+        return quickModules.filter(m => hasPermission(m.perm));
+    }, [quickModules, hasPermission]);
+
+    // Vista de Bienvenida cuando el usuario NO tiene permiso para ver el Dashboard
+    if (!canViewDashboard) {
+        return (
+            <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
+                {/* Hero / Banner de Bienvenida */}
+                <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-6 sm:p-10 shadow-lg">
+                    <div className="absolute top-0 right-0 -mt-6 -mr-6 w-48 h-48 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+                    <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                        <div className="space-y-3 max-w-2xl">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-primary/15 text-primary">
+                                <Sparkles className="w-3.5 h-3.5" />
+                                Sistema GIPAAF
+                            </div>
+                            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground">
+                                ¡Bienvenido, <span className="text-primary">{displayName}</span>!
+                            </h1>
+                            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                                Tu sesión ha sido iniciada con éxito. Utiliza los accesos directos a continuación o explora el menú lateral para acceder a los módulos autorizados para tu puesto de trabajo.
+                            </p>
+                        </div>
+
+                        {/* Ficha de Información de Usuario */}
+                        <div className="w-full md:w-auto shrink-0 bg-background/80 backdrop-blur-md border border-border/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 min-w-[260px]">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-black">
+                                    <UserCircle className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground font-medium">Perfil / Rol Asignado</p>
+                                    <p className="text-sm font-bold text-foreground uppercase">{userRoleNames}</p>
+                                </div>
+                            </div>
+                            {userBranchName && (
+                                <div className="flex items-center gap-2.5 text-xs text-muted-foreground border-t border-border/50 pt-2.5">
+                                    <Building2 className="w-4 h-4 text-primary shrink-0" />
+                                    <span className="font-medium text-foreground truncate">{userBranchName}</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2.5 text-xs text-muted-foreground border-t border-border/50 pt-2.5">
+                                <Calendar className="w-4 h-4 text-primary shrink-0" />
+                                <span className="capitalize">{formattedToday}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Accesos Rápidos Autorizados */}
+                <div className="space-y-4">
+                    <div>
+                        <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                            <ShieldCheck className="w-5 h-5 text-primary" />
+                            Módulos Disponibles
+                        </h2>
+                        <p className="text-xs sm:text-sm text-muted-foreground">Accesos directos rápidos habilitados según tus permisos de rol.</p>
+                    </div>
+
+                    {availableModules.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {availableModules.map((m) => {
+                                const Icon = m.icon;
+                                return (
+                                    <button
+                                        key={m.path}
+                                        type="button"
+                                        onClick={() => navigate(m.path)}
+                                        className="group text-left p-5 bg-card border rounded-2xl shadow-sm hover:shadow-md hover:border-primary/50 transition-all duration-200 flex flex-col justify-between cursor-pointer"
+                                    >
+                                        <div className="space-y-3 w-full">
+                                            <div className="flex items-center justify-between">
+                                                <div className={`w-11 h-11 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 ${m.color}`}>
+                                                    <Icon className="w-5 h-5" />
+                                                </div>
+                                                <span className="text-xs font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                                    Abrir <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
+                                                    {m.title}
+                                                </h3>
+                                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                                    {m.desc}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="p-8 text-center bg-card border rounded-2xl space-y-2">
+                            <p className="text-sm font-semibold text-foreground">No tienes módulos operativos asignados en este momento.</p>
+                            <p className="text-xs text-muted-foreground">Si consideras que deberías tener acceso a algún módulo, comunícate con el administrador del sistema.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer Informativo */}
+                <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-muted/40 border rounded-2xl gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Sesión segura activa en GIPAAF
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => navigate('/cambiar-password')}
+                        className="inline-flex items-center gap-1.5 font-semibold text-primary hover:underline cursor-pointer"
+                    >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        Cambiar mi contraseña
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     if (loadingStats || loadingTrend || loadingTop) {
         return (

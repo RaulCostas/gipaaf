@@ -1251,6 +1251,12 @@ const PagosProveedoresPage: React.FC = () => {
                         {selectedCompra && (
                             <div className="p-3.5 bg-muted/40 rounded-xl border space-y-2">
                                 <div className="flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground">Sucursal Asignada al Pago:</span>
+                                    <span className="font-semibold text-foreground">
+                                        {(selectedCompra.sucursalPago || selectedCompra.sucursal)?.nombre || 'Sucursal Central'}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
                                     <span className="text-muted-foreground">Moneda de Registro Compra:</span>
                                     <span className="font-bold px-2 py-0.5 rounded bg-primary/10 text-primary text-[11px]">
                                         {selectedCompra.moneda || 'BOB'} ({conversion.simboloCompra})

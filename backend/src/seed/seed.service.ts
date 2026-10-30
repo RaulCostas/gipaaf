@@ -9,6 +9,9 @@ import { Permiso } from '../permisos/permiso.entity';
 import * as bcrypt from 'bcryptjs';
 
 const SYSTEM_PERMISSIONS = [
+  // Inicio / Dashboard
+  { nombre: 'Ver Dashboard / Estadísticas', recurso: 'DASHBOARD', accion: 'VER', descripcion: 'Visualizar métricas, gráficos e indicadores clave en el panel de inicio' },
+
   // Existencias (Stock) & Almacenes
   { nombre: 'Ver Productos', recurso: 'PRODUCTOS', accion: 'VER', descripcion: 'Consultar catálogo de productos' },
   { nombre: 'Crear/Editar Productos', recurso: 'PRODUCTOS', accion: 'GESTIONAR', descripcion: 'Crear, modificar y actualizar precios de productos' },
@@ -182,6 +185,9 @@ export class SeedService implements OnApplicationBootstrap {
         // 3. Ensure ADMIN role always has all permissions
         const allPermissions = await this.permisoRepo.find();
         let adminRole = await this.rolRepo.findOne({ where: { nombre: 'ADMIN' }, relations: ['permisos'] });
+        if (!adminRole) {
+            adminRole = await this.rolRepo.findOne({ where: { nombre: 'ADMIN (GLOBAL)' }, relations: ['permisos'] });
+        }
         if (adminRole) {
             adminRole.permisos = allPermissions;
             await this.rolRepo.save(adminRole);

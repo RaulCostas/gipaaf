@@ -9,6 +9,9 @@ const client = new Client({
 });
 
 const permissions = [
+  // Inicio / Dashboard
+  { nombre: 'Ver Dashboard / Estadísticas', recurso: 'DASHBOARD', accion: 'VER', descripcion: 'Visualizar métricas, gráficos e indicadores clave en el panel de inicio' },
+
   // Ventas & Proformas
   { nombre: 'Ver Proformas', recurso: 'PROFORMAS', accion: 'VER', descripcion: 'Consultar listado e historial de proformas' },
   { nombre: 'Crear Proformas', recurso: 'PROFORMAS', accion: 'CREAR', descripcion: 'Generar nuevas proformas para clientes' },
