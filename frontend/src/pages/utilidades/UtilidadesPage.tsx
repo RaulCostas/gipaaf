@@ -500,12 +500,11 @@ const UtilidadesPage: React.FC = () => {
             const monto = Number(t.costoTransporte) || 0;
             if (monto <= 0) return;
 
-            const sucId = t.sucursalCargoCosto === 'DESTINO' 
-                ? (t.sucursalDestino as any)?.id 
-                : (t.sucursalOrigen as any)?.id;
-            const ciuId = t.sucursalCargoCosto === 'DESTINO'
-                ? (t.sucursalDestino as any)?.ciudad?.id
-                : (t.sucursalOrigen as any)?.ciudad?.id;
+            const sucAsignada = t.sucursalGasto || (t.sucursalCargoCosto === 'DESTINO' 
+                ? t.sucursalDestino 
+                : t.sucursalOrigen);
+            const sucId = (sucAsignada as any)?.id;
+            const ciuId = (sucAsignada as any)?.ciudad?.id;
 
             if (!isSucursalMatch(sucId, ciuId)) return;
 

@@ -470,16 +470,17 @@ const ReportesPage: React.FC = () => {
         let trList = traspasosList || [];
         if (selectedSucursal) {
             trList = trList.filter(t => {
-                const sucAsignadaId = (t.sucursalCargoCosto === 'DESTINO' 
-                    ? (t.sucursalDestino?.id || (t.almacenDestino as any)?.id) 
-                    : (t.sucursalOrigen?.id || (t.almacenOrigen as any)?.id));
+                const sucAsignada = t.sucursalGasto || (t.sucursalCargoCosto === 'DESTINO' 
+                    ? (t.sucursalDestino || t.almacenDestino) 
+                    : (t.sucursalOrigen || t.almacenOrigen));
+                const sucAsignadaId = (sucAsignada as any)?.id;
                 return sucAsignadaId === Number(selectedSucursal);
             });
         } else if (selectedCiudad) {
             trList = trList.filter(t => {
-                const sucAsignada = t.sucursalCargoCosto === 'DESTINO' 
+                const sucAsignada = t.sucursalGasto || (t.sucursalCargoCosto === 'DESTINO' 
                     ? (t.sucursalDestino || t.almacenDestino) 
-                    : (t.sucursalOrigen || t.almacenOrigen);
+                    : (t.sucursalOrigen || t.almacenOrigen));
                 const ciudadId = (sucAsignada as any)?.ciudad?.id || (sucAsignada as any)?.ciudadId;
                 return ciudadId === Number(selectedCiudad);
             });

@@ -29,6 +29,22 @@ export class TraspasosService implements OnModuleInit {
 
     async onModuleInit() {
         try {
+            await this.dataSource.query(`
+                ALTER TABLE traspasos ADD COLUMN IF NOT EXISTS "sucursalGastoId" INTEGER REFERENCES sucursales(id) ON DELETE SET NULL;
+            `);
+            await this.dataSource.query(`
+                UPDATE traspasos 
+                SET "sucursalGastoId" = CASE 
+                    WHEN "sucursalCargoCosto" = 'DESTINO' THEN "sucursalDestinoId" 
+                    ELSE "sucursalOrigenId" 
+                END 
+                WHERE "sucursalGastoId" IS NULL;
+            `);
+        } catch (e) {
+            console.error('Error auto-migrating sucursalGastoId in traspasos:', e);
+        }
+
+        try {
             const legacyTraspasos = await this.traspasoRepo
                 .createQueryBuilder('traspaso')
                 .leftJoinAndSelect('traspaso.sucursalOrigen', 'sucursalOrigen')
@@ -71,6 +87,8 @@ export class TraspasosService implements OnModuleInit {
             .leftJoinAndSelect('sucursalOrigen.ciudad', 'origenCiudad')
             .leftJoinAndSelect('traspaso.sucursalDestino', 'sucursalDestino')
             .leftJoinAndSelect('sucursalDestino.ciudad', 'destinoCiudad')
+            .leftJoinAndSelect('traspaso.sucursalGasto', 'sucursalGasto')
+            .leftJoinAndSelect('sucursalGasto.ciudad', 'gastoCiudad')
             .leftJoinAndSelect('traspaso.usuario', 'usuario')
             .leftJoinAndSelect('traspaso.detalles', 'detalles')
             .leftJoinAndSelect('detalles.producto', 'producto')
@@ -85,6 +103,8 @@ export class TraspasosService implements OnModuleInit {
             .leftJoinAndSelect('sucursalOrigen.ciudad', 'origenCiudad')
             .leftJoinAndSelect('traspaso.sucursalDestino', 'sucursalDestino')
             .leftJoinAndSelect('sucursalDestino.ciudad', 'destinoCiudad')
+            .leftJoinAndSelect('traspaso.sucursalGasto', 'sucursalGasto')
+            .leftJoinAndSelect('sucursalGasto.ciudad', 'gastoCiudad')
             .leftJoinAndSelect('traspaso.usuario', 'usuario')
             .leftJoinAndSelect('traspaso.detalles', 'detalles')
             .leftJoinAndSelect('detalles.producto', 'producto')
@@ -158,6 +178,7 @@ export class TraspasosService implements OnModuleInit {
         fecha?: string;
         sucursalOrigenId?: number;
         sucursalDestinoId?: number;
+        sucursalGastoId?: number;
         almacenOrigenId?: number; // legacy compatibility
         almacenDestinoId?: number; // legacy compatibility
         costoTransporte?: number;
@@ -200,6 +221,15 @@ export class TraspasosService implements OnModuleInit {
 
         const sucursalDestino = await this.sucursalRepo.findOne({ where: { id: Number(sucursalDestinoId) }, relations: ['ciudad'] });
         if (!sucursalDestino) throw new NotFoundException('Sucursal de destino no encontrada');
+
+        let sucursalGasto: Sucursal | null = null;
+        if (data.sucursalGastoId) {
+            sucursalGasto = await this.sucursalRepo.findOne({ where: { id: Number(data.sucursalGastoId) }, relations: ['ciudad'] });
+        }
+        if (!sucursalGasto) {
+            sucursalGasto = sucursalCargoCosto === CargoCostoTraspaso.DESTINO ? sucursalDestino : sucursalOrigen;
+        }
+        const effectiveCargoCosto = sucursalGasto.id === sucursalDestino.id ? CargoCostoTraspaso.DESTINO : CargoCostoTraspaso.ORIGEN;
 
         const codigo = data.codigo?.trim() || (await this.generateCodigo(sucursalOrigen));
         const fecha = data.fecha || new Date().toISOString().substring(0, 10);
@@ -411,8 +441,9 @@ export class TraspasosService implements OnModuleInit {
                 fecha,
                 sucursalOrigen,
                 sucursalDestino,
+                sucursalGasto,
                 costoTransporte: Number(costoTransporte) || 0,
-                sucursalCargoCosto,
+                sucursalCargoCosto: effectiveCargoCosto,
                 motivo,
                 observaciones,
                 estado: EstadoTraspaso.COMPLETADO,
@@ -561,6 +592,7 @@ export class TraspasosService implements OnModuleInit {
         fecha?: string;
         sucursalOrigenId?: number;
         sucursalDestinoId?: number;
+        sucursalGastoId?: number;
         almacenOrigenId?: number;
         almacenDestinoId?: number;
         costoTransporte?: number;
@@ -578,7 +610,7 @@ export class TraspasosService implements OnModuleInit {
         return await this.dataSource.transaction(async (manager) => {
             const traspaso = await manager.findOne(Traspaso, {
                 where: { id },
-                relations: ['sucursalOrigen', 'sucursalDestino', 'detalles', 'detalles.producto'],
+                relations: ['sucursalOrigen', 'sucursalDestino', 'sucursalGasto', 'detalles', 'detalles.producto'],
             });
 
             if (!traspaso) {
@@ -611,6 +643,18 @@ export class TraspasosService implements OnModuleInit {
             if (!detalles || detalles.length === 0) {
                 throw new BadRequestException('Debe incluir al menos un producto en el traspaso');
             }
+
+            let sucursalGasto: Sucursal | null = null;
+            const targetGastoId = data.sucursalGastoId !== undefined ? data.sucursalGastoId : traspaso.sucursalGasto?.id;
+            if (targetGastoId) {
+                sucursalGasto = await manager.findOne(Sucursal, { where: { id: Number(targetGastoId) }, relations: ['ciudad'] });
+            }
+            if (!sucursalGasto) {
+                sucursalGasto = sucursalCargoCosto === CargoCostoTraspaso.DESTINO
+                    ? (traspaso.sucursalDestino || await manager.findOne(Sucursal, { where: { id: Number(sucursalDestinoId) } }))
+                    : (traspaso.sucursalOrigen || await manager.findOne(Sucursal, { where: { id: Number(sucursalOrigenId) } }));
+            }
+            const effectiveCargoCosto = sucursalGasto?.id === Number(sucursalDestinoId) ? CargoCostoTraspaso.DESTINO : CargoCostoTraspaso.ORIGEN;
 
             const fecha = data.fecha || (traspaso.fecha ? String(traspaso.fecha).substring(0, 10) : new Date().toISOString().substring(0, 10));
 
@@ -645,7 +689,8 @@ export class TraspasosService implements OnModuleInit {
             if (!itemsInventoryChanged) {
                 traspaso.fecha = fecha;
                 traspaso.costoTransporte = Number(costoTransporte) || 0;
-                traspaso.sucursalCargoCosto = sucursalCargoCosto;
+                traspaso.sucursalGasto = sucursalGasto;
+                traspaso.sucursalCargoCosto = effectiveCargoCosto;
                 traspaso.motivo = motivo;
                 traspaso.observaciones = observaciones;
 
@@ -986,8 +1031,9 @@ export class TraspasosService implements OnModuleInit {
             traspaso.fecha = fecha;
             traspaso.sucursalOrigen = sucursalOrigen;
             traspaso.sucursalDestino = sucursalDestino;
+            traspaso.sucursalGasto = sucursalGasto;
             traspaso.costoTransporte = Number(costoTransporte) || 0;
-            traspaso.sucursalCargoCosto = sucursalCargoCosto;
+            traspaso.sucursalCargoCosto = effectiveCargoCosto;
             traspaso.motivo = motivo;
             traspaso.observaciones = observaciones;
             traspaso.detalles = detallesToSave;

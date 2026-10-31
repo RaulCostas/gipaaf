@@ -42,6 +42,10 @@ export class Traspaso {
     @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
     costoTransporte: number; // Costo del traspaso en Bolivianos (Bs.)
 
+    @ManyToOne(() => Sucursal, { nullable: true })
+    @JoinColumn({ name: 'sucursalGastoId' })
+    sucursalGasto: Sucursal; // Sucursal específica que se hace cargo del costo/egreso
+
     @Column({
         type: 'enum',
         enum: CargoCostoTraspaso,

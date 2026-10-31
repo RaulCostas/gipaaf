@@ -18,6 +18,7 @@ export interface Traspaso {
     fecha: string;
     sucursalOrigen: Sucursal;
     sucursalDestino: Sucursal;
+    sucursalGasto?: Sucursal;
     almacenOrigen?: Sucursal; // For backwards compatibility
     almacenDestino?: Sucursal; // For backwards compatibility
     costoTransporte: number;
@@ -38,6 +39,7 @@ export interface CreateTraspasoDto {
     fecha?: string;
     sucursalOrigenId?: number;
     sucursalDestinoId?: number;
+    sucursalGastoId?: number;
     almacenOrigenId?: number;
     almacenDestinoId?: number;
     costoTransporte?: number;

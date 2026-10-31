@@ -1753,6 +1753,8 @@ export class NotasService implements OnModuleInit {
                 .leftJoin('sucursalOrigen.ciudad', 'origenCiudad')
                 .leftJoin('traspaso.sucursalDestino', 'sucursalDestino')
                 .leftJoin('sucursalDestino.ciudad', 'destinoCiudad')
+                .leftJoin('traspaso.sucursalGasto', 'sucursalGasto')
+                .leftJoin('sucursalGasto.ciudad', 'gastoCiudad')
                 .select([
                     'traspaso.id',
                     'traspaso.codigo',
@@ -1768,6 +1770,9 @@ export class NotasService implements OnModuleInit {
                     'sucursalDestino.id',
                     'sucursalDestino.nombre',
                     'destinoCiudad.id',
+                    'sucursalGasto.id',
+                    'sucursalGasto.nombre',
+                    'gastoCiudad.id',
                 ])
                 .where('traspaso.estado != :estado', { estado: 'ANULADO' })
                 .andWhere('traspaso.costoTransporte > 0')

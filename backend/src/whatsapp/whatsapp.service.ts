@@ -2819,7 +2819,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             `📅 *Fecha:* ${fechaFormatted}\n` +
             `📦 *Total Unidades:* ${totalItems.toLocaleString('es-BO')}\n` +
             (traspaso.motivo ? `📝 *Motivo:* ${traspaso.motivo}\n` : '') +
-            (Number(traspaso.costoTransporte) > 0 ? `💰 *Costo Transporte:* Bs. ${Number(traspaso.costoTransporte).toLocaleString('es-BO', { minimumFractionDigits: 2 })} (Asume: ${traspaso.sucursalCargoCosto === CargoCostoTraspaso.DESTINO ? 'Destino' : 'Origen'})\n` : '') +
+            (Number(traspaso.costoTransporte) > 0 ? `💰 *Costo Transporte:* Bs. ${Number(traspaso.costoTransporte).toLocaleString('es-BO', { minimumFractionDigits: 2 })} (Asume: ${traspaso.sucursalGasto?.nombre || (traspaso.sucursalCargoCosto === CargoCostoTraspaso.DESTINO ? 'Destino' : 'Origen')})\n` : '') +
             `\n_En el documento PDF adjunto encontrará la relación completa de productos, lotes y cantidades._`;
 
         try {
@@ -2911,7 +2911,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                     doc.text(`Responsable: ${usuarioName}`, 36, 122, { width: 220, ellipsis: true });
                     const costoTrans = Number(traspaso.costoTransporte) || 0;
                     if (costoTrans > 0) {
-                        doc.text(`Flete/Transporte: Bs. ${costoTrans.toFixed(2)} (Asume ${traspaso.sucursalCargoCosto === CargoCostoTraspaso.DESTINO ? 'Destino' : 'Origen'})`, 270, 122, { width: 280, ellipsis: true });
+                        doc.text(`Flete/Transporte: Bs. ${costoTrans.toFixed(2)} (Asume ${traspaso.sucursalGasto?.nombre || (traspaso.sucursalCargoCosto === CargoCostoTraspaso.DESTINO ? 'Destino' : 'Origen')})`, 270, 122, { width: 280, ellipsis: true });
                     } else {
                         doc.text(`Motivo: ${traspaso.motivo || 'Traspaso de Stock'}`, 270, 122, { width: 280, ellipsis: true });
                     }

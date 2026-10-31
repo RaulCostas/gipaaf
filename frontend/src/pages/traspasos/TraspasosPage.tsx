@@ -110,6 +110,7 @@ const TraspasosPage: React.FC = () => {
         sucursalDestinoId: '',
         costoTransporte: '',
         sucursalCargoCosto: 'ORIGEN' as 'ORIGEN' | 'DESTINO',
+        sucursalGastoId: '',
         motivo: '',
         observaciones: ''
     });
@@ -423,6 +424,7 @@ const TraspasosPage: React.FC = () => {
             sucursalDestinoId: '',
             costoTransporte: '',
             sucursalCargoCosto: 'ORIGEN',
+            sucursalGastoId: defaultOrigenId,
             motivo: '',
             observaciones: ''
         });
@@ -437,6 +439,9 @@ const TraspasosPage: React.FC = () => {
     const handleOpenEdit = (t: Traspaso) => {
         const origId = (t.sucursalOrigen || t.almacenOrigen)?.id ? String((t.sucursalOrigen || t.almacenOrigen)?.id) : '';
         const destId = (t.sucursalDestino || t.almacenDestino)?.id ? String((t.sucursalDestino || t.almacenDestino)?.id) : '';
+        const gastoId = t.sucursalGasto?.id 
+            ? String(t.sucursalGasto.id) 
+            : (t.sucursalCargoCosto === 'DESTINO' ? destId : origId);
 
         setEditingId(t.id);
         setEditingItemIndex(null);
@@ -447,6 +452,7 @@ const TraspasosPage: React.FC = () => {
             sucursalDestinoId: destId,
             costoTransporte: t.costoTransporte !== undefined && t.costoTransporte !== null ? String(t.costoTransporte) : '',
             sucursalCargoCosto: t.sucursalCargoCosto || 'ORIGEN',
+            sucursalGastoId: gastoId,
             motivo: t.motivo || '',
             observaciones: t.observaciones || ''
         });
@@ -493,13 +499,20 @@ const TraspasosPage: React.FC = () => {
             return;
         }
 
+        const costoTransporte = parseFloat(formData.costoTransporte) || 0;
+        if (costoTransporte > 0 && !formData.sucursalGastoId) {
+            setError('Debe seleccionar qué sucursal se hace cargo del costo/egreso de transporte');
+            return;
+        }
+
         const payload = {
             codigo: formData.codigo || undefined,
             fecha: formData.fecha,
             sucursalOrigenId: Number(formData.sucursalOrigenId),
             sucursalDestinoId: Number(formData.sucursalDestinoId),
-            costoTransporte: parseFloat(formData.costoTransporte) || 0,
-            sucursalCargoCosto: formData.sucursalCargoCosto,
+            costoTransporte,
+            sucursalGastoId: formData.sucursalGastoId ? Number(formData.sucursalGastoId) : undefined,
+            sucursalCargoCosto: (formData.sucursalGastoId === formData.sucursalDestinoId ? 'DESTINO' : 'ORIGEN') as 'ORIGEN' | 'DESTINO',
             motivo: formData.motivo,
             observaciones: formData.observaciones,
             detalles: itemsList.map(i => ({
@@ -647,8 +660,11 @@ const TraspasosPage: React.FC = () => {
             const destCiudad = (sucDest as any)?.ciudad?.nombre ? ` (${(sucDest as any).ciudad.nombre})` : '';
             const sucursalOrigenNombre = `${sucOrig?.nombre || '-'}${origCiudad}`;
             const sucursalDestinoNombre = `${sucDest?.nombre || '-'}${destCiudad}`;
+            const sucGasto = t.sucursalGasto;
             const cargoCostoSucursal = Number(t.costoTransporte) > 0
-                ? (t.sucursalCargoCosto === 'DESTINO' ? `Destino (${sucDest?.nombre || '-'})` : `Origen (${sucOrig?.nombre || '-'})`)
+                ? (sucGasto?.nombre 
+                    ? `${sucGasto.nombre}${(sucGasto as any)?.ciudad?.nombre ? ` (${(sucGasto as any).ciudad.nombre})` : ''}`
+                    : (t.sucursalCargoCosto === 'DESTINO' ? `Destino (${sucDest?.nombre || '-'})` : `Origen (${sucOrig?.nombre || '-'})`))
                 : '-';
             const lotesResumen = t.detalles && t.detalles.length > 0
                 ? t.detalles.map(d => `${d.producto?.nombre || 'Prod'} [Lote: ${d.numeroLote || 'S/N'} x ${d.cantidad}]`).join('; ')
@@ -774,8 +790,9 @@ const TraspasosPage: React.FC = () => {
         doc.text(`Sucursal Destino (Ingreso): ${destinoNombre}`, 14, currentY);
         currentY += 5;
 
+        const sucGastoNombre = t.sucursalGasto?.nombre || (t.sucursalCargoCosto === 'DESTINO' ? 'Destino' : 'Origen');
         const costoTxt = Number(t.costoTransporte) > 0 
-            ? `Bs. ${Number(t.costoTransporte).toLocaleString('es-BO', { minimumFractionDigits: 2 })} (Cargo: ${t.sucursalCargoCosto === 'DESTINO' ? 'Destino' : 'Origen'})`
+            ? `Bs. ${Number(t.costoTransporte).toLocaleString('es-BO', { minimumFractionDigits: 2 })} (Cargo: ${sucGastoNombre})`
             : 'Bs. 0.00 (Sin Costo)';
         doc.text(`Costo Transporte: ${costoTxt}`, 14, currentY);
         doc.text(`Registrado por: ${usuarioNombre}`, 110, currentY);
@@ -1160,11 +1177,13 @@ const TraspasosPage: React.FC = () => {
                                             {Number(t.costoTransporte) > 0 && (
                                                 <div className="mt-1">
                                                     <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded border ${
-                                                        t.sucursalCargoCosto === 'DESTINO'
-                                                            ? 'bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-700'
-                                                            : 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-700'
-                                                    }`} title={`Costo asumido por Sucursal ${t.sucursalCargoCosto === 'DESTINO' ? 'Destino' : 'Origen'}`}>
-                                                        Cargo: {t.sucursalCargoCosto === 'DESTINO' ? 'Destino' : 'Origen'}
+                                                        t.sucursalGasto
+                                                            ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-700'
+                                                            : t.sucursalCargoCosto === 'DESTINO'
+                                                                ? 'bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-700'
+                                                                : 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-700'
+                                                    }`} title={`Costo asumido por Sucursal ${t.sucursalGasto?.nombre || (t.sucursalCargoCosto === 'DESTINO' ? 'Destino' : 'Origen')}`}>
+                                                        Cargo: {t.sucursalGasto?.nombre || (t.sucursalCargoCosto === 'DESTINO' ? 'Destino' : 'Origen')}
                                                     </span>
                                                 </div>
                                             )}
@@ -1339,7 +1358,12 @@ const TraspasosPage: React.FC = () => {
                                 <select
                                     value={formData.sucursalOrigenId}
                                     onChange={(e) => {
-                                        setFormData({ ...formData, sucursalOrigenId: e.target.value });
+                                        const newOrigId = e.target.value;
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            sucursalOrigenId: newOrigId,
+                                            sucursalGastoId: (!prev.sucursalGastoId || prev.sucursalGastoId === prev.sucursalOrigenId) ? newOrigId : prev.sucursalGastoId
+                                        }));
                                         setItemsList([]); // Reset items if branch changes
                                         setError(null);
                                     }}
@@ -1381,62 +1405,38 @@ const TraspasosPage: React.FC = () => {
 
                         {/* Asignación de Cargo por Costo de Transporte / Egreso */}
                         {parseFloat(formData.costoTransporte) > 0 && (
-                            <div className="p-3 bg-muted/40 border border-primary/30 rounded-xl space-y-2">
-                                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                                    <Building2 className="w-4 h-4 text-primary shrink-0" />
-                                    <span>¿Qué sucursal se hace cargo de este gasto / egreso de dinero?</span>
+                            <div className="p-3.5 bg-muted/40 border border-primary/30 rounded-xl space-y-2">
+                                <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5">
+                                        <Building2 className="w-4 h-4 text-primary shrink-0" />
+                                        <span>¿Qué sucursal se hace cargo de este gasto / egreso de dinero?</span>
+                                        <span className="text-destructive">*</span>
+                                    </span>
                                 </label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    <label
-                                        className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all text-xs font-medium ${
-                                            formData.sucursalCargoCosto === 'ORIGEN'
-                                                ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm'
-                                                : 'bg-background hover:bg-muted/50 border-border text-foreground'
-                                        }`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="sucursalCargoCosto"
-                                            value="ORIGEN"
-                                            checked={formData.sucursalCargoCosto === 'ORIGEN'}
-                                            onChange={() => setFormData({ ...formData, sucursalCargoCosto: 'ORIGEN' })}
-                                            className="text-primary focus:ring-primary h-4 w-4"
-                                        />
-                                        <div>
-                                            <span className="block font-bold">Sucursal de Origen (Salida)</span>
-                                            <span className="text-[11px] text-muted-foreground">
-                                                {formData.sucursalOrigenId
-                                                    ? sucursales?.find(s => s.id === Number(formData.sucursalOrigenId))?.nombre || 'Seleccionada'
-                                                    : 'Sucursal de salida'}
-                                            </span>
-                                        </div>
-                                    </label>
-
-                                    <label
-                                        className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all text-xs font-medium ${
-                                            formData.sucursalCargoCosto === 'DESTINO'
-                                                ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm'
-                                                : 'bg-background hover:bg-muted/50 border-border text-foreground'
-                                        }`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="sucursalCargoCosto"
-                                            value="DESTINO"
-                                            checked={formData.sucursalCargoCosto === 'DESTINO'}
-                                            onChange={() => setFormData({ ...formData, sucursalCargoCosto: 'DESTINO' })}
-                                            className="text-primary focus:ring-primary h-4 w-4"
-                                        />
-                                        <div>
-                                            <span className="block font-bold">Sucursal de Destino (Ingreso)</span>
-                                            <span className="text-[11px] text-muted-foreground">
-                                                {formData.sucursalDestinoId
-                                                    ? sucursales?.find(s => s.id === Number(formData.sucursalDestinoId))?.nombre || 'Seleccionada'
-                                                    : 'Sucursal de llegada'}
-                                            </span>
-                                        </div>
-                                    </label>
-                                </div>
+                                <select
+                                    value={formData.sucursalGastoId}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, sucursalGastoId: e.target.value });
+                                        setError(null);
+                                    }}
+                                    className="w-full p-2.5 border rounded-lg bg-background text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20"
+                                    required
+                                >
+                                    <option value="">Seleccione Sucursal que asume el gasto...</option>
+                                    {sucursales?.filter(s => s.activo !== false || s.id.toString() === formData.sucursalGastoId).map(s => {
+                                        const isOrig = s.id.toString() === formData.sucursalOrigenId;
+                                        const isDest = s.id.toString() === formData.sucursalDestinoId;
+                                        const tag = isOrig ? ' (Origen / Salida)' : (isDest ? ' (Destino / Ingreso)' : '');
+                                        return (
+                                            <option key={s.id} value={s.id}>
+                                                {s.nombre} {s.ciudad?.nombre ? `(${s.ciudad.nombre})` : ''}{tag}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                                <p className="text-[11px] text-muted-foreground">
+                                    El egreso financiero de este flete se asignará a la sucursal seleccionada. Puede elegir origen, destino o cualquier otra sucursal de la empresa.
+                                </p>
                             </div>
                         )}
 
@@ -1748,7 +1748,11 @@ const TraspasosPage: React.FC = () => {
                                 <span className="font-bold text-primary">Bs. {Number(viewingTraspaso.costoTransporte).toLocaleString('es-BO', { minimumFractionDigits: 2 })}</span>
                                 {Number(viewingTraspaso.costoTransporte) > 0 && (
                                     <span className="text-[10px] text-muted-foreground block font-medium mt-0.5">
-                                        Cargo: <span className="font-bold text-foreground">{viewingTraspaso.sucursalCargoCosto === 'DESTINO' ? `Destino (${sucDestino?.nombre || '-'})` : `Origen (${sucOrigen?.nombre || '-'})`}</span>
+                                        Cargo: <span className="font-bold text-foreground">
+                                            {viewingTraspaso.sucursalGasto?.nombre 
+                                                ? `${viewingTraspaso.sucursalGasto.nombre}${(viewingTraspaso.sucursalGasto as any)?.ciudad?.nombre ? ` (${(viewingTraspaso.sucursalGasto as any).ciudad.nombre})` : ''}`
+                                                : (viewingTraspaso.sucursalCargoCosto === 'DESTINO' ? `Destino (${sucDestino?.nombre || '-'})` : `Origen (${sucOrigen?.nombre || '-'})`)}
+                                        </span>
                                     </span>
                                 )}
                             </div>
