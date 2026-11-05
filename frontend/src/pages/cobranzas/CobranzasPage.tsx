@@ -615,7 +615,8 @@ const CobranzasPage: React.FC = () => {
             const clienteTexto = cliCodigo ? `(${cliCodigo}) ${cliTienda}` : cliTienda;
             const cleanCodigo = (cliCodigo ? cliCodigo.replace(/\./g, '') : '').trim();
             const clienteExcel = [cleanCodigo, cliTienda].filter(Boolean).join(' ') || '-';
-            const recibo = (p.referencia || (p.id ? `REC-${String(p.id).padStart(6, '0')}` : '-')).trim() || '-';
+            const rawRecibo = (p.referencia || (p.id ? `REC-${String(p.id).padStart(6, '0')}` : '-')).trim() || '-';
+            const recibo = /^\d{1,3}(\.\d{3})+$/.test(rawRecibo) ? rawRecibo.replace(/\./g, '') : rawRecibo;
 
             return {
                 ...p,

@@ -226,15 +226,30 @@ export const isCodeOrIdColumn = (colKey?: string, header?: string): boolean => {
     k === 'ci' ||
     k === 'nit' ||
     k.includes('telefono') ||
-    k.includes('celular')
+    k.includes('celular') ||
+    k.includes('recibo') ||
+    h.includes('recibo') ||
+    k.includes('referencia') ||
+    h.includes('referencia') ||
+    k.includes('factura') ||
+    h.includes('factura') ||
+    k.includes('notanumero') ||
+    h.includes('nro venta') ||
+    h.includes('nro. venta') ||
+    k === 'id' ||
+    h === 'id'
   );
 };
 
 const parsePossibleExcelNumber = (val: any, colKey?: string, header?: string): any => {
   if (val === null || val === undefined || val === '') return '';
   if (isCodeOrIdColumn(colKey, header)) {
-    // Preserve codes exactly as text strings (including dots that are part of the code, e.g. 700889L.36)
-    return String(val).trim();
+    // Preserve codes and IDs exactly as text strings; clean thousand separator dots from pure numbers (e.g. 22.754 -> 22754)
+    const str = String(val).trim();
+    if (/^\d{1,3}(\.\d{3})+$/.test(str)) {
+      return str.replace(/\./g, '');
+    }
+    return str;
   }
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (typeof val === 'boolean') return val ? 'Activo' : 'Inactivo';
@@ -320,11 +335,15 @@ export const exportToExcel = (
     // Skip header row
     if (decoded.r === 0) return;
 
-    // For code columns (like client code), ensure they are treated as plain text preserving dots (e.g. 700889L.36)
+    // For code columns (like client code, receipt number, ID), ensure they are treated as plain text without thousand dots
     if (colDef && isCodeOrIdColumn(colDef.dataKey, colDef.header)) {
       if (cell) {
         cell.t = 's';
-        cell.v = String(cell.v ?? '').trim();
+        let strVal = String(cell.v ?? '').trim();
+        if (/^\d{1,3}(\.\d{3})+$/.test(strVal)) {
+          strVal = strVal.replace(/\./g, '');
+        }
+        cell.v = strVal;
         delete cell.z;
       }
       return;
