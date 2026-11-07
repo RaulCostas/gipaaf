@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, NotFoundException } from '@nestjs/common';
+import { Injectable, OnModuleInit, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { MovimientoInventario } from './movimiento_inventario.entity';
@@ -457,14 +457,91 @@ export class MovimientosInventarioService implements OnModuleInit {
         return this.repo.save(this.repo.create(data));
     }
 
-    async update(id: number, data: { motivo?: string; observaciones?: string }) {
-        const mov = await this.repo.findOne({ where: { id } });
-        if (!mov) {
-            throw new NotFoundException('Movimiento no encontrado');
-        }
-        if (data.motivo !== undefined) mov.motivo = data.motivo;
-        if (data.observaciones !== undefined) mov.observaciones = data.observaciones;
-        return this.repo.save(mov);
+    async update(
+        id: number,
+        data: {
+            motivo?: string;
+            observaciones?: string;
+            reintegrarStock?: boolean;
+            cantidadReintegrar?: number;
+            motivoReingreso?: string;
+        },
+        usuarioId?: number,
+    ) {
+        return this.repo.manager.transaction(async (manager) => {
+            const mov = await manager.findOne(MovimientoInventario, {
+                where: { id },
+                relations: ['inventario', 'inventario.producto', 'inventario.sucursal', 'usuario'],
+            });
+            if (!mov) {
+                throw new NotFoundException('Movimiento no encontrado');
+            }
+
+            if (data.motivo !== undefined) mov.motivo = data.motivo;
+            if (data.observaciones !== undefined) mov.observaciones = data.observaciones;
+
+            if (data.reintegrarStock) {
+                const cantMermaActual = Math.abs(Number(mov.cantidad) || 0);
+                if (cantMermaActual <= 0) {
+                    throw new BadRequestException('Esta merma ya no cuenta con unidades disponibles para reintegrar.');
+                }
+
+                const cantReintegrar = Number(data.cantidadReintegrar);
+                if (isNaN(cantReintegrar) || cantReintegrar <= 0) {
+                    throw new BadRequestException('La cantidad a reintegrar debe ser un valor numérico mayor a 0');
+                }
+
+                if (cantReintegrar > cantMermaActual) {
+                    throw new BadRequestException(
+                        `No puede reintegrar ${cantReintegrar} unidades porque la merma solo tiene ${cantMermaActual} unidades registradas.`,
+                    );
+                }
+
+                // 1. Restaurar stock en inventario
+                if (mov.inventario) {
+                    const nuevoStock = Number(mov.inventario.stockActual || 0) + cantReintegrar;
+                    mov.inventario.stockActual = nuevoStock;
+                    await manager.save(Inventario, mov.inventario);
+                }
+
+                // 2. Restaurar stock en lotes
+                let lote = await manager.findOne(Lote, {
+                    where: {
+                        producto: { id: mov.inventario?.producto?.id },
+                        sucursal: mov.inventario?.sucursal ? { id: mov.inventario.sucursal.id } : undefined,
+                    },
+                    order: { fechaIngreso: 'DESC' },
+                });
+
+                if (lote) {
+                    lote.cantidadActual = Number(lote.cantidadActual || 0) + cantReintegrar;
+                    await manager.save(Lote, lote);
+                } else if (mov.inventario?.producto) {
+                    lote = manager.create(Lote, {
+                        numeroLote: `L-RECUP-${mov.id}`,
+                        producto: mov.inventario.producto,
+                        sucursal: mov.inventario.sucursal,
+                        cantidadInicial: cantReintegrar,
+                        cantidadActual: cantReintegrar,
+                        costoUnitario: Number(mov.costoUnitario) || Number(mov.inventario?.precioCompra) || 0,
+                        fechaIngreso: new Date(),
+                    });
+                    await manager.save(Lote, lote);
+                }
+
+                // 3. Actualizar la cantidad de la merma
+                const nuevaCantMerma = cantMermaActual - cantReintegrar;
+                mov.cantidad = -nuevaCantMerma;
+
+                // 4. Agregar detalle del reingreso en observaciones
+                const fechaHora = new Date().toLocaleString('es-BO');
+                const motivoReing = data.motivoReingreso?.trim() || 'Venta especial de producto dañado / vencido con descuento';
+                const notaReingreso = `[Reingreso a Stock: +${cantReintegrar} u. el ${fechaHora}. Motivo: ${motivoReing}]`;
+                mov.observaciones = mov.observaciones ? `${mov.observaciones}\n${notaReingreso}` : notaReingreso;
+            }
+
+            return manager.save(MovimientoInventario, mov);
+        });
     }
 
     async remove(id: number) {

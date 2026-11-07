@@ -13,7 +13,8 @@ import { SearchableSelect, type SearchableOption } from '../../components/ui/Sea
 import { 
     AlertOctagon, Search, Filter, Printer, FileText, FileSpreadsheet, 
     X, ChevronLeft, ChevronRight, Check, Tag, Layers, Calendar, 
-    DollarSign, Package, Eye, Plus, History, Edit, Trash2, AlertTriangle
+    DollarSign, Package, Eye, Plus, History, Edit, Trash2, AlertTriangle,
+    RotateCcw, CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
@@ -46,7 +47,20 @@ const MermasPage: React.FC = () => {
     const [selectedMerma, setSelectedMerma] = useState<any | null>(null);
 
     // Edit modal state
-    const [editingMerma, setEditingMerma] = useState<{ id: number; productName: string; motivo: string; observaciones: string } | null>(null);
+    const [editingMerma, setEditingMerma] = useState<{
+        id: number;
+        productName: string;
+        productCode?: string;
+        sucursalName?: string;
+        cantidadActual: number;
+        unidadMedida: string;
+        stockActualInventario: number;
+        motivo: string;
+        observaciones: string;
+        reintegrarStock: boolean;
+        cantidadReintegrarStr: string;
+        motivoReingreso: string;
+    } | null>(null);
 
     // Delete confirmation state
     const [deletingMerma, setDeletingMerma] = useState<any | null>(null);
@@ -94,12 +108,23 @@ const MermasPage: React.FC = () => {
     });
 
     const updateMermaMutation = useMutation({
-        mutationFn: ({ id, motivo, observaciones }: { id: number; motivo: string; observaciones: string }) =>
-            movimientoService.update(id, { motivo, observaciones }),
-        onSuccess: () => {
+        mutationFn: (data: {
+            id: number;
+            motivo: string;
+            observaciones: string;
+            reintegrarStock?: boolean;
+            cantidadReintegrar?: number;
+            motivoReingreso?: string;
+        }) => movimientoService.update(data.id, data),
+        onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
             setEditingMerma(null);
-            toast.success('Merma actualizada con éxito');
+            if (variables.reintegrarStock) {
+                toast.success('Producto reintegrado al stock con éxito. Ya está disponible para venta.');
+            } else {
+                toast.success('Merma actualizada con éxito');
+            }
         },
         onError: (err: any) => {
             toast.error(err.response?.data?.message || 'Error al actualizar la merma');
@@ -777,10 +802,24 @@ const MermasPage: React.FC = () => {
                                             </td>
                                         )}
                                         <td className="p-4 text-center">
-                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-destructive/10 text-destructive rounded-full text-xs font-bold">
-                                                <AlertOctagon className="w-3 h-3" />
-                                                -{formatQuantity(cant)} {m.inventario?.producto?.unidadMedida || 'u.'}
-                                            </span>
+                                            {cant === 0 ? (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-bold" title="Reintegrado totalmente al inventario vendible">
+                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                    0 {m.inventario?.producto?.unidadMedida || 'u.'} (Reintegrado)
+                                                </span>
+                                            ) : (
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-destructive/10 text-destructive rounded-full text-xs font-bold">
+                                                        <AlertOctagon className="w-3 h-3" />
+                                                        -{formatQuantity(cant)} {m.inventario?.producto?.unidadMedida || 'u.'}
+                                                    </span>
+                                                    {m.observaciones?.includes('Reingreso a Stock') && (
+                                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded text-[10px] font-semibold" title="Parte de esta merma ya fue reintegrada al stock">
+                                                            <RotateCcw className="w-2.5 h-2.5" /> Reingreso parcial
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="p-4 text-right text-xs font-mono">
                                             {formatCurrency(costo)}
@@ -818,14 +857,25 @@ const MermasPage: React.FC = () => {
                                                 </button>
                                                 {canEditarMerma && (
                                                     <button
-                                                        onClick={() => setEditingMerma({
-                                                            id: m.id,
-                                                            productName: m.inventario?.producto?.nombre || '',
-                                                            motivo: m.motivo || 'Vencimiento / Caducidad',
-                                                            observaciones: m.observaciones || ''
-                                                        })}
+                                                        onClick={() => {
+                                                            const cantMerma = Math.abs(Number(m.cantidad) || 0);
+                                                            setEditingMerma({
+                                                                id: m.id,
+                                                                productName: m.inventario?.producto?.nombre || '',
+                                                                productCode: m.inventario?.producto?.codigo || '',
+                                                                sucursalName: (m.inventario?.sucursal as any)?.nombre || 'Sucursal Principal',
+                                                                cantidadActual: cantMerma,
+                                                                unidadMedida: m.inventario?.producto?.unidadMedida || 'u.',
+                                                                stockActualInventario: Number(m.inventario?.stockActual || 0),
+                                                                motivo: m.motivo || 'Vencimiento / Caducidad',
+                                                                observaciones: m.observaciones || '',
+                                                                reintegrarStock: false,
+                                                                cantidadReintegrarStr: cantMerma > 0 ? (cantMerma <= 1 ? String(cantMerma) : '1') : '0',
+                                                                motivoReingreso: 'Venta especial de producto dañado / vencido con descuento'
+                                                            });
+                                                        }}
                                                         className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                                                        title="Editar Motivo u Observaciones"
+                                                        title="Editar Merma / Reintegrar al Stock"
                                                     >
                                                         <Edit className="w-3.5 h-3.5 text-amber-500" />
                                                     </button>
@@ -887,10 +937,16 @@ const MermasPage: React.FC = () => {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="p-3 border rounded-xl bg-card">
-                                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block">Cantidad Mermada</span>
-                                <span className="text-lg font-bold text-destructive">
-                                    {formatQuantity(Math.abs(selectedMerma.cantidad))} {selectedMerma.inventario?.producto?.unidadMedida || 'u.'}
-                                </span>
+                                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block">Cantidad en Merma</span>
+                                {Math.abs(selectedMerma.cantidad) === 0 ? (
+                                    <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1">
+                                        <CheckCircle2 className="w-4 h-4" /> 0 {selectedMerma.inventario?.producto?.unidadMedida || 'u.'} (Reintegrado)
+                                    </span>
+                                ) : (
+                                    <span className="text-lg font-bold text-destructive">
+                                        {formatQuantity(Math.abs(selectedMerma.cantidad))} {selectedMerma.inventario?.producto?.unidadMedida || 'u.'}
+                                    </span>
+                                )}
                             </div>
                             <div className="p-3 border rounded-xl bg-card">
                                 <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block">Pérdida Total Estimada</span>
@@ -1066,10 +1122,140 @@ const MermasPage: React.FC = () => {
             >
                 {editingMerma && (
                     <div className="space-y-5">
-                        <div className="p-4 bg-muted/50 rounded-xl space-y-1 border">
-                            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Producto</div>
-                            <div className="text-base font-bold">{editingMerma.productName}</div>
+                        {/* Cabecera del producto */}
+                        <div className="p-4 bg-muted/50 rounded-xl space-y-2 border">
+                            <div className="flex justify-between items-start gap-2">
+                                <div>
+                                    <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Producto</span>
+                                    <span className="text-base font-bold text-foreground">{editingMerma.productName}</span>
+                                    {editingMerma.productCode && (
+                                        <span className="text-xs font-mono text-muted-foreground block">Código: {editingMerma.productCode}</span>
+                                    )}
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xs text-muted-foreground font-medium block">Sucursal</span>
+                                    <span className="text-xs font-semibold text-foreground">{editingMerma.sucursalName}</span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-2 border-t mt-2">
+                                <div className="p-2 bg-background/60 rounded-lg border text-xs">
+                                    <span className="text-muted-foreground block">Cantidad en Merma:</span>
+                                    <span className="font-bold text-destructive">
+                                        {formatQuantity(editingMerma.cantidadActual)} {editingMerma.unidadMedida}
+                                    </span>
+                                </div>
+                                <div className="p-2 bg-background/60 rounded-lg border text-xs">
+                                    <span className="text-muted-foreground block">Stock Vendible en Sucursal:</span>
+                                    <span className="font-bold text-primary">
+                                        {formatQuantity(editingMerma.stockActualInventario)} {editingMerma.unidadMedida}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
+
+                        {/* Opción de Reintegrar al Stock para Venta */}
+                        {editingMerma.cantidadActual > 0 ? (
+                            <div className={`p-4 rounded-xl border transition-all ${
+                                editingMerma.reintegrarStock 
+                                    ? 'bg-emerald-500/10 border-emerald-500/30' 
+                                    : 'bg-muted/30 border-dashed border-border'
+                            }`}>
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={editingMerma.reintegrarStock}
+                                        onChange={(e) => setEditingMerma({ ...editingMerma, reintegrarStock: e.target.checked })}
+                                        className="mt-1 w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                                    />
+                                    <div className="flex-1">
+                                        <span className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                                            <RotateCcw className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                            Reintegrar producto a Inventario (Stock para Venta)
+                                        </span>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            Habilite esta opción si un cliente desea adquirir el producto (por ej. con descuento especial por daño físico o vencimiento). Las unidades reintegradas volverán al inventario para poder venderse.
+                                        </p>
+                                    </div>
+                                </label>
+
+                                {editingMerma.reintegrarStock && (
+                                    <div className="mt-4 pt-4 border-t border-emerald-500/20 space-y-4">
+                                        <div className="space-y-1">
+                                            <div className="flex justify-between items-center text-xs">
+                                                <label className="font-semibold text-foreground">Cantidad a devolver al inventario vendible:</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditingMerma({ ...editingMerma, cantidadReintegrarStr: String(editingMerma.cantidadActual) })}
+                                                    className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+                                                >
+                                                    Devolver todo ({editingMerma.cantidadActual} {editingMerma.unidadMedida})
+                                                </button>
+                                            </div>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    min="0.01"
+                                                    max={editingMerma.cantidadActual}
+                                                    step="any"
+                                                    value={editingMerma.cantidadReintegrarStr}
+                                                    onChange={(e) => setEditingMerma({ ...editingMerma, cantidadReintegrarStr: e.target.value })}
+                                                    className="w-full p-2.5 border rounded-lg bg-background text-base font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                                                    placeholder="Cantidad a devolver..."
+                                                />
+                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+                                                    {editingMerma.unidadMedida}
+                                                </span>
+                                            </div>
+                                            {Number(editingMerma.cantidadReintegrarStr) > editingMerma.cantidadActual && (
+                                                <p className="text-xs text-destructive font-semibold">
+                                                    La cantidad no puede superar las {editingMerma.cantidadActual} {editingMerma.unidadMedida} mermadas.
+                                                </p>
+                                            )}
+                                            {(Number(editingMerma.cantidadReintegrarStr) <= 0 || !editingMerma.cantidadReintegrarStr) && (
+                                                <p className="text-xs text-destructive font-semibold">
+                                                    Debe ingresar una cantidad mayor a 0.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <label className="text-xs font-semibold block mb-1 text-foreground">Motivo del reingreso / acuerdo con cliente:</label>
+                                            <input
+                                                type="text"
+                                                value={editingMerma.motivoReingreso}
+                                                onChange={(e) => setEditingMerma({ ...editingMerma, motivoReingreso: e.target.value })}
+                                                className="w-full p-2.5 border rounded-lg bg-background text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                                                placeholder="Ej: Cliente compra producto dañado/vencido con descuento acordado..."
+                                            />
+                                        </div>
+
+                                        {/* Vista previa de stock resultante */}
+                                        {Number(editingMerma.cantidadReintegrarStr) > 0 && Number(editingMerma.cantidadReintegrarStr) <= editingMerma.cantidadActual && (
+                                            <div className="p-3 bg-background/90 border rounded-lg text-xs space-y-1.5">
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Merma restante:</span>
+                                                    <span className="font-bold text-amber-600 dark:text-amber-400">
+                                                        {formatQuantity(Math.max(0, editingMerma.cantidadActual - Number(editingMerma.cantidadReintegrarStr)))} {editingMerma.unidadMedida}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Nuevo stock vendible en sucursal:</span>
+                                                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                                        {formatQuantity(editingMerma.stockActualInventario + Number(editingMerma.cantidadReintegrarStr))} {editingMerma.unidadMedida} (Disponible en /ventas)
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                                <span>Esta merma ya fue reintegrada totalmente al inventario vendible (0 u. disponibles).</span>
+                            </div>
+                        )}
 
                         <div>
                             <label className="text-sm font-medium block mb-1">Motivo de la Merma</label>
@@ -1107,15 +1293,37 @@ const MermasPage: React.FC = () => {
                             </button>
                             <button
                                 type="button"
-                                onClick={() => updateMermaMutation.mutate({
-                                    id: editingMerma.id,
-                                    motivo: editingMerma.motivo,
-                                    observaciones: editingMerma.observaciones
-                                })}
-                                disabled={updateMermaMutation.isPending}
-                                className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                                onClick={() => {
+                                    const cantReint = Number(editingMerma.cantidadReintegrarStr);
+                                    updateMermaMutation.mutate({
+                                        id: editingMerma.id,
+                                        motivo: editingMerma.motivo,
+                                        observaciones: editingMerma.observaciones,
+                                        reintegrarStock: editingMerma.reintegrarStock,
+                                        cantidadReintegrar: editingMerma.reintegrarStock ? cantReint : undefined,
+                                        motivoReingreso: editingMerma.reintegrarStock ? editingMerma.motivoReingreso : undefined
+                                    });
+                                }}
+                                disabled={
+                                    updateMermaMutation.isPending || 
+                                    (editingMerma.reintegrarStock && (
+                                        !editingMerma.cantidadReintegrarStr || 
+                                        Number(editingMerma.cantidadReintegrarStr) <= 0 || 
+                                        Number(editingMerma.cantidadReintegrarStr) > editingMerma.cantidadActual
+                                    ))
+                                }
+                                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-sm cursor-pointer disabled:opacity-50 ${
+                                    editingMerma.reintegrarStock
+                                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                        : 'bg-primary text-primary-foreground hover:opacity-90'
+                                }`}
                             >
-                                <Check className="w-4 h-4" /> {updateMermaMutation.isPending ? 'Guardando...' : 'Guardar Cambios'}
+                                <Check className="w-4 h-4" /> 
+                                {updateMermaMutation.isPending 
+                                    ? 'Guardando...' 
+                                    : editingMerma.reintegrarStock 
+                                        ? `Reintegrar ${editingMerma.cantidadReintegrarStr || '0'} ${editingMerma.unidadMedida} y Guardar`
+                                        : 'Guardar Cambios'}
                             </button>
                         </div>
                     </div>

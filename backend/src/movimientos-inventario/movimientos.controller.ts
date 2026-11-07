@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, ParseIntPipe, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, ParseIntPipe, UseGuards, Query, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { MovimientosInventarioService } from './movimientos.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -28,8 +28,19 @@ export class MovimientosInventarioController {
     }
 
     @Put(':id')
-    update(@Param('id', ParseIntPipe) id: number, @Body() body: { motivo?: string; observaciones?: string }) {
-        return this.service.update(id, body);
+    update(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() body: {
+            motivo?: string;
+            observaciones?: string;
+            reintegrarStock?: boolean;
+            cantidadReintegrar?: number;
+            motivoReingreso?: string;
+        },
+        @Req() req: any
+    ) {
+        const usuarioId = req.user?.id || req.user?.userId;
+        return this.service.update(id, body, usuarioId);
     }
 
     @Delete(':id')

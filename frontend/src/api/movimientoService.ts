@@ -41,7 +41,16 @@ export const movimientoService = {
         const response = await apiClient.get<MovimientoInventario[]>(`/movimientos-inventario?inventarioId=${inventarioId}`);
         return response.data;
     },
-    update: async (id: number, data: { motivo?: string; observaciones?: string }) => {
+    update: async (
+        id: number,
+        data: {
+            motivo?: string;
+            observaciones?: string;
+            reintegrarStock?: boolean;
+            cantidadReintegrar?: number;
+            motivoReingreso?: string;
+        }
+    ) => {
         const response = await apiClient.put<MovimientoInventario>(`/movimientos-inventario/${id}`, data);
         return response.data;
     },

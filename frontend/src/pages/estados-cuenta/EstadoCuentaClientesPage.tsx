@@ -139,6 +139,12 @@ const EstadoCuentaClientesPage: React.FC = () => {
         queryFn: salesService.getAll,
     });
 
+    const { data: allPagosList, isLoading: loadingPagos } = useQuery({
+        queryKey: ['cobranzasListAll'],
+        queryFn: cobranzaService.getAll,
+        staleTime: 30000,
+    });
+
     const { data: clientsList } = useQuery({
         queryKey: ['clients'],
         queryFn: () => clientService.getAll(),
@@ -157,6 +163,47 @@ const EstadoCuentaClientesPage: React.FC = () => {
         queryFn: () => cobranzaService.getByNota(viewingNota.id),
         enabled: !!viewingNota?.id
     });
+
+    // Mapeo de cobranzas realizadas con fecha POSTERIOR a fechaHasta por nota de venta
+    const pagosPosterioresMap = useMemo(() => {
+        const map = new Map<number, number>();
+        if (!fechaHasta || !allPagosList) return map;
+
+        const cutoff = fechaHasta.substring(0, 10);
+        allPagosList.forEach((p: any) => {
+            if (p.activo === false) return;
+            const notaId = p.nota?.id;
+            if (!notaId) return;
+
+            const pagoFecha = p.fecha ? String(p.fecha).substring(0, 10) : '';
+            if (pagoFecha && pagoFecha > cutoff) {
+                const montoEq = Number(p.montoEquivalente) || Number(p.monto) || 0;
+                map.set(notaId, (map.get(notaId) || 0) + montoEq);
+            }
+        });
+
+        return map;
+    }, [allPagosList, fechaHasta]);
+
+    // Ventas con saldo recalculado a la fecha de corte (ignorando pagos posteriores a fechaHasta)
+    const salesWithEffectiveSaldo = useMemo(() => {
+        if (!salesList) return [];
+        return salesList.map((s: any) => {
+            const pagosPosteriores = pagosPosterioresMap.get(s.id) || 0;
+            const originalSaldo = Number(s.saldo || 0);
+            const total = Number(s.total || 0);
+            const saldoCalculado = pagosPosteriores > 0 
+                ? Math.min(total, originalSaldo + pagosPosteriores)
+                : originalSaldo;
+            
+            return {
+                ...s,
+                saldoOriginalDb: originalSaldo,
+                pagosPosteriores,
+                saldo: saldoCalculado,
+            };
+        });
+    }, [salesList, pagosPosterioresMap]);
 
     // Helper for calculation of Credit due date and Overdue status (Mora)
     const getMoraInfo = (v: any) => {
@@ -185,9 +232,9 @@ const EstadoCuentaClientesPage: React.FC = () => {
             return { estado: 'PENDIENTE', texto: 'Por Cobrar', dias: 0, color: 'slate', fechaVenc: null, diasCredito: 0 };
         }
 
-        const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
-        const diffMs = hoy.getTime() - fechaVenc.getTime();
+        const refDate = fechaHasta ? new Date(fechaHasta + 'T00:00:00') : new Date();
+        refDate.setHours(0, 0, 0, 0);
+        const diffMs = refDate.getTime() - fechaVenc.getTime();
         const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
         if (diffDias > 0) {
@@ -201,12 +248,14 @@ const EstadoCuentaClientesPage: React.FC = () => {
 
     // Helper to get a vendor's active debt summary
     const getVendorPortfolioSummary = (vendedorId: number) => {
-        if (!salesList) return { totalSaldo: 0, totalNotas: 0, totalClientes: 0, totalMora: 0 };
-        const ventasVend = salesList.filter((s: any) => 
+        if (!salesWithEffectiveSaldo) return { totalSaldo: 0, totalNotas: 0, totalClientes: 0, totalMora: 0 };
+        const ventasVend = salesWithEffectiveSaldo.filter((s: any) => 
             s.tipo === 'VENTA' && 
             s.estado === 'CONFIRMADA' && 
             Number(s.saldo) > 0 && 
-            s.vendedor?.id === vendedorId
+            s.vendedor?.id === vendedorId &&
+            (!fechaHasta || (s.fecha && s.fecha.substring(0, 10) <= fechaHasta)) &&
+            (!fechaDesde || (s.fecha && s.fecha.substring(0, 10) >= fechaDesde))
         );
         const clientesSet = new Set<number>();
         let totalSaldo = 0;
@@ -316,7 +365,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
         if (isRestrictedVendor) {
             list = list.filter(c => 
                 (c.ruta?.vendedor?.id === userPersonal.id) ||
-                salesList?.some(s => s.vendedor?.id === userPersonal.id && s.cliente?.id === c.id) ||
+                salesWithEffectiveSaldo?.some(s => s.vendedor?.id === userPersonal.id && s.cliente?.id === c.id) ||
                 (selectedClienteId && c.id.toString() === selectedClienteId)
             );
         }
@@ -325,7 +374,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
             const nb = getClientDisplayName(b);
             return na.localeCompare(nb);
         });
-    }, [clientsList, selectedSucursal, selectedCiudad, isRestrictedVendor, userPersonal, salesList, selectedClienteId]);
+    }, [clientsList, selectedSucursal, selectedCiudad, isRestrictedVendor, userPersonal, salesWithEffectiveSaldo, selectedClienteId]);
 
     const availableClientsOptions: SearchableOption[] = useMemo(() => {
         return availableClients.map(c => {
@@ -344,8 +393,8 @@ const EstadoCuentaClientesPage: React.FC = () => {
 
     // Filter sales by global filters, client, date range, status, invoice type, and search term
     const filteredVentas = useMemo(() => {
-        if (!salesList) return [];
-        let filtered = salesList.filter(s => s.tipo === 'VENTA' && s.estado === 'CONFIRMADA');
+        if (!salesWithEffectiveSaldo) return [];
+        let filtered = salesWithEffectiveSaldo.filter(s => s.tipo === 'VENTA' && s.estado === 'CONFIRMADA');
 
         // Global branch and city filter
         if (selectedSucursal) {
@@ -411,7 +460,7 @@ const EstadoCuentaClientesPage: React.FC = () => {
         }
 
         return filtered;
-    }, [salesList, selectedSucursal, selectedCiudad, selectedClienteId, selectedVendedores, estadoFiltro, facturaFiltro, fechaDesde, fechaHasta, searchTerm, isRestrictedVendor, userPersonal]);
+    }, [salesWithEffectiveSaldo, selectedSucursal, selectedCiudad, selectedClienteId, selectedVendedores, estadoFiltro, facturaFiltro, fechaDesde, fechaHasta, searchTerm, isRestrictedVendor, userPersonal]);
 
     // Financial Metrics Calculation
     const metrics = useMemo(() => {
@@ -689,11 +738,11 @@ const EstadoCuentaClientesPage: React.FC = () => {
 
         // Fechas
         if (fechaDesde && fechaHasta) {
-            texts.push(`Rango: ${fechaDesde.split('-').reverse().join('/')} al ${fechaHasta.split('-').reverse().join('/')}`);
+            texts.push(`Rango: ${fechaDesde.split('-').reverse().join('/')} al ${fechaHasta.split('-').reverse().join('/')} (Saldos al corte: ${fechaHasta.split('-').reverse().join('/')})`);
         } else if (fechaDesde) {
             texts.push(`Desde: ${fechaDesde.split('-').reverse().join('/')}`);
         } else if (fechaHasta) {
-            texts.push(`Hasta: ${fechaHasta.split('-').reverse().join('/')}`);
+            texts.push(`Corte de saldos al: ${fechaHasta.split('-').reverse().join('/')}`);
         }
 
         if (searchTerm.trim()) {
@@ -1247,6 +1296,21 @@ const EstadoCuentaClientesPage: React.FC = () => {
                 </div>
             </div>
 
+            {/* Aviso de Corte Histórico de Saldos */}
+            {fechaHasta && (
+                <div className="flex items-center gap-3 p-3.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-700 dark:text-blue-300 shadow-xs">
+                    <Clock className="w-5 h-5 shrink-0 text-blue-600 dark:text-blue-400" />
+                    <div>
+                        <span className="font-bold block">
+                            Saldos calculados a la fecha de corte ({fechaHasta.split('-').reverse().join('/')}):
+                        </span>
+                        <span>
+                            Los saldos pendientes y montos cobrados se muestran exactamente al corte indicado, excluyendo automáticamente cualquier cobranza registrada en fechas posteriores.
+                        </span>
+                    </div>
+                </div>
+            )}
+
             {/* Tabla de Estados de Cuenta */}
             <div className="bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
                 {/* Header si estamos en la vista de detalle de un cliente */}
@@ -1505,6 +1569,11 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                                 <span className={saldo > 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-muted-foreground'}>
                                                     {sim} {saldo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                                                 </span>
+                                                {v.pagosPosteriores > 0 && (
+                                                    <span className="block text-[10px] text-blue-600 dark:text-blue-400 font-normal" title={`Cobrado después de la fecha de corte: ${sim} ${v.pagosPosteriores.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`}>
+                                                        (+{sim} {v.pagosPosteriores.toLocaleString('es-BO', { minimumFractionDigits: 2 })} cobr. post.)
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="p-4 text-center">
                                                 {mora.estado === 'CANCELADO' && (
@@ -1636,10 +1705,17 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                 </span>
                             </div>
                             <div>
-                                <span className="text-muted-foreground block">Saldo Pendiente:</span>
+                                <span className="text-muted-foreground block">
+                                    {fechaHasta ? `Saldo al ${fechaHasta.split('-').reverse().join('/')}:` : 'Saldo Pendiente:'}
+                                </span>
                                 <span className={`font-bold ${Number(viewingNota.saldo) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                                     {viewingNota.moneda === 'USD' ? '$us' : 'Bs.'} {Number(viewingNota.saldo).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                                 </span>
+                                {viewingNota.pagosPosteriores > 0 && (
+                                    <span className="block text-[11px] text-blue-600 dark:text-blue-400 mt-0.5">
+                                        (Se pagaron {viewingNota.moneda === 'USD' ? '$us' : 'Bs.'} {Number(viewingNota.pagosPosteriores).toLocaleString('es-BO', { minimumFractionDigits: 2 })} en cobranzas posteriores al corte)
+                                    </span>
+                                )}
                             </div>
                         </div>
 
@@ -1721,13 +1797,17 @@ const EstadoCuentaClientesPage: React.FC = () => {
                                                         )}
                                                     </td>
                                                     <td className="p-3 text-center">
-                                                        {p.activo ? (
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
-                                                                Aplicado
-                                                            </span>
-                                                        ) : (
+                                                        {!p.activo ? (
                                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">
                                                                 Anulado
+                                                            </span>
+                                                        ) : fechaHasta && p.fecha && String(p.fecha).substring(0, 10) > fechaHasta ? (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300" title="Cobranza registrada con fecha posterior al corte">
+                                                                Posterior al corte
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
+                                                                Aplicado
                                                             </span>
                                                         )}
                                                     </td>
