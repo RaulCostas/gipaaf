@@ -377,11 +377,12 @@ const PagosProveedoresPage: React.FC = () => {
 
     const openEditModal = (pago: PagoProveedor) => {
         setEditingId(pago.id);
+        const tcEdit = pago.tipoCambio != null && Number(pago.tipoCambio) > 1 ? String(pago.tipoCambio) : '6.96';
         setFormData({
             proveedorId: pago.proveedor?.id?.toString() || '',
             notaId: pago.nota?.id?.toString() || '',
             moneda: pago.moneda || 'BOB',
-            tipoCambio: pago.tipoCambio != null ? String(pago.tipoCambio) : '6.96',
+            tipoCambio: tcEdit,
             monto: pago.monto?.toString() || '',
             fecha: pago.fecha ? pago.fecha.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'),
             metodoPago: pago.metodoPago || 'Transferencia Bancaria',
@@ -1160,11 +1161,13 @@ const PagosProveedoresPage: React.FC = () => {
                                         onChange={(e) => {
                                             const nId = e.target.value;
                                             const n = todasLasDeudas?.find(d => d.id === Number(nId));
+                                            const tcCompra = n?.tipoCambio != null && Number(n.tipoCambio) > 1 ? String(n.tipoCambio) : null;
+                                            const currentTc = formData.tipoCambio && Number(formData.tipoCambio) > 1 ? String(formData.tipoCambio) : '6.96';
                                             setFormData({
                                                 ...formData,
                                                 notaId: nId,
-                                                moneda: n?.moneda || formData.moneda,
-                                                tipoCambio: n?.tipoCambio != null ? String(n.tipoCambio) : formData.tipoCambio
+                                                moneda: n?.moneda || formData.moneda || 'BOB',
+                                                tipoCambio: tcCompra || currentTc
                                             });
                                             setError(null);
                                         }}
@@ -1194,58 +1197,70 @@ const PagosProveedoresPage: React.FC = () => {
                         )}
 
                         {/* Moneda y Tipo de Cambio */}
-                        {selectedCompra && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-muted/20 border rounded-xl">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                                        <DollarSign className="w-3.5 h-3.5 text-primary" />
-                                        Moneda del Pago
-                                    </label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, moneda: 'BOB' })}
-                                            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all border ${
-                                                formData.moneda === 'BOB'
-                                                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                                                    : 'bg-background hover:bg-accent text-muted-foreground'
-                                            }`}
-                                        >
-                                            Bolivianos (Bs.)
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, moneda: 'USD' })}
-                                            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all border ${
-                                                formData.moneda === 'USD'
-                                                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                                                    : 'bg-background hover:bg-accent text-muted-foreground'
-                                            }`}
-                                        >
-                                            Dólares ($us)
-                                        </button>
+                        {selectedCompra && (() => {
+                            const mostrarTipoCambio = formData.moneda === 'USD' || (selectedCompra.moneda === 'USD' && formData.moneda !== 'USD');
+                            return (
+                                <div className={`grid ${mostrarTipoCambio ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-3 p-3 bg-muted/20 border rounded-xl transition-all`}>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                            <DollarSign className="w-3.5 h-3.5 text-primary" />
+                                            Moneda del Pago
+                                        </label>
+                                        <div className={`grid ${mostrarTipoCambio ? 'grid-cols-2' : 'grid-cols-2 sm:w-72'} gap-2`}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const tc = formData.tipoCambio && Number(formData.tipoCambio) > 1 ? String(formData.tipoCambio) : '6.96';
+                                                    setFormData({ ...formData, moneda: 'BOB', tipoCambio: tc });
+                                                }}
+                                                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all border ${
+                                                    formData.moneda === 'BOB'
+                                                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                                        : 'bg-background hover:bg-accent text-muted-foreground'
+                                                }`}
+                                            >
+                                                Bolivianos (Bs.)
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const tc = formData.tipoCambio && Number(formData.tipoCambio) > 1 ? String(formData.tipoCambio) : '6.96';
+                                                    setFormData({ ...formData, moneda: 'USD', tipoCambio: tc });
+                                                }}
+                                                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all border ${
+                                                    formData.moneda === 'USD'
+                                                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                                        : 'bg-background hover:bg-accent text-muted-foreground'
+                                                }`}
+                                            >
+                                                Dólares ($us)
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                                        <ArrowRightLeft className="w-3.5 h-3.5 text-primary" />
-                                        Tipo de Cambio
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        value={formData.tipoCambio}
-                                        onChange={(e) => {
-                                            const val = e.target.value.replace(/[^0-9.,]/g, '');
-                                            setFormData({ ...formData, tipoCambio: val });
-                                        }}
-                                        className="w-full p-2 border rounded-lg bg-background text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
-                                        required
-                                    />
+                                    {mostrarTipoCambio && (
+                                        <div className="space-y-1.5 animate-in fade-in duration-200">
+                                            <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                                <ArrowRightLeft className="w-3.5 h-3.5 text-primary" />
+                                                Tipo de Cambio (1 $us = Bs.)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                placeholder="6.96"
+                                                value={formData.tipoCambio}
+                                                onChange={(e) => {
+                                                    const val = e.target.value.replace(/[^0-9.,]/g, '');
+                                                    setFormData({ ...formData, tipoCambio: val });
+                                                }}
+                                                className="w-full p-2 border rounded-lg bg-background text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                                                required
+                                            />
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        )}
+                            );
+                        })()}
 
                         {/* Resumen de la Compra y Saldo */}
                         {selectedCompra && (

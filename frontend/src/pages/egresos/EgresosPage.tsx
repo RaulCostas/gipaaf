@@ -603,7 +603,7 @@ const EgresosPage: React.FC = () => {
                     </div>
 
                     {/* Fila Monto, Moneda y Tipo de Cambio */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-muted/20 border rounded-xl">
+                    <div className={`grid ${currentEgreso.moneda === 'USD' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'} gap-3 p-3 bg-muted/20 border rounded-xl transition-all`}>
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                                 <DollarSign className="w-3.5 h-3.5 text-primary" /> Monto <span className="text-destructive">*</span>
@@ -625,9 +625,13 @@ const EgresosPage: React.FC = () => {
                             <div className="grid grid-cols-2 gap-1">
                                 <button
                                     type="button"
-                                    onClick={() => setCurrentEgreso({ ...currentEgreso, moneda: 'BOB' })}
+                                    onClick={() => setCurrentEgreso({ 
+                                        ...currentEgreso, 
+                                        moneda: 'BOB',
+                                        tipoCambio: currentEgreso.tipoCambio && Number(currentEgreso.tipoCambio) > 1 ? currentEgreso.tipoCambio : 6.96 
+                                    })}
                                     className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
-                                        currentEgreso.moneda === 'BOB'
+                                        (currentEgreso.moneda || 'BOB') === 'BOB'
                                             ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                                             : 'bg-background hover:bg-accent text-muted-foreground'
                                     }`}
@@ -636,7 +640,11 @@ const EgresosPage: React.FC = () => {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setCurrentEgreso({ ...currentEgreso, moneda: 'USD' })}
+                                    onClick={() => setCurrentEgreso({ 
+                                        ...currentEgreso, 
+                                        moneda: 'USD',
+                                        tipoCambio: currentEgreso.tipoCambio && Number(currentEgreso.tipoCambio) > 1 ? currentEgreso.tipoCambio : 6.96 
+                                    })}
                                     className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
                                         currentEgreso.moneda === 'USD'
                                             ? 'bg-primary text-primary-foreground border-primary shadow-sm'
@@ -648,22 +656,24 @@ const EgresosPage: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-foreground">Tipo de Cambio</label>
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                placeholder="6.96"
-                                value={currentEgreso.tipoCambio !== undefined && currentEgreso.tipoCambio !== null ? currentEgreso.tipoCambio : ''}
-                                onChange={(e) => {
-                                    const val = e.target.value.replace(',', '.');
-                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                        setCurrentEgreso({ ...currentEgreso, tipoCambio: val });
-                                    }
-                                }}
-                                className="w-full p-2 border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary/20 outline-none text-xs"
-                            />
-                        </div>
+                        {currentEgreso.moneda === 'USD' && (
+                            <div className="space-y-1.5 animate-in fade-in duration-200">
+                                <label className="text-xs font-semibold text-foreground">Tipo de Cambio (1 $us = Bs.)</label>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="6.96"
+                                    value={currentEgreso.tipoCambio !== undefined && currentEgreso.tipoCambio !== null ? currentEgreso.tipoCambio : '6.96'}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(',', '.');
+                                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                            setCurrentEgreso({ ...currentEgreso, tipoCambio: val });
+                                        }
+                                    }}
+                                    className="w-full p-2 border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary/20 outline-none text-xs"
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -967,7 +977,7 @@ const EgresosPage: React.FC = () => {
                                                                     detalle: egreso.detalle,
                                                                     monto: Number(egreso.monto),
                                                                     moneda: egreso.moneda,
-                                                                    tipoCambio: Number(egreso.tipoCambio),
+                                                                    tipoCambio: egreso.tipoCambio != null && Number(egreso.tipoCambio) > 1 ? Number(egreso.tipoCambio) : 6.96,
                                                                     formaPago: egreso.formaPago,
                                                                     nroComprobante: egreso.nroComprobante || '',
                                                                     comprobanteUrl: egreso.comprobanteUrl || '',
