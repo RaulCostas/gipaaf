@@ -10,6 +10,9 @@ export interface DetalleTraspaso {
     fechaVencimiento?: string;
     lotesDetalle?: string;
     observacion?: string;
+    cantidadVendidaDestino?: number;
+    cantidadDisponibleDestino?: number;
+    tieneVentasDestino?: boolean;
 }
 
 export interface Traspaso {
@@ -47,6 +50,7 @@ export interface CreateTraspasoDto {
     motivo?: string;
     observaciones?: string;
     detalles: {
+        detalleId?: number;
         productoId: number;
         cantidad: number;
         numeroLote?: string;

@@ -10,7 +10,7 @@ import {
     X, Save, ChevronLeft, ChevronRight, Edit,
     Printer, FileText, FileSpreadsheet, AlertTriangle,
     Building2, Calendar, Eye, Truck, Package, CheckCircle2, XCircle, Filter,
-    MessageCircle, Send, Loader2, ExternalLink, Check
+    MessageCircle, Send, Loader2, ExternalLink, Check, Lock
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import { SearchableSelect, type SearchableOption } from '../../components/ui/SearchableSelect';
@@ -24,13 +24,19 @@ import { useAuth } from '../../context/AuthContext';
 import { whatsappService } from '../../api/whatsappService';
 
 interface ItemForm {
+    detalleId?: number;
     productoId: number;
     producto?: Producto;
     cantidad: number;
+    cantidadOriginal?: number;
     numeroLote?: string;
     fechaVencimiento?: string;
     stockDisponible: number;
     observacion?: string;
+    tieneVentasDestino?: boolean;
+    cantidadVendidaDestino?: number;
+    cantidadDisponibleDestino?: number;
+    lotesResumenTexto?: string;
 }
 
 const TraspasosPage: React.FC = () => {
@@ -40,6 +46,7 @@ const TraspasosPage: React.FC = () => {
 
     const [isCreating, setIsCreating] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
+    const [loadingEditId, setLoadingEditId] = useState<number | null>(null);
     const [viewingTraspaso, setViewingTraspaso] = useState<Traspaso | null>(null);
     const [anularConfirmId, setAnularConfirmId] = useState<number | null>(null);
 
@@ -174,21 +181,38 @@ const TraspasosPage: React.FC = () => {
         return getLotesInOrigen(Number(selectedProdId), Number(formData.sucursalOrigenId));
     }, [selectedProdId, formData.sucursalOrigenId, inventarios]);
 
+    const hasSoldItemsInTraspaso = useMemo(
+        () => Boolean(editingId && itemsList.some(i => i.tieneVentasDestino)),
+        [editingId, itemsList]
+    );
+
+    const editingLockedItem = useMemo(
+        () => (editingItemIndex !== null && itemsList[editingItemIndex]?.tieneVentasDestino ? itemsList[editingItemIndex] : null),
+        [editingItemIndex, itemsList]
+    );
+
+    const isSpecificLot = (lote?: string) => Boolean(lote && !lote.startsWith('TRASP-') && lote !== 'S/N');
+
     const selectedProductStockInOrigen = useMemo(() => {
         if (!selectedProdId || !formData.sucursalOrigenId) return 0;
+        const prodId = Number(selectedProdId);
         let baseStock = 0;
-        if (selectedNumeroLote) {
+        if (isSpecificLot(selectedNumeroLote)) {
             const found = availableLotesInOrigen.find(l => l.numeroLote === selectedNumeroLote);
             baseStock = found ? Number(found.cantidadActual) : 0;
         } else {
-            baseStock = getStockInOrigen(Number(selectedProdId), Number(formData.sucursalOrigenId));
+            baseStock = getStockInOrigen(prodId, Number(formData.sucursalOrigenId));
         }
 
-        if (editingId && editingItemIndex !== null && itemsList[editingItemIndex]) {
-            const currentItem = itemsList[editingItemIndex];
-            if (currentItem.productoId === Number(selectedProdId) && (currentItem.numeroLote || '') === (selectedNumeroLote || '')) {
-                baseStock += currentItem.cantidad;
-            }
+        if (editingId) {
+            const origSum = itemsList
+                .filter(i => i.productoId === prodId && (!isSpecificLot(selectedNumeroLote) || (i.numeroLote || '') === selectedNumeroLote))
+                .reduce((acc, i) => acc + (i.cantidadOriginal || 0), 0);
+            const otherCurrSum = itemsList
+                .filter((_, idx) => (editingItemIndex !== null ? idx !== editingItemIndex : true))
+                .filter(i => i.productoId === prodId && (!isSpecificLot(selectedNumeroLote) || (i.numeroLote || '') === selectedNumeroLote))
+                .reduce((acc, i) => acc + i.cantidad, 0);
+            return Math.max(0, baseStock + origSum - otherCurrSum);
         }
         return baseStock;
     }, [selectedProdId, selectedNumeroLote, availableLotesInOrigen, formData.sucursalOrigenId, inventarios, editingId, editingItemIndex, itemsList]);
@@ -198,7 +222,7 @@ const TraspasosPage: React.FC = () => {
         return productos.map(p => {
             let stock = getStockInOrigen(p.id, Number(formData.sucursalOrigenId));
             if (editingId && editingItemIndex !== null && itemsList[editingItemIndex]?.productoId === p.id) {
-                stock += itemsList[editingItemIndex].cantidad;
+                stock += (itemsList[editingItemIndex].cantidadOriginal ?? itemsList[editingItemIndex].cantidad);
             }
             const isOutOfStock = stock <= 0;
             return {
@@ -228,45 +252,62 @@ const TraspasosPage: React.FC = () => {
         }
 
         const prodId = Number(selectedProdId);
-        const prod = productos?.find(p => p.id === prodId);
+        const prod = productos?.find(p => p.id === prodId) || (editingItemIndex !== null ? itemsList[editingItemIndex]?.producto : undefined);
         if (!prod) return;
 
-        const stockDisponible = getStockInOrigen(prodId, Number(formData.sucursalOrigenId));
-        const chosenLot = selectedNumeroLote ? availableLotesInOrigen.find(l => l.numeroLote === selectedNumeroLote) : null;
-        let lotMax = chosenLot ? Number(chosenLot.cantidadActual) : stockDisponible;
-
-        // If editing a traspaso and modifying an item, add back its previously assigned quantity
-        if (editingId && editingItemIndex !== null && itemsList[editingItemIndex]) {
-            const currentItem = itemsList[editingItemIndex];
-            if (currentItem.productoId === prodId && (currentItem.numeroLote || '') === (selectedNumeroLote || '')) {
-                lotMax += currentItem.cantidad;
+        if (editingItemIndex !== null && itemsList[editingItemIndex]?.tieneVentasDestino) {
+            const lockedItem = itemsList[editingItemIndex];
+            const minQty = lockedItem.cantidadVendidaDestino || 0;
+            if (qty < minQty) {
+                setError(
+                    `No se puede reducir la cantidad de "${prod.nombre}" por debajo de ${minQty} un., ya que esa cantidad ya fue vendida o utilizada en la sucursal de destino.`
+                );
+                return;
             }
+        }
+
+        const stockDisponible = getStockInOrigen(prodId, Number(formData.sucursalOrigenId));
+        const chosenLot = isSpecificLot(selectedNumeroLote)
+            ? availableLotesInOrigen.find(l => l.numeroLote === selectedNumeroLote)
+            : null;
+        let lotMax = isSpecificLot(selectedNumeroLote)
+            ? (chosenLot ? Number(chosenLot.cantidadActual) : 0)
+            : stockDisponible;
+
+        // Add back original DB quantities for this traspaso matching this product/lote
+        if (editingId) {
+            const origSum = itemsList
+                .filter(i => i.productoId === prodId && (!isSpecificLot(selectedNumeroLote) || (i.numeroLote || '') === selectedNumeroLote))
+                .reduce((acc, curr) => acc + (curr.cantidadOriginal || 0), 0);
+            lotMax += origSum;
         }
 
         // Calculate quantity already assigned to other items in the list for same product and lot
         const otherQtyInList = itemsList
             .filter((_, idx) => editingItemIndex !== null ? idx !== editingItemIndex : true)
-            .filter(i => i.productoId === prodId && (i.numeroLote || '') === (selectedNumeroLote || ''))
+            .filter(i => i.productoId === prodId && (!isSpecificLot(selectedNumeroLote) || (i.numeroLote || '') === selectedNumeroLote))
             .reduce((acc, curr) => acc + curr.cantidad, 0);
 
         if (qty + otherQtyInList > lotMax) {
             const remaining = Math.max(0, lotMax - otherQtyInList);
-            setError(chosenLot 
-                ? `Stock insuficiente en el lote "${chosenLot.numeroLote}". Disponible: ${remaining}, Solicitado: ${qty}`
+            setError(isSpecificLot(selectedNumeroLote)
+                ? `Stock insuficiente en el lote "${selectedNumeroLote}". Disponible: ${remaining}, Solicitado: ${qty}`
                 : `Stock insuficiente en la sucursal de origen. Disponible: ${remaining}, Solicitado: ${qty}`
             );
             return;
         }
 
         if (editingItemIndex !== null) {
-            // Update existing item in the list
+            // Update existing item in the list preserving metadata
             const updated = [...itemsList];
+            const prev = updated[editingItemIndex];
             updated[editingItemIndex] = {
+                ...prev,
                 productoId: prodId,
                 producto: prod,
                 cantidad: qty,
                 numeroLote: selectedNumeroLote || undefined,
-                fechaVencimiento: chosenLot?.fechaVencimiento || updated[editingItemIndex]?.fechaVencimiento || undefined,
+                fechaVencimiento: chosenLot?.fechaVencimiento || prev?.fechaVencimiento || undefined,
                 stockDisponible: lotMax,
                 observacion: itemObservacion
             };
@@ -278,13 +319,21 @@ const TraspasosPage: React.FC = () => {
             const existingIndex = itemsList.findIndex(i => i.productoId === prodId && (i.numeroLote || '') === (selectedNumeroLote || ''));
             if (existingIndex >= 0) {
                 const newTotalQty = itemsList[existingIndex].cantidad + qty;
-                if (newTotalQty > lotMax) {
-                    setError(`La cantidad total (${newTotalQty}) supera el stock disponible (${lotMax})`);
+                const otherTotalExcludingExisting = itemsList
+                    .filter((_, idx) => idx !== existingIndex)
+                    .filter(i => i.productoId === prodId && (!isSpecificLot(selectedNumeroLote) || (i.numeroLote || '') === selectedNumeroLote))
+                    .reduce((acc, curr) => acc + curr.cantidad, 0);
+                if (newTotalQty + otherTotalExcludingExisting > lotMax) {
+                    const maxForExisting = Math.max(0, lotMax - otherTotalExcludingExisting);
+                    setError(`La cantidad total (${newTotalQty}) supera el stock disponible (${maxForExisting})`);
                     return;
                 }
                 const updated = [...itemsList];
-                updated[existingIndex].cantidad = newTotalQty;
-                if (itemObservacion) updated[existingIndex].observacion = itemObservacion;
+                updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    cantidad: newTotalQty,
+                    observacion: itemObservacion || updated[existingIndex].observacion
+                };
                 setItemsList(updated);
             } else {
                 setItemsList([
@@ -329,6 +378,10 @@ const TraspasosPage: React.FC = () => {
     };
 
     const handleRemoveItem = (index: number) => {
+        if (itemsList[index]?.tieneVentasDestino) {
+            toast.error(`No se puede eliminar "${itemsList[index]?.producto?.nombre}": ya se vendieron o utilizaron unidades de este lote en la sucursal de destino.`);
+            return;
+        }
         if (editingItemIndex === index) {
             handleCancelEditItem();
         } else if (editingItemIndex !== null && editingItemIndex > index) {
@@ -436,48 +489,91 @@ const TraspasosPage: React.FC = () => {
         setError(null);
     };
 
-    const handleOpenEdit = (t: Traspaso) => {
-        const origId = (t.sucursalOrigen || t.almacenOrigen)?.id ? String((t.sucursalOrigen || t.almacenOrigen)?.id) : '';
-        const destId = (t.sucursalDestino || t.almacenDestino)?.id ? String((t.sucursalDestino || t.almacenDestino)?.id) : '';
-        const gastoId = t.sucursalGasto?.id 
-            ? String(t.sucursalGasto.id) 
-            : (t.sucursalCargoCosto === 'DESTINO' ? destId : origId);
+    const handleOpenEdit = async (t: Traspaso) => {
+        setLoadingEditId(t.id);
+        try {
+            const [freshTraspaso, freshInventarios] = await Promise.all([
+                traspasoService.getById(t.id),
+                queryClient.fetchQuery({
+                    queryKey: ['inventariosGlobal'],
+                    queryFn: inventoryService.getAll,
+                    staleTime: 0,
+                }),
+            ]);
 
-        setEditingId(t.id);
-        setEditingItemIndex(null);
-        setFormData({
-            codigo: t.codigo || '',
-            fecha: t.fecha ? String(t.fecha).substring(0, 10) : format(new Date(), 'yyyy-MM-dd'),
-            sucursalOrigenId: origId,
-            sucursalDestinoId: destId,
-            costoTransporte: t.costoTransporte !== undefined && t.costoTransporte !== null ? String(t.costoTransporte) : '',
-            sucursalCargoCosto: t.sucursalCargoCosto || 'ORIGEN',
-            sucursalGastoId: gastoId,
-            motivo: t.motivo || '',
-            observaciones: t.observaciones || ''
-        });
+            const source = freshTraspaso || t;
+            const origId = (source.sucursalOrigen || source.almacenOrigen)?.id ? String((source.sucursalOrigen || source.almacenOrigen)?.id) : '';
+            const destId = (source.sucursalDestino || source.almacenDestino)?.id ? String((source.sucursalDestino || source.almacenDestino)?.id) : '';
+            const gastoId = source.sucursalGasto?.id 
+                ? String(source.sucursalGasto.id) 
+                : (source.sucursalCargoCosto === 'DESTINO' ? destId : origId);
 
-        const mappedItems: ItemForm[] = (t.detalles || []).map(d => {
-            const currentStockInBranch = origId ? getStockInOrigen(d.producto?.id, Number(origId)) : 0;
-            return {
-                productoId: d.producto?.id,
-                producto: d.producto,
-                cantidad: Number(d.cantidad) || 0,
-                numeroLote: d.numeroLote || undefined,
-                fechaVencimiento: d.fechaVencimiento ? String(d.fechaVencimiento).substring(0, 10) : undefined,
-                stockDisponible: currentStockInBranch + (Number(d.cantidad) || 0),
-                observacion: d.observacion || ''
-            };
-        });
+            setEditingId(source.id);
+            setEditingItemIndex(null);
+            setFormData({
+                codigo: source.codigo || '',
+                fecha: source.fecha ? String(source.fecha).substring(0, 10) : format(new Date(), 'yyyy-MM-dd'),
+                sucursalOrigenId: origId,
+                sucursalDestinoId: destId,
+                costoTransporte: source.costoTransporte !== undefined && source.costoTransporte !== null ? String(source.costoTransporte) : '',
+                sucursalCargoCosto: source.sucursalCargoCosto || 'ORIGEN',
+                sucursalGastoId: gastoId,
+                motivo: source.motivo || '',
+                observaciones: source.observaciones || ''
+            });
 
-        setItemsList(mappedItems);
-        setSelectedProdId('');
-        setSelectedNumeroLote('');
-        setItemCantidad('1');
-        setItemObservacion('');
-        setError(null);
-        if (viewingTraspaso) setViewingTraspaso(null);
-        setIsCreating(true);
+            const mappedItems: ItemForm[] = (source.detalles || []).map(d => {
+                const invOrig = (freshInventarios || []).find(
+                    (i: any) => i.producto?.id === d.producto?.id && ((i.sucursal?.id === Number(origId)) || (i.almacen?.id === Number(origId)))
+                );
+                let lotesArr: Array<{ numeroLote: string; cantidad: number }> = [];
+                if (d.lotesDetalle) {
+                    try {
+                        lotesArr = JSON.parse(d.lotesDetalle) || [];
+                    } catch {
+                        lotesArr = [];
+                    }
+                }
+                const isMultiLote = Array.isArray(lotesArr) && lotesArr.length > 1;
+                const itemLote = isMultiLote ? undefined : (d.numeroLote || undefined);
+
+                let currentStockInBranch = invOrig ? Number(invOrig.stockActual) : 0;
+                if (itemLote && !itemLote.startsWith('TRASP-') && itemLote !== 'S/N') {
+                    const loteMatch = ((invOrig as any)?.lotes || []).find((l: any) => l.numeroLote === itemLote);
+                    currentStockInBranch = loteMatch ? Number(loteMatch.cantidadActual) : 0;
+                }
+
+                const qtyOrig = Number(d.cantidad) || 0;
+                return {
+                    detalleId: d.id,
+                    productoId: d.producto?.id,
+                    producto: d.producto,
+                    cantidad: qtyOrig,
+                    cantidadOriginal: qtyOrig,
+                    numeroLote: itemLote,
+                    fechaVencimiento: d.fechaVencimiento ? String(d.fechaVencimiento).substring(0, 10) : undefined,
+                    stockDisponible: currentStockInBranch + qtyOrig,
+                    observacion: d.observacion || '',
+                    tieneVentasDestino: Boolean(d.tieneVentasDestino),
+                    cantidadVendidaDestino: Number(d.cantidadVendidaDestino) || 0,
+                    cantidadDisponibleDestino: d.cantidadDisponibleDestino !== undefined ? Number(d.cantidadDisponibleDestino) : qtyOrig,
+                    lotesResumenTexto: isMultiLote ? lotesArr.map(l => `${l.numeroLote} (${l.cantidad} u.)`).join(', ') : undefined,
+                };
+            });
+
+            setItemsList(mappedItems);
+            setSelectedProdId('');
+            setSelectedNumeroLote('');
+            setItemCantidad('1');
+            setItemObservacion('');
+            setError(null);
+            if (viewingTraspaso) setViewingTraspaso(null);
+            setIsCreating(true);
+        } catch (err: any) {
+            toast.error(err?.response?.data?.message || 'Error al cargar los detalles actualizados del traspaso');
+        } finally {
+            setLoadingEditId(null);
+        }
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -516,6 +612,7 @@ const TraspasosPage: React.FC = () => {
             motivo: formData.motivo,
             observaciones: formData.observaciones,
             detalles: itemsList.map(i => ({
+                detalleId: i.detalleId,
                 productoId: i.productoId,
                 cantidad: i.cantidad,
                 numeroLote: i.numeroLote,
@@ -1231,10 +1328,15 @@ const TraspasosPage: React.FC = () => {
                                                     <>
                                                         <button
                                                             onClick={() => handleOpenEdit(t)}
-                                                            className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                            disabled={loadingEditId === t.id}
+                                                            className="px-2.5 py-1.5 bg-card border hover:border-amber-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer disabled:opacity-60"
                                                             title="Editar Traspaso"
                                                         >
-                                                            <Edit className="w-3.5 h-3.5 text-amber-500" />
+                                                            {loadingEditId === t.id ? (
+                                                                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                                                            ) : (
+                                                                <Edit className="w-3.5 h-3.5 text-amber-500" />
+                                                            )}
                                                         </button>
                                                         <button
                                                             onClick={() => setAnularConfirmId(t.id)}
@@ -1303,6 +1405,18 @@ const TraspasosPage: React.FC = () => {
                     )}
 
                     <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1.5 py-1 custom-scrollbar">
+                        {hasSoldItemsInTraspaso && (
+                            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-xs text-foreground flex items-start gap-2.5">
+                                <Lock className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                                <div className="space-y-0.5">
+                                    <p className="font-bold text-amber-600">Este traspaso tiene productos con ventas o salidas registradas en la sucursal de destino</p>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        No se pueden cambiar las sucursales ni eliminar esos productos (ni reducir por debajo de lo vendido en destino), pero <strong className="text-foreground">sí puedes aumentar cantidades por error de digitación</strong>, agregar nuevos productos o editar/eliminar ítems que aún no se vendieron.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Cabecera: Código, Fecha, Costo de Transporte */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="space-y-1.5">
@@ -1357,6 +1471,7 @@ const TraspasosPage: React.FC = () => {
                                 </label>
                                 <select
                                     value={formData.sucursalOrigenId}
+                                    disabled={hasSoldItemsInTraspaso}
                                     onChange={(e) => {
                                         const newOrigId = e.target.value;
                                         setFormData(prev => ({
@@ -1367,7 +1482,7 @@ const TraspasosPage: React.FC = () => {
                                         setItemsList([]); // Reset items if branch changes
                                         setError(null);
                                     }}
-                                    className="w-full p-2.5 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                                    className="w-full p-2.5 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
                                     required
                                 >
                                     <option value="">Seleccione Sucursal Origen...</option>
@@ -1386,11 +1501,12 @@ const TraspasosPage: React.FC = () => {
                                 </label>
                                 <select
                                     value={formData.sucursalDestinoId}
+                                    disabled={hasSoldItemsInTraspaso}
                                     onChange={(e) => {
                                         setFormData({ ...formData, sucursalDestinoId: e.target.value });
                                         setError(null);
                                     }}
-                                    className="w-full p-2.5 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                                    className="w-full p-2.5 border rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
                                     required
                                 >
                                     <option value="">Seleccione Sucursal Destino...</option>
@@ -1460,15 +1576,22 @@ const TraspasosPage: React.FC = () => {
                             ) : (
                                 <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/60">
                                     {editingItemIndex !== null && (
-                                        <div className="flex items-center justify-between p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg text-xs text-blue-700 dark:text-blue-300 shadow-xs">
-                                            <div className="flex items-center gap-1.5 font-bold">
-                                                <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                                                <span>Modificando producto en la lista: <span className="underline">{itemsList[editingItemIndex]?.producto?.nombre}</span></span>
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg text-xs text-blue-700 dark:text-blue-300 shadow-xs">
+                                            <div className="space-y-0.5">
+                                                <div className="flex items-center gap-1.5 font-bold">
+                                                    <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                                    <span>Modificando producto en la lista: <span className="underline">{itemsList[editingItemIndex]?.producto?.nombre}</span></span>
+                                                </div>
+                                                {editingLockedItem && (
+                                                    <p className="text-[11px] text-amber-600 pl-5 font-semibold">
+                                                        Ya tiene {editingLockedItem.cantidadVendidaDestino} un. vendidas/usadas en destino (solo puede ajustar cantidad ≥ {editingLockedItem.cantidadVendidaDestino} un. o editar observación).
+                                                    </p>
+                                                )}
                                             </div>
                                             <button
                                                 type="button"
                                                 onClick={handleCancelEditItem}
-                                                className="text-[11px] font-semibold hover:underline flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                                                className="text-[11px] font-semibold hover:underline flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer self-end sm:self-center"
                                             >
                                                 <X className="w-3.5 h-3.5" /> Cancelar edición
                                             </button>
@@ -1480,6 +1603,7 @@ const TraspasosPage: React.FC = () => {
                                             <label className="text-[11px] font-semibold text-muted-foreground">Producto</label>
                                             <SearchableSelect
                                                 value={selectedProdId}
+                                                disabled={Boolean(editingLockedItem)}
                                                 onChange={(val) => {
                                                     setSelectedProdId(val);
                                                     setSelectedNumeroLote('');
@@ -1495,10 +1619,13 @@ const TraspasosPage: React.FC = () => {
                                             <select
                                                 value={selectedNumeroLote}
                                                 onChange={(e) => setSelectedNumeroLote(e.target.value)}
-                                                disabled={!selectedProdId || availableLotesInOrigen.length === 0}
-                                                className="w-full min-h-[40px] p-2 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+                                                disabled={!selectedProdId || Boolean(editingLockedItem) || (availableLotesInOrigen.length === 0 && !selectedNumeroLote)}
+                                                className="w-full min-h-[40px] p-2 border rounded-lg bg-background text-xs outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
                                             >
                                                 <option value="">Automático (FEFO / PEPS)</option>
+                                                {selectedNumeroLote && !availableLotesInOrigen.some(l => l.numeroLote === selectedNumeroLote) && (
+                                                    <option value={selectedNumeroLote}>Lote: {selectedNumeroLote} (0 u. adicionales en origen)</option>
+                                                )}
                                                 {availableLotesInOrigen.map(l => {
                                                     const venc = l.fechaVencimiento ? ` | Venc: ${String(l.fechaVencimiento).substring(0, 10).split('-').reverse().join('/')}` : '';
                                                     return (
@@ -1513,16 +1640,21 @@ const TraspasosPage: React.FC = () => {
 
                                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                                         <div className="sm:col-span-3 space-y-1">
-                                            <div className="flex items-center justify-between">
+                                            <div className="flex items-center justify-between gap-1">
                                                 <label className="text-[11px] font-semibold text-muted-foreground">Cantidad</label>
-                                                {selectedProdId && (
-                                                    <span className="text-[10px] text-primary font-bold">Max: {selectedProductStockInOrigen}</span>
-                                                )}
+                                                <div className="flex items-center gap-1.5 text-[10px] font-bold">
+                                                    {editingLockedItem && (
+                                                        <span className="text-amber-600">Mín: {editingLockedItem.cantidadVendidaDestino}</span>
+                                                    )}
+                                                    {selectedProdId && (
+                                                        <span className="text-primary">Max: {selectedProductStockInOrigen}</span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <input
                                                 type="number"
                                                 step="1"
-                                                min={selectedProdId ? 1 : undefined}
+                                                min={editingLockedItem ? Math.max(1, editingLockedItem.cantidadVendidaDestino || 1) : (selectedProdId ? 1 : undefined)}
                                                 max={selectedProdId && selectedProductStockInOrigen > 0 ? selectedProductStockInOrigen : undefined}
                                                 value={itemCantidad}
                                                 onChange={(e) => setItemCantidad(e.target.value)}
@@ -1608,11 +1740,19 @@ const TraspasosPage: React.FC = () => {
                                                     className={`hover:bg-accent/30 transition-colors ${editingItemIndex === idx ? 'bg-blue-50/80 dark:bg-blue-950/40 border-l-4 border-l-blue-500' : ''}`}
                                                 >
                                                     <td className="p-2.5 font-medium">
-                                                        {item.producto?.nombre}
-                                                        {item.producto?.codigo && (
-                                                             <span className="text-[10px] text-muted-foreground ml-1.5 font-mono">
-                                                                [{item.producto.codigo}]
-                                                            </span>
+                                                        <div>
+                                                            {item.producto?.nombre}
+                                                            {item.producto?.codigo && (
+                                                                <span className="text-[10px] text-muted-foreground ml-1.5 font-mono">
+                                                                    [{item.producto.codigo}]
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {item.tieneVentasDestino && (
+                                                            <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 border border-amber-500/40 text-[10px] font-semibold">
+                                                                <Lock className="w-2.5 h-2.5 shrink-0" />
+                                                                <span>Vendidas en destino: {item.cantidadVendidaDestino} un. (Mín. {item.cantidadVendidaDestino})</span>
+                                                            </div>
                                                         )}
                                                     </td>
                                                     <td className="p-2.5">
@@ -1622,6 +1762,11 @@ const TraspasosPage: React.FC = () => {
                                                                 {item.fechaVencimiento && (
                                                                     <span className="text-[10px] text-muted-foreground">Venc: {String(item.fechaVencimiento).substring(0, 10).split('-').reverse().join('/')}</span>
                                                                 )}
+                                                            </div>
+                                                        ) : item.lotesResumenTexto ? (
+                                                            <div className="flex flex-col text-[10px] text-muted-foreground">
+                                                                <span className="font-semibold text-foreground">Multi-lote (FEFO)</span>
+                                                                <span className="font-mono">{item.lotesResumenTexto}</span>
                                                             </div>
                                                         ) : (
                                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted text-[10px] text-muted-foreground">
@@ -1644,17 +1789,30 @@ const TraspasosPage: React.FC = () => {
                                                                 type="button"
                                                                 onClick={() => handleEditItem(idx)}
                                                                 className={`p-1.5 rounded transition-colors cursor-pointer ${editingItemIndex === idx ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-blue-600 hover:bg-blue-500/10'}`}
-                                                                title="Editar producto"
+                                                                title={item.tieneVentasDestino ? `Editar cantidad (mín. ${item.cantidadVendidaDestino} un.) u observación` : 'Editar producto'}
                                                             >
                                                                 <Edit className="w-3.5 h-3.5" />
                                                             </button>
                                                             <button
                                                                 type="button"
+                                                                disabled={Boolean(item.tieneVentasDestino)}
                                                                 onClick={() => handleRemoveItem(idx)}
-                                                                className="p-1.5 text-red-600 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
-                                                                title="Eliminar producto"
+                                                                className={`p-1.5 rounded transition-colors ${
+                                                                    item.tieneVentasDestino
+                                                                        ? 'text-muted-foreground/40 cursor-not-allowed'
+                                                                        : 'text-red-600 hover:bg-red-500/10 cursor-pointer'
+                                                                }`}
+                                                                title={
+                                                                    item.tieneVentasDestino
+                                                                        ? `Bloqueado: ya se vendieron/utilizaron ${item.cantidadVendidaDestino} un. de este lote en destino`
+                                                                        : 'Eliminar producto'
+                                                                }
                                                             >
-                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                {item.tieneVentasDestino ? (
+                                                                    <Lock className="w-3.5 h-3.5" />
+                                                                ) : (
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                )}
                                                             </button>
                                                         </div>
                                                     </td>
@@ -1893,10 +2051,15 @@ const TraspasosPage: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => handleOpenEdit(viewingTraspaso)}
-                                        className="px-3 py-2 bg-amber-500/10 text-amber-600 hover:bg-amber-600 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                                        disabled={loadingEditId === viewingTraspaso.id}
+                                        className="px-3 py-2 bg-amber-500/10 text-amber-600 hover:bg-amber-600 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                                         title="Editar Traspaso"
                                     >
-                                        <Edit className="w-3.5 h-3.5" /> Editar
+                                        {loadingEditId === viewingTraspaso.id ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <Edit className="w-3.5 h-3.5" />
+                                        )} Editar
                                     </button>
                                 )}
                                 {viewingTraspaso.estado === 'COMPLETADO' && (
