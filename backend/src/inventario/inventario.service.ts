@@ -343,6 +343,16 @@ export class InventarioService implements OnModuleInit {
         // If fechaCorte is today or future, do not subtract any movements (stockActual is already live).
         const cutoffTimestamp = isPast ? `${fechaCorte!.trim()} 23:59:59.999` : '2099-12-31 23:59:59.999';
 
+        // Excluir mermas históricas migradas del sistema anterior (MERMA-*-HIST-*)
+        // ya que no formaron parte del inventario vendible inicial de GIPAAF
+        const movSubquery = `
+            SELECT "inventarioId", SUM(cantidad) as total_movs
+            FROM movimientos_inventario
+            WHERE "creadoEn" > $1::timestamp
+              AND NOT (tipo = 'MERMA' AND COALESCE("numeroDocumento", '') LIKE 'MERMA-%-HIST-%')
+            GROUP BY "inventarioId"
+        `;
+
         let query = '';
         let params: any[] = [];
 
@@ -366,12 +376,7 @@ export class InventarioService implements OnModuleInit {
                 LEFT JOIN lineas l ON p."lineaId" = l.id
                 LEFT JOIN grupos g ON p."grupoId" = g.id
                 LEFT JOIN inventario i ON i."productoId" = p.id AND i."sucursalId" = $2
-                LEFT JOIN (
-                    SELECT "inventarioId", SUM(cantidad) as total_movs
-                    FROM movimientos_inventario
-                    WHERE "creadoEn" > $1::timestamp
-                    GROUP BY "inventarioId"
-                ) mov ON mov."inventarioId" = i.id
+                LEFT JOIN (${movSubquery}) mov ON mov."inventarioId" = i.id
                 WHERE p.activo = true AND p."eliminadoEn" IS NULL
                 GROUP BY p.id, p.codigo, p.nombre, p."unidadMedida", p."precioVenta", p."precioCompra", m.nombre, l.nombre, g.nombre
                 ORDER BY p.nombre ASC
@@ -402,12 +407,7 @@ export class InventarioService implements OnModuleInit {
                     INNER JOIN sucursales suc ON inv."sucursalId" = suc.id 
                     WHERE suc."ciudadId" = $2
                 ) i ON i."productoId" = p.id
-                LEFT JOIN (
-                    SELECT "inventarioId", SUM(cantidad) as total_movs
-                    FROM movimientos_inventario
-                    WHERE "creadoEn" > $1::timestamp
-                    GROUP BY "inventarioId"
-                ) mov ON mov."inventarioId" = i.id
+                LEFT JOIN (${movSubquery}) mov ON mov."inventarioId" = i.id
                 WHERE p.activo = true AND p."eliminadoEn" IS NULL
                 GROUP BY p.id, p.codigo, p.nombre, p."unidadMedida", p."precioVenta", p."precioCompra", m.nombre, l.nombre, g.nombre
                 ORDER BY p.nombre ASC
@@ -433,12 +433,7 @@ export class InventarioService implements OnModuleInit {
                 LEFT JOIN lineas l ON p."lineaId" = l.id
                 LEFT JOIN grupos g ON p."grupoId" = g.id
                 LEFT JOIN inventario i ON i."productoId" = p.id
-                LEFT JOIN (
-                    SELECT "inventarioId", SUM(cantidad) as total_movs
-                    FROM movimientos_inventario
-                    WHERE "creadoEn" > $1::timestamp
-                    GROUP BY "inventarioId"
-                ) mov ON mov."inventarioId" = i.id
+                LEFT JOIN (${movSubquery}) mov ON mov."inventarioId" = i.id
                 WHERE p.activo = true AND p."eliminadoEn" IS NULL
                 GROUP BY p.id, p.codigo, p.nombre, p."unidadMedida", p."precioVenta", p."precioCompra", m.nombre, l.nombre, g.nombre
                 ORDER BY p.nombre ASC
