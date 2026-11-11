@@ -166,16 +166,16 @@ const MuestrasPage: React.FC = () => {
         const activeSucursal = formSucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
         const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
 
-        let list = clientes;
+        let list = clientes.filter(c => c.activo !== false || (formClienteId && c.id.toString() === formClienteId) || (clienteFilter !== 'all' && c.id.toString() === clienteFilter));
         if (activeSucursal) {
-            list = clientes.filter(c => 
+            list = list.filter(c => 
                 c.sucursal?.id === Number(activeSucursal) || 
                 c.ruta?.sucursal?.id === Number(activeSucursal) ||
                 (formClienteId && c.id.toString() === formClienteId) ||
                 (clienteFilter !== 'all' && c.id.toString() === clienteFilter)
             );
         } else if (activeCiudad) {
-            list = clientes.filter(c => 
+            list = list.filter(c => 
                 c.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 (formClienteId && c.id.toString() === formClienteId) ||

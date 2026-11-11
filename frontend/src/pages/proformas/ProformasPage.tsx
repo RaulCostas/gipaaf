@@ -83,15 +83,15 @@ const ProformasPage: React.FC = () => {
         const activeSucursal = newProforma.sucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
         const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
 
-        let list = clients;
+        let list = clients.filter(c => c.activo !== false || (newProforma.clienteId && c.id.toString() === newProforma.clienteId));
         if (activeSucursal) {
-            list = clients.filter(c => 
+            list = list.filter(c => 
                 c.sucursal?.id === Number(activeSucursal) || 
                 c.ruta?.sucursal?.id === Number(activeSucursal) ||
                 (newProforma.clienteId && c.id.toString() === newProforma.clienteId)
             );
         } else if (activeCiudad) {
-            list = clients.filter(c => 
+            list = list.filter(c => 
                 c.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) ||
                 (newProforma.clienteId && c.id.toString() === newProforma.clienteId)

@@ -147,16 +147,16 @@ const DevolucionesPage: React.FC = () => {
         const activeSucursal = newReturn.sucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
         const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
 
-        let list = clients;
+        let list = clients.filter(c => c.activo !== false || (newReturn.clienteId && c.id.toString() === newReturn.clienteId) || (selectedClientFilter !== 'all' && c.id.toString() === selectedClientFilter));
         if (activeSucursal) {
-            list = clients.filter(c => 
+            list = list.filter(c => 
                 c.sucursal?.id === Number(activeSucursal) || 
                 c.ruta?.sucursal?.id === Number(activeSucursal) ||
                 (newReturn.clienteId && c.id.toString() === newReturn.clienteId) ||
                 (selectedClientFilter !== 'all' && c.id.toString() === selectedClientFilter)
             );
         } else if (activeCiudad) {
-            list = clients.filter(c => 
+            list = list.filter(c => 
                 c.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 (newReturn.clienteId && c.id.toString() === newReturn.clienteId) ||

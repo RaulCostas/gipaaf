@@ -102,15 +102,15 @@ const VentasPage: React.FC = () => {
         const activeSucursal = newVenta.sucursalId || selectedSucursal || (userSucursal?.id ? String(userSucursal.id) : '');
         const activeCiudad = selectedCiudad || (userCiudad?.id ? String(userCiudad.id) : '');
 
-        let list = clients;
+        let list = clients.filter(c => c.activo !== false || (newVenta.clienteId && c.id.toString() === newVenta.clienteId));
         if (activeSucursal) {
-            list = clients.filter(c => 
+            list = list.filter(c => 
                 c.sucursal?.id === Number(activeSucursal) || 
                 c.ruta?.sucursal?.id === Number(activeSucursal) ||
                 (newVenta.clienteId && c.id.toString() === newVenta.clienteId)
             );
         } else if (activeCiudad) {
-            list = clients.filter(c => 
+            list = list.filter(c => 
                 c.sucursal?.ciudad?.id === Number(activeCiudad) || 
                 c.ruta?.sucursal?.ciudad?.id === Number(activeCiudad) ||
                 (newVenta.clienteId && c.id.toString() === newVenta.clienteId)

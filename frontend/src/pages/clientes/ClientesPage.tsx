@@ -34,6 +34,7 @@ const ClientesPage: React.FC = () => {
         longitud: null
     });
     const [searchTerm, setSearchTerm] = useState('');
+    const [estadoFilter, setEstadoFilter] = useState<'TODOS' | 'ACTIVO' | 'INACTIVO'>('TODOS');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
     const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -330,6 +331,12 @@ const ClientesPage: React.FC = () => {
         }
     };
 
+    const normalizeText = (text?: string | null) =>
+        (text || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+
     const filteredClients = useMemo(() => {
         if (!clients) return [];
         let filtered = clients;
@@ -345,17 +352,26 @@ const ClientesPage: React.FC = () => {
             filtered = filtered.filter(c => c.sucursal?.id === Number(selectedSucursal));
         }
 
-        filtered = filtered.filter(c => 
-            c.persona?.nombres?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.persona?.apellidos?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.nombreTienda?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.persona?.ci?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.persona?.telefono?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.persona?.direccion?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        return filtered.sort((a, b) => ((a.nombreTienda || a.persona?.nombres) || '').localeCompare((b.nombreTienda || b.persona?.nombres) || ''));
-    }, [clients, searchTerm, selectedCiudad, selectedSucursal]);
+        if (estadoFilter === 'ACTIVO') {
+            filtered = filtered.filter(c => Boolean(c.activo));
+        } else if (estadoFilter === 'INACTIVO') {
+            filtered = filtered.filter(c => !c.activo);
+        }
+
+        const q = normalizeText(searchTerm.trim());
+        if (q) {
+            filtered = filtered.filter(c => 
+                normalizeText(c.persona?.nombres).includes(q) ||
+                normalizeText(c.persona?.apellidos).includes(q) ||
+                normalizeText(c.nombreTienda).includes(q) ||
+                normalizeText(c.persona?.ci).includes(q) ||
+                normalizeText(c.codigo).includes(q) ||
+                normalizeText(c.persona?.telefono).includes(q) ||
+                normalizeText(c.persona?.direccion).includes(q)
+            );
+        }
+        return [...filtered].sort((a, b) => ((a.nombreTienda || a.persona?.nombres) || '').localeCompare((b.nombreTienda || b.persona?.nombres) || ''));
+    }, [clients, searchTerm, estadoFilter, selectedCiudad, selectedSucursal]);
 
     const totalPages = Math.ceil(filteredClients.length / itemsPerPage) || 1;
     const paginatedClients = useMemo(() => {
@@ -365,7 +381,7 @@ const ClientesPage: React.FC = () => {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedCiudad, selectedSucursal]);
+    }, [searchTerm, estadoFilter, selectedCiudad, selectedSucursal]);
 
     if (isLoading) return <div className="p-6 text-center text-muted-foreground animate-pulse">Cargando clientes...</div>;
 
@@ -403,20 +419,31 @@ const ClientesPage: React.FC = () => {
                 </div>
             </div>
 
-            <div className="bg-card p-3 border rounded-lg shadow-sm flex items-center gap-2 max-w-md">
-                <Search className="w-5 h-5 text-muted-foreground ml-1" />
-                <input 
-                    type="text" 
-                    placeholder="Buscar por nombre, apellido o CI..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-transparent border-none outline-none flex-1 text-sm placeholder:text-muted-foreground/70"
-                />
-                {searchTerm && (
-                    <button onClick={() => setSearchTerm('')} className="p-1 hover:bg-accent rounded-md text-muted-foreground">
-                        <X className="w-4 h-4" />
-                    </button>
-                )}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="bg-card p-3 border rounded-lg shadow-sm flex items-center gap-2 flex-1 max-w-md">
+                    <Search className="w-5 h-5 text-muted-foreground ml-1" />
+                    <input 
+                        type="text" 
+                        placeholder="Buscar por código, tienda, nombre, CI..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="bg-transparent border-none outline-none flex-1 text-sm placeholder:text-muted-foreground/70"
+                    />
+                    {searchTerm && (
+                        <button onClick={() => setSearchTerm('')} className="p-1 hover:bg-accent rounded-md text-muted-foreground">
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
+                <select
+                    value={estadoFilter}
+                    onChange={(e) => setEstadoFilter(e.target.value as 'TODOS' | 'ACTIVO' | 'INACTIVO')}
+                    className="bg-card px-3 py-3 border rounded-lg shadow-sm text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                    <option value="TODOS">Todos los estados</option>
+                    <option value="ACTIVO">Solo Activos</option>
+                    <option value="INACTIVO">Solo Inactivos</option>
+                </select>
             </div>
 
             <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title={
@@ -786,20 +813,20 @@ const ClientesPage: React.FC = () => {
                                     </td>
                                     <td className="p-4">
                                         <div className="flex flex-col">
-                                            <span className="text-sm font-medium">{client.persona.nombres} {client.persona.apellidos}</span>
-                                            <span className="text-xs font-mono text-muted-foreground">CI: {client.persona.ci || '-'}</span>
+                                            <span className="text-sm font-medium">{client.persona?.nombres || ''} {client.persona?.apellidos || ''}</span>
+                                            <span className="text-xs font-mono text-muted-foreground">CI: {client.persona?.ci || '-'}</span>
                                         </div>
                                     </td>
                                     <td className="p-4">
                                         <div className="flex flex-col gap-1">
                                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                 <Phone className="w-3.5 h-3.5 shrink-0" /> 
-                                                <span>{client.persona.telefono || '-'}</span>
+                                                <span>{client.persona?.telefono || '-'}</span>
                                             </div>
                                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                 <MapPin className="w-3.5 h-3.5 shrink-0" /> 
                                                 <span className="truncate max-w-[170px]">
-                                                    {client.persona.direccion || '-'}
+                                                    {client.persona?.direccion || '-'}
                                                 </span>
                                             </div>
                                             {client.latitud && client.longitud && (

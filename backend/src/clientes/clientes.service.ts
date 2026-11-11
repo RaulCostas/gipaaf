@@ -57,17 +57,16 @@ export class ClientesService {
         if (search) {
             clientes = await this.repo.find({
                 where: [
-                    { persona: { nombres: Like(`%${search}%`) }, activo: true },
-                    { persona: { apellidos: Like(`%${search}%`) }, activo: true },
-                    { persona: { ci: Like(`%${search}%`) }, activo: true },
-                    { nombreTienda: Like(`%${search}%`), activo: true },
-                    { codigo: Like(`%${search}%`), activo: true },
+                    { persona: { nombres: Like(`%${search}%`) } },
+                    { persona: { apellidos: Like(`%${search}%`) } },
+                    { persona: { ci: Like(`%${search}%`) } },
+                    { nombreTienda: Like(`%${search}%`) },
+                    { codigo: Like(`%${search}%`) },
                 ],
                 relations: ['persona', 'sucursal', 'sucursal.ciudad', 'ruta', 'ruta.vendedor', 'ruta.sucursal', 'ruta.sucursal.ciudad']
             });
         } else {
             clientes = await this.repo.find({ 
-                where: { activo: true },
                 relations: ['persona', 'sucursal', 'sucursal.ciudad', 'ruta', 'ruta.vendedor', 'ruta.sucursal', 'ruta.sucursal.ciudad']
             });
         }
@@ -197,7 +196,9 @@ export class ClientesService {
     }
 
     async remove(id: number) {
-        const c = await this.findOne(id);
-        return this.repo.softRemove(c);
+        const c = await this.repo.findOne({ where: { id } });
+        if (!c) throw new NotFoundException(`Cliente ${id} no encontrado`);
+        c.activo = false;
+        return this.repo.save(c);
     }
 }
