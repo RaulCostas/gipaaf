@@ -1504,8 +1504,8 @@ const UtilidadesPage: React.FC = () => {
                         )}
                     </div>
 
-                    <div className="border rounded-xl overflow-hidden max-h-[50vh] overflow-y-auto custom-scrollbar shadow-xs">
-                        <table className="w-full text-left border-collapse text-xs">
+                    <div className="border rounded-xl overflow-auto max-h-[50vh] custom-scrollbar shadow-xs">
+                        <table className="w-full min-w-[440px] text-left border-collapse text-xs">
                             <thead className="bg-muted/80 sticky top-0 border-b">
                                 <tr>
                                     <th className="p-2.5 font-bold text-center w-12">#</th>

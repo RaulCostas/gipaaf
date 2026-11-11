@@ -1721,8 +1721,8 @@ const TraspasosPage: React.FC = () => {
 
                             {/* Lista de Items agregados */}
                             {itemsList.length > 0 && (
-                                <div className="border rounded-lg overflow-hidden mt-3">
-                                    <table className="w-full text-left border-collapse text-xs">
+                                <div className="border rounded-lg overflow-x-auto mt-3">
+                                    <table className="w-full min-w-[600px] text-left border-collapse text-xs">
                                         <thead>
                                             <tr className="bg-muted/40 border-b">
                                                 <th className="p-2.5 font-semibold text-muted-foreground">Producto</th>
@@ -1943,8 +1943,8 @@ const TraspasosPage: React.FC = () => {
                             <span className="text-xs font-bold text-foreground uppercase tracking-wider">
                                 Productos Transferidos
                             </span>
-                            <div className="border rounded-lg overflow-hidden">
-                                <table className="w-full text-left border-collapse text-xs">
+                            <div className="border rounded-lg overflow-x-auto">
+                                <table className="w-full min-w-[540px] text-left border-collapse text-xs">
                                     <thead>
                                         <tr className="bg-muted/40 border-b">
                                             <th className="p-3 font-semibold text-muted-foreground w-10">#</th>

@@ -24,6 +24,7 @@ import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData, printJsPdf } from '../../utils/exportUtils';
 import { numeroALetras } from '../../utils/currencyUtils';
 import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
+import { sortDetallesByMarcaAndProduct } from '../../utils/sortUtils';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -372,7 +373,7 @@ const VentasPage: React.FC = () => {
             descuentoPorcentaje: Number(venta.descuentoPorcentaje || 0),
             aplicaDescuentoFijo: Boolean(venta.aplicaDescuentoFijo) || Number(venta.descuentoFijoPorcentaje || 0) > 0,
             descuentoPromocionPorcentaje: Number(venta.descuentoPromocionPorcentaje || 0),
-            detalles: venta.detalles?.map((d: any) => ({
+            detalles: sortDetallesByMarcaAndProduct(venta.detalles?.map((d: any) => ({
                 productoId: d.producto?.id || d.productoId,
                 producto: d.producto,
                 cantidad: Number(d.cantidad),
@@ -382,7 +383,7 @@ const VentasPage: React.FC = () => {
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
-            })) || [],
+            })) || [], products),
             montoEfectivo: Number(venta.montoEfectivo || 0),
             montoTransferencia: Number(venta.montoTransferencia || 0),
             montoQr: Number(venta.montoQr || 0),
@@ -414,7 +415,7 @@ const VentasPage: React.FC = () => {
             descuentoPorcentaje: Number(venta.descuentoPorcentaje || 0),
             aplicaDescuentoFijo: Boolean(venta.aplicaDescuentoFijo) || Number(venta.descuentoFijoPorcentaje || 0) > 0,
             descuentoPromocionPorcentaje: Number(venta.descuentoPromocionPorcentaje || 0),
-            detalles: venta.detalles?.map((d: any) => ({
+            detalles: sortDetallesByMarcaAndProduct(venta.detalles?.map((d: any) => ({
                 productoId: d.producto?.id || d.productoId,
                 producto: d.producto,
                 cantidad: Number(d.cantidad),
@@ -424,7 +425,7 @@ const VentasPage: React.FC = () => {
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
-            })) || [],
+            })) || [], products),
             montoEfectivo: Number(venta.montoEfectivo || 0),
             montoTransferencia: Number(venta.montoTransferencia || 0),
             montoQr: Number(venta.montoQr || 0),
@@ -493,7 +494,8 @@ const VentasPage: React.FC = () => {
             ? ["Código", "Producto", "Cant.", "P.Unit (Bs.)", "Desc. %", "Subtotal (Bs.)"]
             : ["Código", "Producto", "Cant.", "P.Unit (Bs.)", "Subtotal (Bs.)"];
 
-        const tableRows = newVenta.detalles.map((det: any) => {
+        const sortedDetalles = sortDetallesByMarcaAndProduct(newVenta.detalles, products);
+        const tableRows = sortedDetalles.map((det: any) => {
             const descPct = Number(det.descuentoPorcentaje) || 0;
             const hasFijo = Boolean(det.aplicaDescuentoFijo);
 
@@ -660,7 +662,7 @@ const VentasPage: React.FC = () => {
 
         setNewVenta({
             ...newVenta,
-            detalles: [...newVenta.detalles, {
+            detalles: sortDetallesByMarcaAndProduct([...newVenta.detalles, {
                 productoId: prod.id,
                 producto: prod,
                 cantidad: 1,
@@ -668,7 +670,7 @@ const VentasPage: React.FC = () => {
                 descuentoPorcentaje: 0,
                 aplicaDescuentoFijo: false,
                 subtotal: precioVentaNum
-            }]
+            }], products)
         });
     };
 
@@ -1691,7 +1693,9 @@ const VentasPage: React.FC = () => {
                                             const stockDisp = getProductStock(det.productoId || det.producto?.id);
                                             const isExceeded = det.cantidad > stockDisp;
 
-                                            const productLotes = getProductLotes(det.productoId || det.producto?.id);
+                                            const prodIdNum = Number(det.productoId || det.producto?.id);
+                                            const marcaNombre = det.producto?.marca?.nombre || products?.find((p: any) => p.id === prodIdNum)?.marca?.nombre;
+                                            const productLotes = getProductLotes(prodIdNum);
                                             const assignedLotes = det.movimientosLote && det.movimientosLote.length > 0 ? det.movimientosLote : null;
 
                                             return (
@@ -1705,7 +1709,14 @@ const VentasPage: React.FC = () => {
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <div className="text-[10px] text-muted-foreground font-mono">{det.producto?.codigo}</div>
+                                                        <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5 flex-wrap">
+                                                            <span>{det.producto?.codigo}</span>
+                                                            {marcaNombre && (
+                                                                <span className="font-sans font-semibold text-primary/80 bg-primary/10 px-1.5 py-0.2 rounded">
+                                                                    {marcaNombre}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         {assignedLotes ? (
                                                             <div className="flex flex-wrap gap-1 mt-1">
                                                                 {assignedLotes.map((m: any, mIdx: number) => {

@@ -1733,89 +1733,91 @@ const EstadoCuentaClientesPage: React.FC = () => {
                             {loadingNotaPagos ? (
                                 <div className="p-6 text-center text-xs text-muted-foreground animate-pulse">Cargando abonos...</div>
                             ) : notaPagos && notaPagos.length > 0 ? (
-                                <table className="w-full text-left border-collapse text-xs">
-                                    <thead>
-                                        <tr className="bg-muted/20 border-b">
-                                            <th className="p-3 font-semibold text-muted-foreground">Fecha</th>
-                                            <th className="p-3 font-semibold text-muted-foreground">Método</th>
-                                            <th className="p-3 font-semibold text-muted-foreground">Referencia</th>
-                                            <th className="p-3 font-semibold text-muted-foreground text-center">Comprobante</th>
-                                            <th className="p-3 font-semibold text-muted-foreground text-right">Monto Pagado</th>
-                                            <th className="p-3 font-semibold text-muted-foreground text-center">Estado</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                        {notaPagos.map((p) => {
-                                            const isUSD = p.moneda === 'USD';
-                                            const sim = isUSD ? '$us' : 'Bs.';
-                                            const esCruzada = p.moneda !== viewingNota.moneda;
+                                <div className="overflow-x-auto w-full">
+                                    <table className="w-full min-w-[560px] text-left border-collapse text-xs">
+                                        <thead>
+                                            <tr className="bg-muted/20 border-b">
+                                                <th className="p-3 font-semibold text-muted-foreground whitespace-nowrap">Fecha</th>
+                                                <th className="p-3 font-semibold text-muted-foreground whitespace-nowrap">Método</th>
+                                                <th className="p-3 font-semibold text-muted-foreground whitespace-nowrap">Referencia</th>
+                                                <th className="p-3 font-semibold text-muted-foreground text-center whitespace-nowrap">Comprobante</th>
+                                                <th className="p-3 font-semibold text-muted-foreground text-right whitespace-nowrap">Monto Pagado</th>
+                                                <th className="p-3 font-semibold text-muted-foreground text-center whitespace-nowrap">Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {notaPagos.map((p) => {
+                                                const isUSD = p.moneda === 'USD';
+                                                const sim = isUSD ? '$us' : 'Bs.';
+                                                const esCruzada = p.moneda !== viewingNota.moneda;
 
-                                            return (
-                                                <tr key={p.id} className="hover:bg-accent/30">
-                                                    <td className="p-3 font-medium">
-                                                        {p.fecha ? format(new Date(p.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-'}
-                                                    </td>
-                                                    <td className="p-3 text-muted-foreground">{p.metodoPago || 'Efectivo'}</td>
-                                                    <td className="p-3 font-mono text-[11px] text-muted-foreground">{p.referencia || '-'}</td>
-                                                    <td className="p-3 text-center">
-                                                        {p.comprobanteUrl ? (
-                                                            p.comprobanteUrl.toLowerCase().endsWith('.pdf') ? (
-                                                                <a 
-                                                                    href={getFileUrl(p.comprobanteUrl)} 
-                                                                    target="_blank" 
-                                                                    rel="noopener noreferrer" 
-                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
-                                                                    title="Ver comprobante PDF"
-                                                                >
-                                                                    <FileText className="w-3 h-3" /> PDF
-                                                                </a>
+                                                return (
+                                                    <tr key={p.id} className="hover:bg-accent/30">
+                                                        <td className="p-3 font-medium whitespace-nowrap">
+                                                            {p.fecha ? format(new Date(p.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-'}
+                                                        </td>
+                                                        <td className="p-3 text-muted-foreground whitespace-nowrap">{p.metodoPago || 'Efectivo'}</td>
+                                                        <td className="p-3 font-mono text-[11px] text-muted-foreground whitespace-nowrap">{p.referencia || '-'}</td>
+                                                        <td className="p-3 text-center whitespace-nowrap">
+                                                            {p.comprobanteUrl ? (
+                                                                p.comprobanteUrl.toLowerCase().endsWith('.pdf') ? (
+                                                                    <a 
+                                                                        href={getFileUrl(p.comprobanteUrl)} 
+                                                                        target="_blank" 
+                                                                        rel="noopener noreferrer" 
+                                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                                                                        title="Ver comprobante PDF"
+                                                                    >
+                                                                        <FileText className="w-3 h-3" /> PDF
+                                                                    </a>
+                                                                ) : (
+                                                                    <a
+                                                                        href={getFileUrl(p.comprobanteUrl)}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="inline-flex items-center gap-1 p-0.5 rounded hover:ring-2 hover:ring-primary/40 transition-all"
+                                                                        title="Ver comprobante de pago"
+                                                                    >
+                                                                        <img 
+                                                                            src={getFileUrl(p.comprobanteUrl)} 
+                                                                            alt="Voucher" 
+                                                                            className="w-6 h-6 object-cover rounded border" 
+                                                                        />
+                                                                    </a>
+                                                                )
                                                             ) : (
-                                                                <a
-                                                                    href={getFileUrl(p.comprobanteUrl)}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="inline-flex items-center gap-1 p-0.5 rounded hover:ring-2 hover:ring-primary/40 transition-all"
-                                                                    title="Ver comprobante de pago"
-                                                                >
-                                                                    <img 
-                                                                        src={getFileUrl(p.comprobanteUrl)} 
-                                                                        alt="Voucher" 
-                                                                        className="w-6 h-6 object-cover rounded border" 
-                                                                    />
-                                                                </a>
-                                                            )
-                                                        ) : (
-                                                            <span className="text-muted-foreground">-</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="p-3 text-right font-bold text-primary">
-                                                        {sim} {Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                                                        {esCruzada && p.montoEquivalente > 0 && (
-                                                            <div className="text-[10px] text-muted-foreground font-normal">
-                                                                ≈ {viewingNota.moneda === 'USD' ? '$us' : 'Bs.'} {Number(p.montoEquivalente).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                    <td className="p-3 text-center">
-                                                        {!p.activo ? (
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">
-                                                                Anulado
-                                                            </span>
-                                                        ) : fechaHasta && p.fecha && String(p.fecha).substring(0, 10) > fechaHasta ? (
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300" title="Cobranza registrada con fecha posterior al corte">
-                                                                Posterior al corte
-                                                            </span>
-                                                        ) : (
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
-                                                                Aplicado
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                                                <span className="text-muted-foreground">-</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-3 text-right font-bold text-primary whitespace-nowrap">
+                                                            {sim} {Number(p.monto).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                                            {esCruzada && p.montoEquivalente > 0 && (
+                                                                <div className="text-[10px] text-muted-foreground font-normal">
+                                                                    ≈ {viewingNota.moneda === 'USD' ? '$us' : 'Bs.'} {Number(p.montoEquivalente).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-3 text-center whitespace-nowrap">
+                                                            {!p.activo ? (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">
+                                                                    Anulado
+                                                                </span>
+                                                            ) : fechaHasta && p.fecha && String(p.fecha).substring(0, 10) > fechaHasta ? (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300" title="Cobranza registrada con fecha posterior al corte">
+                                                                    Posterior al corte
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
+                                                                    Aplicado
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
                             ) : (
                                 <div className="p-6 text-center text-xs text-muted-foreground">
                                     No se han registrado pagos o abonos para esta venta todavía.

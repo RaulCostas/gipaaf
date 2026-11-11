@@ -25,6 +25,7 @@ import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData, printJsPdf } from '../../utils/exportUtils';
 import { numeroALetras } from '../../utils/currencyUtils';
 import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
+import { sortDetallesByMarcaAndProduct } from '../../utils/sortUtils';
 import { useAuth } from '../../context/AuthContext';
 
 const ProformasPage: React.FC = () => {
@@ -341,7 +342,7 @@ const ProformasPage: React.FC = () => {
             observaciones: proforma.observaciones || '',
             descuentoPorcentaje: Number(proforma.descuentoPorcentaje || 0),
             descuentoPromocionPorcentaje: Number(proforma.descuentoPromocionPorcentaje || 0),
-            detalles: proforma.detalles?.map((d: any) => ({
+            detalles: sortDetallesByMarcaAndProduct(proforma.detalles?.map((d: any) => ({
                 productoId: d.producto?.id || d.productoId,
                 producto: d.producto,
                 cantidad: Number(d.cantidad),
@@ -351,7 +352,7 @@ const ProformasPage: React.FC = () => {
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
-            })) || []
+            })) || [], products)
         });
         setIsCreating(true);
     };
@@ -374,7 +375,7 @@ const ProformasPage: React.FC = () => {
             observaciones: proforma.observaciones || '',
             descuentoPorcentaje: Number(proforma.descuentoPorcentaje || 0),
             descuentoPromocionPorcentaje: Number(proforma.descuentoPromocionPorcentaje || 0),
-            detalles: proforma.detalles?.map((d: any) => ({
+            detalles: sortDetallesByMarcaAndProduct(proforma.detalles?.map((d: any) => ({
                 productoId: d.producto?.id || d.productoId,
                 producto: d.producto,
                 cantidad: Number(d.cantidad),
@@ -384,7 +385,7 @@ const ProformasPage: React.FC = () => {
                 subtotal: Number(d.subtotal),
                 numeroLote: d.numeroLote || '',
                 movimientosLote: d.movimientosLote || []
-            })) || []
+            })) || [], products)
         });
         setIsCreating(true);
     };
@@ -463,7 +464,8 @@ const ProformasPage: React.FC = () => {
             ? ["Código", "Producto", "Cant.", "P.Unit (Bs.)", "Desc. %", "Subtotal (Bs.)"]
             : ["Código", "Producto", "Cant.", "P.Unit (Bs.)", "Subtotal (Bs.)"];
 
-        const tableRows = newProforma.detalles.map((det: any) => {
+        const sortedDetalles = sortDetallesByMarcaAndProduct(newProforma.detalles, products);
+        const tableRows = sortedDetalles.map((det: any) => {
             const descPct = Number(det.descuentoPorcentaje) || 0;
             const hasFijo = Boolean(det.aplicaDescuentoFijo);
             const row = [
@@ -601,7 +603,7 @@ const ProformasPage: React.FC = () => {
 
         setNewProforma({
             ...newProforma,
-            detalles: [...newProforma.detalles, {
+            detalles: sortDetallesByMarcaAndProduct([...newProforma.detalles, {
                 productoId: prod.id,
                 producto: prod,
                 cantidad: 1,
@@ -609,7 +611,7 @@ const ProformasPage: React.FC = () => {
                 descuentoPorcentaje: 0,
                 aplicaDescuentoFijo: false,
                 subtotal: precioVentaNum
-            }]
+            }], products)
         });
     };
 
@@ -1598,7 +1600,9 @@ const ProformasPage: React.FC = () => {
                                         </tr>
                                     )}
                                     {newProforma.detalles.map((det: any, index: number) => {
-                                        const stockDisp = getProductStock(det.productoId || det.producto?.id);
+                                        const prodIdNum = Number(det.productoId || det.producto?.id);
+                                        const marcaNombre = det.producto?.marca?.nombre || products?.find((p: any) => p.id === prodIdNum)?.marca?.nombre;
+                                        const stockDisp = getProductStock(prodIdNum);
                                         const isExceeded = det.cantidad > stockDisp;
 
                                         return (
@@ -1612,7 +1616,14 @@ const ProformasPage: React.FC = () => {
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <div className="text-[10px] text-muted-foreground font-mono">{det.producto?.codigo}</div>
+                                                    <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5 flex-wrap">
+                                                        <span>{det.producto?.codigo}</span>
+                                                        {marcaNombre && (
+                                                            <span className="font-sans font-semibold text-primary/80 bg-primary/10 px-1.5 py-0.2 rounded">
+                                                                {marcaNombre}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="p-3 text-center">
                                                     <div className="flex flex-col items-center gap-1">

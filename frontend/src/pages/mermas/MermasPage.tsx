@@ -1200,7 +1200,13 @@ const MermasPage: React.FC = () => {
                                                     step="any"
                                                     value={editingMerma.cantidadReintegrarStr}
                                                     onChange={(e) => setEditingMerma({ ...editingMerma, cantidadReintegrarStr: e.target.value })}
-                                                    className="w-full p-2.5 border rounded-lg bg-background text-base font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                                                    className={`w-full p-2.5 border rounded-lg bg-background text-base font-bold outline-none focus:ring-2 ${
+                                                        Number(editingMerma.cantidadReintegrarStr) > editingMerma.cantidadActual ||
+                                                        Number(editingMerma.cantidadReintegrarStr) <= 0 ||
+                                                        !editingMerma.cantidadReintegrarStr
+                                                            ? 'border-red-500 ring-2 ring-red-500/30 focus:border-red-500 focus:ring-red-500/30'
+                                                            : 'focus:ring-emerald-500/20 focus:border-emerald-500'
+                                                    }`}
                                                     placeholder="Cantidad a devolver..."
                                                 />
                                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
@@ -1208,14 +1214,18 @@ const MermasPage: React.FC = () => {
                                                 </span>
                                             </div>
                                             {Number(editingMerma.cantidadReintegrarStr) > editingMerma.cantidadActual && (
-                                                <p className="text-xs text-destructive font-semibold">
-                                                    La cantidad no puede superar las {editingMerma.cantidadActual} {editingMerma.unidadMedida} mermadas.
-                                                </p>
+                                                <div className="mt-2 p-3 rounded-lg bg-red-600 text-white text-sm font-bold flex items-center gap-2.5 shadow-sm">
+                                                    <AlertTriangle className="w-5 h-5 shrink-0 text-white" />
+                                                    <span>
+                                                        La cantidad no puede superar las {editingMerma.cantidadActual} {editingMerma.unidadMedida} mermadas.
+                                                    </span>
+                                                </div>
                                             )}
                                             {(Number(editingMerma.cantidadReintegrarStr) <= 0 || !editingMerma.cantidadReintegrarStr) && (
-                                                <p className="text-xs text-destructive font-semibold">
-                                                    Debe ingresar una cantidad mayor a 0.
-                                                </p>
+                                                <div className="mt-2 p-3 rounded-lg bg-red-600 text-white text-sm font-bold flex items-center gap-2.5 shadow-sm">
+                                                    <AlertTriangle className="w-5 h-5 shrink-0 text-white" />
+                                                    <span>Debe ingresar una cantidad mayor a 0.</span>
+                                                </div>
                                             )}
                                         </div>
 

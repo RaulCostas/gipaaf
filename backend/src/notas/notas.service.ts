@@ -120,6 +120,7 @@ export class NotasService implements OnModuleInit {
             .leftJoinAndSelect('nota.usuario', 'usuario')
             .leftJoinAndSelect('nota.detalles', 'detalles')
             .leftJoinAndSelect('detalles.producto', 'producto')
+            .leftJoinAndSelect('producto.marca', 'marca')
             .leftJoinAndSelect('detalles.movimientosLote', 'movimientosLote')
             .leftJoinAndSelect('movimientosLote.lote', 'lote')
             .leftJoinAndSelect('nota.costoImportacion', 'costoImportacion')
@@ -133,7 +134,13 @@ export class NotasService implements OnModuleInit {
             qb.andWhere('vendedor.id = :vendedorId', { vendedorId });
         }
 
-        return qb.getMany();
+        const notas = await qb.getMany();
+        for (const n of notas) {
+            if ((n.tipo === TipoNota.VENTA || n.tipo === TipoNota.PROFORMA) && n.detalles?.length) {
+                n.detalles = this.sortDetallesByMarcaAndProduct(n.detalles);
+            }
+        }
+        return notas;
     }
 
     async findOne(id: number) {
@@ -150,6 +157,7 @@ export class NotasService implements OnModuleInit {
             .leftJoinAndSelect('nota.usuario', 'usuario')
             .leftJoinAndSelect('nota.detalles', 'detalles')
             .leftJoinAndSelect('detalles.producto', 'producto')
+            .leftJoinAndSelect('producto.marca', 'marca')
             .leftJoinAndSelect('detalles.movimientosLote', 'movimientosLote')
             .leftJoinAndSelect('movimientosLote.lote', 'lote')
             .leftJoinAndSelect('nota.costoImportacion', 'costoImportacion')
@@ -157,7 +165,26 @@ export class NotasService implements OnModuleInit {
             .getOne();
 
         if (!nota) throw new NotFoundException(`Nota ${id} no encontrada`);
+        if ((nota.tipo === TipoNota.VENTA || nota.tipo === TipoNota.PROFORMA) && nota.detalles?.length) {
+            nota.detalles = this.sortDetallesByMarcaAndProduct(nota.detalles);
+        }
         return nota;
+    }
+
+    private sortDetallesByMarcaAndProduct(detalles: DetalleNota[]): DetalleNota[] {
+        return [...detalles].sort((a, b) => {
+            const marcaA = (a.producto?.marca?.nombre || '').trim();
+            const marcaB = (b.producto?.marca?.nombre || '').trim();
+            if (marcaA !== marcaB) {
+                if (!marcaA) return 1;
+                if (!marcaB) return -1;
+                const cmpMarca = marcaA.localeCompare(marcaB, 'es', { sensitivity: 'base' });
+                if (cmpMarca !== 0) return cmpMarca;
+            }
+            const prodA = (a.producto?.nombre || '').trim();
+            const prodB = (b.producto?.nombre || '').trim();
+            return prodA.localeCompare(prodB, 'es', { sensitivity: 'base' });
+        });
     }
 
     async create(data: Partial<Nota> & { detalles: Partial<DetalleNota>[] }) {

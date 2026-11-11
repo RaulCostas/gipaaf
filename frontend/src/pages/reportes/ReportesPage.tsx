@@ -5413,8 +5413,8 @@ const ReportesPage: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="border rounded-xl overflow-hidden">
-                            <table className="w-full text-left border-collapse">
+                        <div className="border rounded-xl overflow-x-auto">
+                            <table className="w-full min-w-[560px] text-left border-collapse">
                                 <thead>
                                     <tr className="bg-muted/50 border-b">
                                         <th className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Producto</th>

@@ -1321,8 +1321,8 @@ const MuestrasPage: React.FC = () => {
                             </div>
 
                             {/* Added details table */}
-                            <div className="border rounded-lg overflow-hidden mt-3">
-                                <table className="w-full text-left border-collapse text-sm">
+                            <div className="border rounded-lg overflow-x-auto mt-3">
+                                <table className="w-full min-w-[560px] text-left border-collapse text-sm">
                                     <thead>
                                         <tr className="bg-muted/50 border-b text-xs text-muted-foreground font-semibold">
                                             <th className="p-2.5">Código / Producto</th>
@@ -1450,8 +1450,8 @@ const MuestrasPage: React.FC = () => {
                             </button>
                         </div>
 
-                        <div className="border rounded-lg overflow-hidden">
-                            <table className="w-full text-left border-collapse text-sm">
+                        <div className="border rounded-lg overflow-x-auto">
+                            <table className="w-full min-w-[600px] text-left border-collapse text-sm">
                                 <thead>
                                     <tr className="bg-muted/50 border-b text-xs text-muted-foreground font-semibold">
                                         <th className="p-3">Producto / Lote</th>
@@ -1611,8 +1611,8 @@ const MuestrasPage: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="border rounded-lg overflow-hidden">
-                            <table className="w-full text-left border-collapse text-sm">
+                        <div className="border rounded-lg overflow-x-auto">
+                            <table className="w-full min-w-[600px] text-left border-collapse text-sm">
                                 <thead>
                                     <tr className="bg-muted/50 border-b text-xs text-muted-foreground font-semibold">
                                         <th className="p-3">Código / Producto</th>

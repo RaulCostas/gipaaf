@@ -1340,6 +1340,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 'sucursal.ciudad',
                 'detalles',
                 'detalles.producto',
+                'detalles.producto.marca',
                 'detalles.movimientosLote',
                 'detalles.movimientosLote.lote'
             ]
@@ -1484,6 +1485,22 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         };
     }
 
+    private sortDetallesByMarcaAndProduct<T extends { producto?: { nombre?: string; marca?: { nombre?: string } | null } | null }>(detalles: T[]): T[] {
+        return [...detalles].sort((a, b) => {
+            const marcaA = (a.producto?.marca?.nombre || '').trim();
+            const marcaB = (b.producto?.marca?.nombre || '').trim();
+            if (marcaA !== marcaB) {
+                if (!marcaA) return 1;
+                if (!marcaB) return -1;
+                const cmpMarca = marcaA.localeCompare(marcaB, 'es', { sensitivity: 'base' });
+                if (cmpMarca !== 0) return cmpMarca;
+            }
+            const prodA = (a.producto?.nombre || '').trim();
+            const prodB = (b.producto?.nombre || '').trim();
+            return prodA.localeCompare(prodB, 'es', { sensitivity: 'base' });
+        });
+    }
+
     private generateVentaPdfInMemory(venta: Nota, sucursalNombre: string): Promise<Buffer> {
         return new Promise((resolve, reject) => {
             const doc = new PDFDocument({
@@ -1561,7 +1578,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 }
             };
 
-            const detalles = venta.detalles || [];
+            const detalles = this.sortDetallesByMarcaAndProduct(venta.detalles || []);
             const hasItemDiscount = detalles.some(d => Number(d.descuentoPorcentaje) > 0);
 
             const drawTableHeader = (startY: number) => {
@@ -1785,7 +1802,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 }
             };
 
-            const detalles = proforma.detalles || [];
+            const detalles = this.sortDetallesByMarcaAndProduct(proforma.detalles || []);
             const hasItemDiscount = detalles.some(d => Number(d.descuentoPorcentaje) > 0);
 
             const drawTableHeader = (startY: number) => {
@@ -4175,6 +4192,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
                 'sucursal.ciudad',
                 'detalles',
                 'detalles.producto',
+                'detalles.producto.marca',
                 'detalles.movimientosLote',
                 'detalles.movimientosLote.lote'
             ]
@@ -4476,7 +4494,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             // ==========================================
             // SECCIÓN 2: DETALLE DE PRODUCTOS EN LA VENTA
             // ==========================================
-            const detalles = venta.detalles || [];
+            const detalles = this.sortDetallesByMarcaAndProduct(venta.detalles || []);
             if (detalles.length > 0) {
                 if (currentY + 50 > maxY) {
                     doc.addPage({ size: 'A4', layout: 'portrait', margin: 36 });

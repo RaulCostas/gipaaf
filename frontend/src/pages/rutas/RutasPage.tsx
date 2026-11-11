@@ -268,6 +268,15 @@ const RutasPage: React.FC = () => {
         setCurrentPage(1);
     }, [searchTerm, selectedCiudad, selectedSucursal]);
 
+    const compareClientsByCode = (a: Cliente, b: Cliente) => {
+        const codeA = (a.codigo || '').trim();
+        const codeB = (b.codigo || '').trim();
+        if (!codeA && !codeB) return 0;
+        if (!codeA) return 1;
+        if (!codeB) return -1;
+        return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    };
+
     // Modal client selection helpers
     const availableClientsForModal = useMemo(() => {
         if (!clientsList) return [];
@@ -301,7 +310,7 @@ const RutasPage: React.FC = () => {
             );
         }
 
-        return list;
+        return [...list].sort(compareClientsByCode);
     }, [clientsList, onlyUnassignedClients, filterClientsBySucursal, currentRuta.id, currentRuta.sucursal, modalClientSearch, selectedClientIds]);
 
     const handleToggleClient = (clientId: number) => {
@@ -337,7 +346,7 @@ const RutasPage: React.FC = () => {
                 (c.persona?.telefono && c.persona.telefono.toLowerCase().includes(q))
             );
         }
-        return list;
+        return [...list].sort(compareClientsByCode);
     }, [viewingRuta, clientsList, viewingClientSearch]);
 
     // Print Hoja de Ruta y Visitas
@@ -1141,8 +1150,8 @@ const RutasPage: React.FC = () => {
                         </div>
 
                         {/* Table of assigned clients */}
-                        <div className="border rounded-lg overflow-hidden">
-                            <table className="w-full text-left text-xs">
+                        <div className="border rounded-lg overflow-x-auto">
+                            <table className="w-full min-w-[600px] text-left text-xs">
                                 <thead>
                                     <tr className="bg-muted/50 border-b">
                                         <th className="p-2.5 font-semibold text-muted-foreground w-10">#</th>
