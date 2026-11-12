@@ -618,8 +618,10 @@ export class MovimientosInventarioService implements OnModuleInit {
                 { codigo: 'HW-SPB', nuevaCantidad: 168 },
                 { codigo: 'IC-1K52', nuevaCantidad: 20 },
                 { codigo: 'IC-LIJA-P360', nuevaCantidad: 7600 },
-                { codigo: 'MAX-MPROM LL', nuevaCantidad: 18 },
-                { codigo: 'A21-09777', nuevaCantidad: 10 }
+                { codigo: 'MAX-MPROM LL', nuevaCantidad: 13 },
+                { codigo: 'A21-09777', nuevaCantidad: 10 },
+                { codigo: '200384.90', nuevaCantidad: 1 },
+                { codigo: '400584.90', nuevaCantidad: 1 }
             ];
 
             const prodRepo = this.loteRepo.manager.getRepository(Producto);
