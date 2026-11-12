@@ -162,8 +162,8 @@ const MovimientosPage: React.FC = () => {
             };
         });
 
-        // Return descending for display (most recent first)
-        return withSaldo.reverse();
+        // Return ascending for display (chronological order)
+        return withSaldo;
     }, [movimientos]);
 
     // Apply active filters
@@ -289,6 +289,8 @@ const MovimientosPage: React.FC = () => {
             const timeA = a.creadoEn ? new Date(a.creadoEn).getTime() : 0;
             const timeB = b.creadoEn ? new Date(b.creadoEn).getTime() : 0;
             if (timeA !== timeB) return timeA - timeB;
+            if (a.tipo === 'INVENTARIO_INICIAL' && b.tipo !== 'INVENTARIO_INICIAL') return -1;
+            if (b.tipo === 'INVENTARIO_INICIAL' && a.tipo !== 'INVENTARIO_INICIAL') return 1;
             return (a.id || 0) - (b.id || 0);
         });
 
