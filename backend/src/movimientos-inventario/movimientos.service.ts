@@ -282,7 +282,7 @@ export class MovimientosInventarioService implements OnModuleInit {
             // (ej. lotes L-INI-CBBA-% que llegaron a La Paz por traspaso antes del 05/10/2026)
             await this.repo.query(`
                 DELETE FROM movimientos_inventario mi
-                USING inventarios inv
+                USING inventario inv
                 JOIN sucursales s ON inv."sucursalId" = s.id
                 LEFT JOIN ciudades c ON s."ciudadId" = c.id
                 WHERE mi."inventarioId" = inv.id
