@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository, Between, ILike, FindOptionsWhere } from 'typeorm';
+import { DataSource, Repository, EntityManager, Between, ILike, FindOptionsWhere } from 'typeorm';
 import { Muestra, EstadoMuestra } from './muestra.entity';
 import { DetalleMuestra } from './detalle-muestra.entity';
+import { Sucursal } from '../sucursales/sucursal.entity';
 
 @Injectable()
 export class MuestrasService {
@@ -80,10 +81,73 @@ export class MuestrasService {
         return muestra;
     }
 
+    private getSucursalCode(sucursal?: Sucursal | null): string {
+        if (!sucursal) return '';
+        const ciudad = (sucursal.ciudad?.nombre || '').toUpperCase().trim();
+        const nombre = (sucursal.nombre || '').toUpperCase().trim();
+
+        if (ciudad.includes('COCHABAMBA') || nombre.includes('COCHABAMBA') || nombre.includes('CBBA')) return 'CBBA';
+        if (ciudad.includes('LA PAZ') || nombre.includes('LA PAZ') || nombre.includes('LPZ') || nombre.includes('LP')) return 'LP';
+        if (ciudad.includes('SANTA CRUZ') || nombre.includes('SANTA CRUZ') || nombre.includes('SCZ') || nombre.includes('SC')) return 'SCZ';
+        if (ciudad.includes('ORURO') || nombre.includes('ORURO')) return 'ORU';
+        if (ciudad.includes('POTOSI') || nombre.includes('POTOSÍ') || nombre.includes('POTOSI')) return 'PTS';
+        if (ciudad.includes('TARIJA') || nombre.includes('TARIJA')) return 'TJA';
+        if (ciudad.includes('CHUQUISACA') || nombre.includes('SUCRE') || nombre.includes('SUCRE')) return 'CHQ';
+        if (ciudad.includes('BENI') || nombre.includes('BENI')) return 'BEN';
+        if (ciudad.includes('PANDO') || nombre.includes('PANDO')) return 'PAN';
+
+        const clean = (ciudad || nombre).replace(/[^A-Z0-9]/g, '');
+        return clean ? clean.substring(0, 4) : `SUC${sucursal.id}`;
+    }
+
+    async generarSiguienteNumero(manager: EntityManager, sucursalInput?: any): Promise<string> {
+        let sucursal: Sucursal | null = null;
+        const sucursalId = typeof sucursalInput === 'object' ? sucursalInput?.id : Number(sucursalInput);
+        if (sucursalId && !isNaN(sucursalId)) {
+            sucursal = await manager.findOne(Sucursal, { where: { id: sucursalId }, relations: ['ciudad'] });
+        } else if (sucursalInput && typeof sucursalInput === 'object' && sucursalInput.nombre) {
+            sucursal = sucursalInput as Sucursal;
+        }
+
+        if (!sucursal) {
+            sucursal = await manager.findOne(Sucursal, { where: { activo: true }, relations: ['ciudad'] });
+        }
+
+        const sucCode = this.getSucursalCode(sucursal);
+        const prefix = sucCode ? `MUE-${sucCode}` : 'MUE';
+
+        const todasMuestras = await manager
+            .createQueryBuilder(Muestra, 'muestra')
+            .withDeleted()
+            .where('muestra.numero LIKE :prefix', { prefix: `${prefix}-%` })
+            .select(['muestra.numero'])
+            .getMany();
+
+        let maxNum = 0;
+        for (const m of todasMuestras) {
+            if (m.numero) {
+                const parts = m.numero.split('-');
+                const lastPart = parts[parts.length - 1];
+                const parsed = parseInt(lastPart, 10);
+                if (!isNaN(parsed) && parsed > maxNum) {
+                    maxNum = parsed;
+                }
+            }
+        }
+
+        let next = maxNum + 1;
+        let candidate = `${prefix}-${String(next).padStart(6, '0')}`;
+        while (await manager.findOne(Muestra, { where: { numero: candidate }, withDeleted: true })) {
+            next++;
+            candidate = `${prefix}-${String(next).padStart(6, '0')}`;
+        }
+
+        return candidate;
+    }
+
     async create(data: any, usuarioId?: number) {
         return this.dataSource.transaction(async (manager) => {
-            const count = await manager.count(Muestra);
-            const numero = `MUE-${String(count + 1).padStart(6, '0')}`;
+            const numero = await this.generarSiguienteNumero(manager, data.sucursalId || data.sucursal);
 
             const today = new Date().toLocaleDateString('en-CA'); // 'YYYY-MM-DD' in local timezone
 

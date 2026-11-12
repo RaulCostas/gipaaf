@@ -278,17 +278,45 @@ export class MovimientosInventarioService implements OnModuleInit {
                 console.warn('Advertencia limpiando lotes residuales L-INICIAL:', e);
             }
 
+            // 1b. Limpiar movimientos INVENTARIO_INICIAL asignados a una sucursal que no corresponde al prefijo del lote
+            // (ej. lotes L-INI-CBBA-% que llegaron a La Paz por traspaso antes del 05/10/2026)
+            await this.repo.query(`
+                DELETE FROM movimientos_inventario mi
+                USING inventarios inv
+                JOIN sucursales s ON inv."sucursalId" = s.id
+                LEFT JOIN ciudades c ON s."ciudadId" = c.id
+                WHERE mi."inventarioId" = inv.id
+                  AND mi.tipo = 'INVENTARIO_INICIAL'
+                  AND (
+                    (mi."numeroDocumento" LIKE 'L-INI-CBBA-%'
+                      AND UPPER(COALESCE(s.nombre, '') || ' ' || COALESCE(c.nombre, '')) NOT LIKE '%CBBA%'
+                      AND UPPER(COALESCE(s.nombre, '') || ' ' || COALESCE(c.nombre, '')) NOT LIKE '%COCHABAMBA%')
+                    OR
+                    (mi."numeroDocumento" LIKE 'L-INI-LP-%'
+                      AND UPPER(COALESCE(s.nombre, '') || ' ' || COALESCE(c.nombre, '')) NOT LIKE '%LA PAZ%'
+                      AND UPPER(COALESCE(s.nombre, '') || ' ' || COALESCE(c.nombre, '')) NOT LIKE '%LP%')
+                  );
+            `);
+
             // 2. Buscar lotes de saldo inicial auténticos ('L-INI-%')
             const allLotes = await this.loteRepo.find({
                 where: { numeroLote: Like('L-INI-%') },
-                relations: ['producto', 'sucursal']
+                relations: ['producto', 'sucursal', 'sucursal.ciudad']
             });
 
-            const initialLotes = (allLotes || []).filter(l =>
-                l.numeroLote.startsWith('L-INI-') &&
-                !l.numeroLote.startsWith('L-INICIAL') &&
-                (!l.fechaIngreso || new Date(l.fechaIngreso).getTime() <= new Date('2026-10-05T00:00:00.000Z').getTime())
-            );
+            const initialLotes = (allLotes || []).filter(l => {
+                if (!l.numeroLote.startsWith('L-INI-') || l.numeroLote.startsWith('L-INICIAL')) return false;
+                if (l.fechaIngreso && new Date(l.fechaIngreso).getTime() > new Date('2026-10-05T00:00:00.000Z').getTime()) return false;
+
+                const sucText = `${l.sucursal?.nombre || ''} ${(l.sucursal as any)?.ciudad?.nombre || ''}`.toUpperCase();
+                if (l.numeroLote.startsWith('L-INI-CBBA-') && !sucText.includes('CBBA') && !sucText.includes('COCHABAMBA')) {
+                    return false;
+                }
+                if (l.numeroLote.startsWith('L-INI-LP-') && !sucText.includes('LA PAZ') && !sucText.includes('LP')) {
+                    return false;
+                }
+                return true;
+            });
 
             if (!initialLotes || initialLotes.length === 0) return;
 

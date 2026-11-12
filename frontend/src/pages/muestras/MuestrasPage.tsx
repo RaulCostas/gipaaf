@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
+import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData, printJsPdf } from '../../utils/exportUtils';
 import { whatsappService } from '../../api/whatsappService';
 import { getClientDisplayName, getClientPersonName, getClientStoreName } from '../../utils/clientUtils';
 import {
@@ -702,27 +702,25 @@ const MuestrasPage: React.FC = () => {
         exportToExcel(exportColumns, getExportData(), 'muestras_reporte');
     };
 
-    // Imprimir directa (abre el preview en el navegador sin forzar descarga directa de archivo)
+    // Imprimir directa (abre el cuadro de diálogo de impresión con el mismo formato que una venta)
     const handlePrintIndividualMuestra = async (m: Muestra) => {
         const doc = new jsPDF();
         try {
             const logoBase64 = await getBase64ImageFromURL('/logo.jpeg');
-            doc.addImage(logoBase64, 'JPEG', 14, 10, 38, 16);
+            doc.addImage(logoBase64, 'JPEG', 14, 10, 45, 15);
         } catch (e) {
             console.warn('Logo could not be loaded for PDF', e);
         }
 
         doc.setFontSize(14);
-        doc.setTextColor(40, 40, 40);
+        doc.setTextColor(30, 30, 30);
         doc.setFont('helvetica', 'bold');
-        doc.text(`ACTA DE ENTREGA DE MUESTRAS`, 196, 16, { align: 'right' });
-        doc.setFontSize(11);
-        doc.setTextColor(80, 80, 80);
-        doc.text(`${m.numero || 'N° S/N'}`, 196, 22, { align: 'right' });
+        doc.text(`Acta de Muestra Nro ${m.numero || m.id || 'S/N'}`, 196, 18, { align: 'right' });
 
-        doc.setFontSize(9.5);
+        doc.setTextColor(60, 60, 60);
         doc.setFont('helvetica', 'normal');
-        let currentY = 36;
+        doc.setFontSize(9.5);
+        let currentY = 32;
 
         const fechaEntrega = m.fecha ? m.fecha.split('T')[0].split('-').reverse().join('/') : '-';
         const fechaEstimada = m.fechaEstimadaDevolucion ? m.fechaEstimadaDevolucion.split('T')[0].split('-').reverse().join('/') : 'No definida';
@@ -732,29 +730,23 @@ const MuestrasPage: React.FC = () => {
         const vendedorNom = m.vendedor ? `${m.vendedor.nombres} ${m.vendedor.apellidos}` : 'No asignado';
         const sucursalNom = m.sucursal ? `${m.sucursal.nombre}${(m.sucursal.ciudad as any)?.nombre ? ` (${(m.sucursal.ciudad as any).nombre})` : ''}` : '-';
 
-        doc.text(`Fecha Entrega: ${fechaEntrega}`, 14, currentY);
-        doc.text(`Sucursal: ${sucursalNom}`, 110, currentY);
-        currentY += 6;
+        doc.text(`Fecha: ${fechaEntrega}`, 14, currentY);
+        doc.text(`Sucursal: ${sucursalNom}`, 100, currentY);
+        currentY += 5;
 
         doc.text(`Cliente: ${clienteNom}`, 14, currentY);
-        doc.text(`Vendedor / Responsable: ${vendedorNom}`, 110, currentY);
-        currentY += 6;
+        doc.text(`Vendedor: ${vendedorNom}`, 100, currentY);
+        currentY += 5;
 
-        doc.text(`F. Estimada Devolución: ${fechaEstimada}`, 14, currentY);
-        doc.text(`Estado: ${m.estado}`, 110, currentY);
-        currentY += 6;
+        doc.text(`F. Est. Devolución: ${fechaEstimada}`, 14, currentY);
+        doc.text(`Estado: ${m.estado}`, 100, currentY);
 
         if (m.fechaDevolucion) {
-            doc.text(`F. Efectiva Devolución: ${fechaDev}`, 14, currentY);
-            currentY += 6;
+            currentY += 5;
+            doc.text(`F. Devolución: ${fechaDev}`, 14, currentY);
         }
 
-        if (m.observaciones) {
-            doc.text(`Observaciones: ${m.observaciones}`, 14, currentY);
-            currentY += 6;
-        }
-
-        const tableColumn = ["Código", "Producto", "N° Lote", "F. Venc.", "Cant. Entregada", "Cant. Devuelta", "Pendiente"];
+        const tableColumn = ["Código", "Producto", "N° Lote", "F. Venc.", "Entregada", "Devuelta", "Pendiente"];
         const tableRows = (m.detalles || []).map(det => {
             const entregada = Number(det.cantidadEntregada) || 0;
             const devuelta = Number(det.cantidadDevuelta) || 0;
@@ -774,41 +766,81 @@ const MuestrasPage: React.FC = () => {
 
         autoTable(doc, {
             startY: currentY + 4,
+            margin: { left: 14, right: 14 },
             head: [tableColumn],
             body: tableRows,
+            theme: 'grid',
             styles: {
                 font: 'helvetica',
-                fontSize: 8.5,
-                cellPadding: 2.5,
+                fontSize: 8,
+                cellPadding: { top: 1, right: 2, bottom: 1, left: 2 },
+                valign: 'middle',
+                textColor: [30, 30, 30],
+                lineColor: [200, 200, 200],
+                lineWidth: 0.1,
             },
             headStyles: {
-                fillColor: [41, 128, 185],
-                textColor: 255,
+                fillColor: [240, 240, 240],
+                textColor: [0, 0, 0],
                 fontStyle: 'bold',
-                halign: 'center'
+                halign: 'center',
+                lineColor: [180, 180, 180],
+                lineWidth: 0.1,
+                cellPadding: { top: 1.4, right: 2, bottom: 1.4, left: 2 },
             },
             alternateRowStyles: {
-                fillColor: [248, 250, 252]
+                fillColor: [252, 252, 252]
             },
             columnStyles: {
-                0: { halign: 'center', cellWidth: 22 },
-                2: { halign: 'center', cellWidth: 22 },
-                3: { halign: 'center', cellWidth: 22 },
-                4: { halign: 'center', cellWidth: 25 },
-                5: { halign: 'center', cellWidth: 25 },
-                6: { halign: 'center', cellWidth: 22 },
+                0: { halign: 'center', cellWidth: 20 },
+                2: { halign: 'center', cellWidth: 20 },
+                3: { halign: 'center', cellWidth: 20 },
+                4: { halign: 'center', cellWidth: 16 },
+                5: { halign: 'center', cellWidth: 15 },
+                6: { halign: 'center', cellWidth: 16 },
             }
         });
 
-        const finalY = (doc as any).lastAutoTable.finalY + 28;
-        doc.line(20, finalY, 80, finalY);
-        doc.text("Entregué Conforme (Vendedor)", 50, finalY + 5, { align: "center" });
+        let finalY = (doc as any).lastAutoTable.finalY || currentY + 6;
+        let bottomContentY = finalY;
 
-        doc.line(130, finalY, 190, finalY);
-        doc.text("Recibí Conforme (Cliente)", 160, finalY + 5, { align: "center" });
+        if (m.observaciones) {
+            const obsLines = doc.splitTextToSize(m.observaciones, 180);
+            const obsHeight = 4 + (obsLines.length * 3.8);
+            if (finalY + obsHeight + 20 > 280) {
+                doc.addPage();
+                finalY = 20;
+            }
+            const obsStartY = finalY + 5;
+            doc.setFontSize(8.5);
+            doc.setTextColor(80, 80, 80);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Notas:', 14, obsStartY);
+            doc.setFont('helvetica', 'italic');
+            doc.text(obsLines, 14, obsStartY + 3.8);
+            bottomContentY = obsStartY + 3.8 + Math.max(0, (obsLines.length - 1) * 3.8);
+        }
 
-        // Abre directamente para imprimir sin descargar
-        window.open(doc.output('bloburl'), '_blank');
+        let signatureY = bottomContentY + 14;
+        if (signatureY > 275) {
+            doc.addPage();
+            signatureY = 30;
+        }
+
+        doc.setDrawColor(160, 160, 160);
+        doc.setLineDashPattern([1, 1], 0);
+        doc.line(20, signatureY, 68, signatureY);
+        doc.line(81, signatureY, 129, signatureY);
+        doc.line(142, signatureY, 190, signatureY);
+
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(60, 60, 60);
+        doc.text('ALMACEN', 44, signatureY + 4.5, { align: 'center' });
+        doc.text('VENDEDOR', 105, signatureY + 4.5, { align: 'center' });
+        doc.text('OFICINA', 166, signatureY + 4.5, { align: 'center' });
+
+        printJsPdf(doc);
     };
 
 
