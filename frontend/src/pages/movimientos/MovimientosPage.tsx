@@ -8,7 +8,7 @@ import { productService } from '../../api/productService';
 import { format } from 'date-fns';
 import { 
     Search, History, FileText, FileSpreadsheet, Printer, 
-    X, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, RefreshCw, Filter, Calendar, Package, Loader2
+    X, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, RefreshCw, Filter, Calendar, Package, Loader2, AlertOctagon
 } from 'lucide-react';
 import { exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
 import { formatQuantity } from '../../utils/currencyUtils';
@@ -119,6 +119,25 @@ const MovimientosPage: React.FC = () => {
         return 0;
     };
 
+    const isMermaHistorica = (m: MovimientoInventario | any): boolean => {
+        const tipo = (m.tipo || '').toUpperCase();
+        if (!tipo.startsWith('MERMA')) return false;
+        const doc = (m.numeroDocumento || getDocNumber(m) || '').toUpperCase();
+        const mot = (m.motivo || '').toUpperCase();
+        const obs = (m.observaciones || getObservacion(m) || '').toUpperCase();
+        return (
+            doc.includes('-HIST') ||
+            doc.includes('HIST-') ||
+            doc.startsWith('MERMA-LP-HIST') ||
+            mot.includes('HISTÓRICA') ||
+            mot.includes('HISTORICA') ||
+            mot.includes('SISTEMA ANTERIOR') ||
+            obs.includes('HISTÓRICA') ||
+            obs.includes('HISTORICA') ||
+            obs.includes('SISTEMA ANTERIOR')
+        );
+    };
+
     // Calculate running balance (Saldo) chronologically
     const allMovimientosWithSaldo = useMemo(() => {
         if (!movimientos) return [];
@@ -141,16 +160,30 @@ const MovimientosPage: React.FC = () => {
             const sucId = (m.inventario?.sucursal as any)?.id || 0;
             // Key for running balance: by product and sucursal
             const key = `${prodId}_${sucId}`;
-            const cant = Number(m.cantidad) || 0;
+            const rawCant = Number(m.cantidad) || 0;
+            const esMermaHist = isMermaHistorica(m);
 
-            saldoPerKey[key] = (saldoPerKey[key] || 0) + cant;
+            // Merma histórica NO afecta el saldo de inventario acumulado (efecto 0)
+            const cantSaldo = esMermaHist ? 0 : rawCant;
+            saldoPerKey[key] = (saldoPerKey[key] || 0) + cantSaldo;
             const currentSaldo = saldoPerKey[key];
 
-            const ingreso = cant > 0 ? cant : 0;
-            const salida = cant < 0 ? Math.abs(cant) : 0;
+            // Toda merma (histórica o no) es por naturaleza una salida/pérdida, NUNCA un ingreso
+            const isMerma = (m.tipo || '').toUpperCase().startsWith('MERMA');
+            let ingreso = 0;
+            let salida = 0;
+
+            if (isMerma) {
+                ingreso = 0;
+                salida = Math.abs(rawCant);
+            } else {
+                ingreso = rawCant > 0 ? rawCant : 0;
+                salida = rawCant < 0 ? Math.abs(rawCant) : 0;
+            }
 
             return {
                 ...m,
+                esMermaHistorica: esMermaHist,
                 ingreso,
                 salida,
                 saldoCalculado: currentSaldo,
@@ -234,8 +267,11 @@ const MovimientosPage: React.FC = () => {
         let inventarioInicial = 0;
 
         filteredMovimientos.forEach(m => {
-            totalIngresos += m.ingreso;
-            totalSalidas += m.salida;
+            // Las mermas históricas del sistema anterior no alteran las salidas operativas del inventario
+            if (!m.esMermaHistorica) {
+                totalIngresos += m.ingreso;
+                totalSalidas += m.salida;
+            }
             if (m.tipo === 'INVENTARIO_INICIAL') {
                 inventarioInicial += m.ingreso;
             }
@@ -302,11 +338,15 @@ const MovimientosPage: React.FC = () => {
             const prod = m.inventario?.producto;
             const prodDisplay = prod ? `${prod.nombre}${prod.codigo ? ` [${prod.codigo}]` : ''}` : '-';
 
+            const salidaTexto = m.esMermaHistorica
+                ? `${formatQuantity(m.salida)} (Hist.)`
+                : (m.salida > 0 ? formatQuantity(m.salida) : '');
+
             return {
                 id: m.id,
                 nro: idx + 1,
                 fecha: m.creadoEn ? format(new Date(m.creadoEn), 'dd/MM/yyyy') : '-',
-                tipo: m.tipo.replace(/_/g, ' '),
+                tipo: m.esMermaHistorica ? 'MERMA HISTÓRICA' : m.tipo.replace(/_/g, ' '),
                 docNumero: m.docNumero,
                 producto: prodDisplay,
                 sucursal: sucursalDisplay,
@@ -314,8 +354,8 @@ const MovimientosPage: React.FC = () => {
                 usuarioText: m.usuarioText,
                 precioCompraFmt: m.precioCompraVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 precioVentaFmt: m.precioVentaVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                ingresoFmt: m.ingreso > 0 ? formatQuantity(m.ingreso) : '',
-                salidaFmt: m.salida > 0 ? formatQuantity(m.salida) : '',
+                ingresoFmt: !m.esMermaHistorica && m.ingreso > 0 ? formatQuantity(m.ingreso) : '',
+                salidaFmt: salidaTexto,
                 saldoFmt: formatQuantity(m.saldoCalculado),
             };
         });
@@ -350,6 +390,7 @@ const MovimientosPage: React.FC = () => {
                 INVENTARIO_INICIAL: 'Inventario Inicial',
                 VENTA: 'Ventas',
                 COMPRA: 'Compras',
+                MERMA: 'Mermas',
                 AJUSTE: 'Ajustes Manuales',
                 TRASPASOS: 'Todos los Traspasos',
                 TRASPASO_ENTRADA: 'Traspasos (Entrada)',
@@ -412,19 +453,27 @@ const MovimientosPage: React.FC = () => {
         setCurrentPage(1);
     }, [searchTerm, selectedProductId, selectedCiudad, selectedSucursal, tipoFilter, fechaHasta]);
 
-    const getTipoIcon = (tipo: string, cantidad: number) => {
+    const getTipoIcon = (tipo: string, cantidad: number, esMermaHistorica?: boolean) => {
+        if (esMermaHistorica) return <AlertOctagon className="w-3 h-3" />;
         if (tipo === 'INVENTARIO_INICIAL') return <Package className="w-3 h-3" />;
+        if (tipo.startsWith('MERMA')) return <AlertOctagon className="w-3 h-3" />;
         if (tipo === 'ENTRADA' || tipo === 'COMPRA' || tipo === 'TRASPASO_ENTRADA' || tipo === 'DEVOLUCION' || tipo === 'ANULACION_VENTA' || cantidad > 0) return <ArrowUpRight className="w-3 h-3" />;
         if (tipo === 'SALIDA' || tipo === 'VENTA' || tipo === 'TRASPASO_SALIDA' || tipo === 'ANULACION_COMPRA' || cantidad < 0) return <ArrowDownRight className="w-3 h-3" />;
         return <RefreshCw className="w-3 h-3" />;
     };
 
-    const getTipoColor = (tipo: string, cantidad: number) => {
+    const getTipoColor = (tipo: string, cantidad: number, esMermaHistorica?: boolean) => {
+        if (esMermaHistorica) {
+            return 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800';
+        }
         const t = (tipo || '').toUpperCase();
         if (t === 'INVENTARIO_INICIAL') {
             return 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800';
         }
         if (t === 'VENTA') {
+            return 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800';
+        }
+        if (t.startsWith('MERMA')) {
             return 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800';
         }
         if (t === 'COMPRA') {
@@ -579,6 +628,7 @@ const MovimientosPage: React.FC = () => {
                         <option value="INVENTARIO_INICIAL" className="bg-background text-foreground">Inventario Inicial</option>
                         <option value="VENTA" className="bg-background text-foreground">Ventas</option>
                         <option value="COMPRA" className="bg-background text-foreground">Compras</option>
+                        <option value="MERMA" className="bg-background text-foreground">Mermas</option>
                         <option value="AJUSTE" className="bg-background text-foreground">Ajustes Manuales</option>
                         <option value="TRASPASOS" className="bg-background text-foreground">Traspasos (Todos)</option>
                         <option value="TRASPASO_ENTRADA" className="bg-background text-foreground">Traspasos (Entrada)</option>
@@ -679,8 +729,8 @@ const MovimientosPage: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="p-3 text-center whitespace-nowrap">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider ${getTipoColor(m.tipo, m.cantidad)}`}>
-                                                {getTipoIcon(m.tipo, m.cantidad)} {m.tipo.replace(/_/g, ' ')}
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider ${getTipoColor(m.tipo, m.cantidad, m.esMermaHistorica)}`}>
+                                                {getTipoIcon(m.tipo, m.cantidad, m.esMermaHistorica)} {m.esMermaHistorica ? 'MERMA HISTÓRICA' : m.tipo.replace(/_/g, ' ')}
                                             </span>
                                         </td>
                                         <td className="p-3 text-xs font-mono font-bold text-primary whitespace-nowrap">
@@ -720,10 +770,24 @@ const MovimientosPage: React.FC = () => {
                                             {m.precioVentaVal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
                                         <td className="p-3 text-xs font-mono font-bold text-right text-green-600 dark:text-green-400 whitespace-nowrap">
-                                            {m.ingreso > 0 ? formatQuantity(m.ingreso) : '-'}
+                                            {!m.esMermaHistorica && m.ingreso > 0 ? formatQuantity(m.ingreso) : '-'}
                                         </td>
                                         <td className="p-3 text-xs font-mono font-bold text-right text-red-600 dark:text-red-400 whitespace-nowrap">
-                                            {m.salida > 0 ? formatQuantity(m.salida) : '-'}
+                                            {m.esMermaHistorica ? (
+                                                <span 
+                                                    className="text-muted-foreground inline-flex items-center gap-1 font-semibold cursor-help"
+                                                    title="Merma histórica del sistema anterior: movimiento informativo, no altera stock actual"
+                                                >
+                                                    <span>{formatQuantity(m.salida)}</span>
+                                                    <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-sans font-bold">
+                                                        HIST
+                                                    </span>
+                                                </span>
+                                            ) : m.salida > 0 ? (
+                                                formatQuantity(m.salida)
+                                            ) : (
+                                                '-'
+                                            )}
                                         </td>
                                         <td className="p-3 text-xs font-mono font-black text-right text-foreground whitespace-nowrap">
                                             {formatQuantity(m.saldoCalculado)}

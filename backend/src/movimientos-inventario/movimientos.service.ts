@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { Repository, Like, IsNull } from 'typeorm';
 import { MovimientoInventario } from './movimiento_inventario.entity';
 import { Nota, TipoNota, EstadoNota } from '../notas/nota.entity';
 import { Inventario } from '../inventario/inventario.entity';
@@ -27,6 +27,7 @@ export class MovimientosInventarioService implements OnModuleInit {
         await this.syncHistoricalNotas();
         await this.applyInitialStockCorrections();
         await this.syncInitialStock();
+        await this.backfillNumerosMerma();
     }
 
     async syncHistoricalNotas() {
@@ -479,6 +480,89 @@ export class MovimientosInventarioService implements OnModuleInit {
             .orderBy('mov.creadoEn', 'DESC')
             .addOrderBy('mov.id', 'DESC')
             .getMany();
+    }
+
+    private getSucursalCode(sucursal?: any): string {
+        if (!sucursal) return 'LP';
+        const ciudad = (sucursal.ciudad?.nombre || '').toUpperCase().trim();
+        const nombre = (sucursal.nombre || '').toUpperCase().trim();
+
+        if (ciudad.includes('COCHABAMBA') || nombre.includes('COCHABAMBA') || nombre.includes('CBBA')) return 'CBBA';
+        if (ciudad.includes('LA PAZ') || nombre.includes('LA PAZ') || nombre.includes('LPZ') || nombre.includes('LP')) return 'LP';
+        if (ciudad.includes('SANTA CRUZ') || nombre.includes('SANTA CRUZ') || nombre.includes('SCZ') || nombre.includes('SC')) return 'SCZ';
+        if (ciudad.includes('ORURO') || nombre.includes('ORURO')) return 'ORU';
+        if (ciudad.includes('POTOSI') || ciudad.includes('POTOSÍ') || nombre.includes('POTOSI')) return 'PTS';
+        if (ciudad.includes('TARIJA') || nombre.includes('TARIJA')) return 'TJA';
+        if (ciudad.includes('CHUQUISACA') || ciudad.includes('SUCRE') || nombre.includes('SUCRE')) return 'CHQ';
+        if (ciudad.includes('BENI') || nombre.includes('BENI')) return 'BEN';
+        if (ciudad.includes('PANDO') || nombre.includes('PANDO')) return 'PAN';
+
+        const clean = (ciudad || nombre).replace(/[^A-Z0-9]/g, '');
+        return clean ? clean.substring(0, 4) : `SUC${sucursal.id || ''}`;
+    }
+
+    async generarNumeroMerma(sucursalInput?: any): Promise<string> {
+        let sucursal: any = sucursalInput;
+        const sucursalId = typeof sucursalInput === 'object' ? sucursalInput?.id : Number(sucursalInput);
+        if (sucursalId && !isNaN(sucursalId) && (!sucursal || !sucursal.ciudad)) {
+            sucursal = await this.sucursalRepo.findOne({ where: { id: sucursalId }, relations: ['ciudad'] });
+        }
+        if (!sucursal) {
+            sucursal = await this.sucursalRepo.findOne({ where: { activo: true }, relations: ['ciudad'] });
+        }
+
+        const sucCode = this.getSucursalCode(sucursal) || 'LP';
+        const prefix = `MER-${sucCode}`;
+
+        const ultimosMovs = await this.repo
+            .createQueryBuilder('mov')
+            .where('mov.tipo = :tipo', { tipo: 'MERMA' })
+            .andWhere('mov.numeroDocumento LIKE :prefix', { prefix: `${prefix}-%` })
+            .select(['mov.numeroDocumento'])
+            .getMany();
+
+        let maxNum = 0;
+        for (const m of ultimosMovs) {
+            if (m.numeroDocumento) {
+                const parts = m.numeroDocumento.split('-');
+                const lastPart = parts[parts.length - 1];
+                const parsed = parseInt(lastPart, 10);
+                if (!isNaN(parsed) && parsed > maxNum) {
+                    maxNum = parsed;
+                }
+            }
+        }
+
+        let next = maxNum + 1;
+        let candidate = `${prefix}-${String(next).padStart(5, '0')}`;
+        while (await this.repo.findOne({ where: { numeroDocumento: candidate } })) {
+            next++;
+            candidate = `${prefix}-${String(next).padStart(5, '0')}`;
+        }
+
+        return candidate;
+    }
+
+    async backfillNumerosMerma() {
+        try {
+            const mermasSinDoc = await this.repo.find({
+                where: {
+                    tipo: 'MERMA',
+                    numeroDocumento: IsNull(),
+                },
+                relations: ['inventario', 'inventario.sucursal', 'inventario.sucursal.ciudad'],
+                order: { creadoEn: 'ASC', id: 'ASC' }
+            });
+
+            for (const mov of mermasSinDoc) {
+                const num = await this.generarNumeroMerma(mov.inventario?.sucursal);
+                mov.numeroDocumento = num;
+                await this.repo.save(mov);
+                console.log(`[backfillNumerosMerma] Asignado ${num} a merma id=${mov.id}`);
+            }
+        } catch (error) {
+            console.error('Error asignando números de documento a mermas pendientes:', error);
+        }
     }
 
     create(data: Partial<MovimientoInventario>) {

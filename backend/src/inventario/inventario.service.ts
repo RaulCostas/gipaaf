@@ -313,12 +313,14 @@ export class InventarioService implements OnModuleInit {
         }
 
         const costo = Number(inv.precioCompra) || Number(inv.producto?.precioCompra) || 0;
+        const numeroDocumento = await this.movimientosService.generarNumeroMerma(inv.sucursal);
 
         // Registrar movimiento con tipo 'MERMA'
         await this.movimientosService.create({
             inventario: saved,
             tipo: 'MERMA',
             cantidad: -cantMerma,
+            numeroDocumento,
             motivo: motivo || 'Merma de Producto',
             observaciones: observaciones || undefined,
             costoUnitario: costo,
