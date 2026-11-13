@@ -54,6 +54,9 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
             autoLoadEntities: true,
             synchronize: configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
             ssl: isSsl ? { rejectUnauthorized: false } : false,
+            extra: {
+              options: '-c timezone=America/La_Paz',
+            },
           };
         }
 
@@ -67,6 +70,9 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
           autoLoadEntities: true,
           synchronize: configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
           ssl: isSsl ? { rejectUnauthorized: false } : false,
+          extra: {
+            options: '-c timezone=America/La_Paz',
+          },
         };
       },
     }),

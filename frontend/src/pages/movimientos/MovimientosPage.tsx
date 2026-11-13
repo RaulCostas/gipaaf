@@ -123,6 +123,12 @@ const MovimientosPage: React.FC = () => {
         const tipo = (m.tipo || '').toUpperCase();
         if (!tipo.startsWith('MERMA')) return false;
         const doc = (m.numeroDocumento || getDocNumber(m) || '').toUpperCase();
+
+        // Mermas operativas con correlativo MER- (ej. MER-LP-00007, MER-SCZ-00001) son mermas REALES, no históricas
+        if (doc.startsWith('MER-') && !doc.includes('-HIST')) {
+            return false;
+        }
+
         const mot = (m.motivo || '').toUpperCase();
         const obs = (m.observaciones || getObservacion(m) || '').toUpperCase();
         return (
@@ -132,9 +138,9 @@ const MovimientosPage: React.FC = () => {
             mot.includes('HISTÓRICA') ||
             mot.includes('HISTORICA') ||
             mot.includes('SISTEMA ANTERIOR') ||
-            obs.includes('HISTÓRICA') ||
-            obs.includes('HISTORICA') ||
-            obs.includes('SISTEMA ANTERIOR')
+            (obs.includes('HISTÓRICA') && !doc.startsWith('MER-')) ||
+            (obs.includes('HISTORICA') && !doc.startsWith('MER-')) ||
+            (obs.includes('SISTEMA ANTERIOR') && !doc.startsWith('MER-'))
         );
     };
 

@@ -1,3 +1,6 @@
+process.env.TZ = 'America/La_Paz';
+process.env.PGTZ = 'America/La_Paz';
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -5,8 +8,6 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AuditInterceptor } from './audit.interceptor';
 
 async function bootstrap() {
-  process.env.TZ = 'America/La_Paz';
-  process.env.PGTZ = 'America/La_Paz';
   const app = await NestFactory.create(AppModule);
 
   // Body parser limit (50MB for PDF catalogs and QR image uploads)

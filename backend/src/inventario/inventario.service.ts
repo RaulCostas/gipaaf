@@ -324,7 +324,8 @@ export class InventarioService implements OnModuleInit {
             motivo: motivo || 'Merma de Producto',
             observaciones: observaciones || undefined,
             costoUnitario: costo,
-            usuario: usuarioId ? { id: usuarioId } as any : undefined
+            usuario: usuarioId ? { id: usuarioId } as any : undefined,
+            creadoEn: new Date()
         });
 
         return saved;
