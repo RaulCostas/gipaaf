@@ -1,13 +1,15 @@
 -- Script: scripts/actualizar_merma_a21_09772.sql
 -- Propósito: 
 -- 1. Corregir la merma histórica de A21-09772 a 4 unidades (error de Excel reportado originalmente como 11).
--- 2. Asegurar que la merma real de 7 unidades quede identificada como 'MER-LP-00007' (operativa, descuenta stock).
--- 3. Sincronizar el stockActual de inventario en La Paz para A21-09772 a 7444.00 unidades (1188 inicial + 7199 traspaso - 936 ventas - 7 merma real).
+-- 2. Limpiar las observaciones de la merma histórica para quitar el texto '[Reingreso a Stock...]' y así eliminar el badge 'Reingreso parcial'.
+-- 3. Asegurar que la merma real de 7 unidades quede identificada como 'MER-LP-00007' (operativa, descuenta stock).
+-- 4. Sincronizar el stockActual de inventario en La Paz para A21-09772 a 7444.00 unidades (1188 inicial + 7199 traspaso - 936 ventas - 7 merma real).
 
--- 1. Actualizar merma histórica de A21-09772 a 4 unidades
+-- 1. Actualizar merma histórica de A21-09772 a 4 unidades y limpiar observación de reingreso
 UPDATE movimientos_inventario
 SET cantidad = -4.00,
-    motivo = 'Merma histórica [A21-09772] - Sistema anterior (corregido a 4 u.)'
+    motivo = 'Merma histórica [A21-09772] - Sistema anterior',
+    observaciones = 'Merma histórica del sistema anterior hasta el 30/10/2026'
 WHERE tipo = 'MERMA'
   AND "numeroDocumento" = 'MERMA-LP-HIST-A21-09772';
 
