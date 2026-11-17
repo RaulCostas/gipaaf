@@ -124,7 +124,13 @@ const EgresosPage: React.FC = () => {
     // Mutations
     const createMutation = useMutation({
         mutationFn: egresoService.create,
-        onSuccess: () => {
+        onSuccess: (savedEgreso: any) => {
+            if (savedEgreso && savedEgreso.id) {
+                queryClient.setQueryData(['egresosList'], (old: any[] | undefined) => {
+                    if (!old) return [savedEgreso];
+                    return [savedEgreso, ...old.filter(e => e.id !== savedEgreso.id)];
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['egresosList'] });
             setIsEditing(false);
             setCurrentEgreso({});
@@ -135,7 +141,13 @@ const EgresosPage: React.FC = () => {
 
     const updateMutation = useMutation({
         mutationFn: (data: { id: number; data: Partial<CreateEgresoDto> }) => egresoService.update(data.id, data.data),
-        onSuccess: () => {
+        onSuccess: (updatedEgreso: any) => {
+            if (updatedEgreso && updatedEgreso.id) {
+                queryClient.setQueryData(['egresosList'], (old: any[] | undefined) => {
+                    if (!old) return [updatedEgreso];
+                    return old.map(e => e.id === updatedEgreso.id ? updatedEgreso : e);
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['egresosList'] });
             setIsEditing(false);
             setCurrentEgreso({});
@@ -146,7 +158,13 @@ const EgresosPage: React.FC = () => {
 
     const deleteMutation = useMutation({
         mutationFn: egresoService.delete,
-        onSuccess: () => {
+        onSuccess: (_: any, deletedId: number) => {
+            if (deletedId) {
+                queryClient.setQueryData(['egresosList'], (old: any[] | undefined) => {
+                    if (!old) return [];
+                    return old.filter(e => e.id !== deletedId);
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['egresosList'] });
             toast.success('Egreso eliminado correctamente');
         },

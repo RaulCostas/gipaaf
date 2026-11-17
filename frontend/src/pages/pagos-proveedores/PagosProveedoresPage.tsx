@@ -291,10 +291,15 @@ const PagosProveedoresPage: React.FC = () => {
     // Mutations
     const createMutation = useMutation({
         mutationFn: pagoProveedorService.create,
-        onSuccess: () => {
+        onSuccess: (savedPago: any) => {
+            if (savedPago && savedPago.id) {
+                queryClient.setQueryData(['pagosProveedoresList'], (old: any[] | undefined) => {
+                    if (!old) return [savedPago];
+                    return [savedPago, ...old.filter(p => p.id !== savedPago.id)];
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['pagosProveedoresList'] });
             queryClient.invalidateQueries({ queryKey: ['todasLasDeudas'] });
-            queryClient.invalidateQueries({ queryKey: ['purchases'] });
             setIsCreating(false);
             resetForm();
             toast.success('Pago registrado exitosamente');
@@ -307,10 +312,15 @@ const PagosProveedoresPage: React.FC = () => {
 
     const updateMutation = useMutation({
         mutationFn: ({ id, data }: { id: number; data: any }) => pagoProveedorService.update(id, data),
-        onSuccess: () => {
+        onSuccess: (updatedPago: any) => {
+            if (updatedPago && updatedPago.id) {
+                queryClient.setQueryData(['pagosProveedoresList'], (old: any[] | undefined) => {
+                    if (!old) return [updatedPago];
+                    return old.map(p => p.id === updatedPago.id ? updatedPago : p);
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['pagosProveedoresList'] });
             queryClient.invalidateQueries({ queryKey: ['todasLasDeudas'] });
-            queryClient.invalidateQueries({ queryKey: ['purchases'] });
             setIsCreating(false);
             resetForm();
             toast.success('Pago actualizado exitosamente');
@@ -323,10 +333,15 @@ const PagosProveedoresPage: React.FC = () => {
 
     const anularMutation = useMutation({
         mutationFn: pagoProveedorService.anular,
-        onSuccess: () => {
+        onSuccess: (anuladoPago: any) => {
+            if (anuladoPago && anuladoPago.id) {
+                queryClient.setQueryData(['pagosProveedoresList'], (old: any[] | undefined) => {
+                    if (!old) return [];
+                    return old.map(p => p.id === anuladoPago.id ? { ...p, activo: false } : p);
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['pagosProveedoresList'] });
             queryClient.invalidateQueries({ queryKey: ['todasLasDeudas'] });
-            queryClient.invalidateQueries({ queryKey: ['purchases'] });
             toast.success('Pago anulado exitosamente');
             setAnularConfirmId(null);
         },

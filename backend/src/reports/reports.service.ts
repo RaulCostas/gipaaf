@@ -37,8 +37,8 @@ export class ReportsService {
             .andWhere('nota.estado = :estado', { estado: EstadoNota.CONFIRMADA })
             .andWhere('nota.fecha BETWEEN :start AND :end', { start, end });
         applyFilters(salesQb, 'nota');
-        const salesToday = await salesQb.getMany();
-        const totalSalesToday = salesToday.reduce((acc, n) => acc + Number(n.total), 0);
+        const salesTodayRaw = await salesQb.select('COALESCE(SUM(nota.total), 0)', 'total').getRawOne();
+        const totalSalesToday = Number(salesTodayRaw?.total || 0);
 
         // 2. Low Stock Count
         const stockQb = this.inventarioRepo.createQueryBuilder('inv')
@@ -61,8 +61,8 @@ export class ReportsService {
             .andWhere('nota.estado = :estado', { estado: EstadoNota.CONFIRMADA })
             .andWhere('nota.fecha BETWEEN :start AND :end', { start: thirtyDaysAgo, end });
         applyFilters(monthQb, 'nota');
-        const salesLastMonth = await monthQb.getMany();
-        const totalSalesMonth = salesLastMonth.reduce((acc, n) => acc + Number(n.total), 0);
+        const monthRaw = await monthQb.select('COALESCE(SUM(nota.total), 0)', 'total').getRawOne();
+        const totalSalesMonth = Number(monthRaw?.total || 0);
 
         return {
             totalSalesToday,

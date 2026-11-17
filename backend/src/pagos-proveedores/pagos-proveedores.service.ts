@@ -121,7 +121,18 @@ export class PagosProveedoresService {
             nota.saldo = Math.max(0, Number(nota.saldo) - montoEquivalente);
             await manager.save(nota);
 
-            return savedPago;
+            const completePago = await manager.findOne(PagoProveedor, {
+                where: { id: savedPago.id },
+                relations: [
+                    'nota',
+                    'nota.sucursal',
+                    'nota.sucursal.ciudad',
+                    'proveedor',
+                    'proveedor.persona'
+                ]
+            });
+
+            return completePago || savedPago;
         });
     }
 
@@ -178,7 +189,18 @@ export class PagosProveedoresService {
             nota.saldo = Math.max(0, saldoSinEstePago - nuevoMontoEquivalente);
             await manager.save(nota);
 
-            return savedPago;
+            const completePago = await manager.findOne(PagoProveedor, {
+                where: { id: savedPago.id },
+                relations: [
+                    'nota',
+                    'nota.sucursal',
+                    'nota.sucursal.ciudad',
+                    'proveedor',
+                    'proveedor.persona'
+                ]
+            });
+
+            return completePago || savedPago;
         });
     }
 

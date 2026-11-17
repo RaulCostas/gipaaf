@@ -55,6 +55,9 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
             synchronize: configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
             ssl: isSsl ? { rejectUnauthorized: false } : false,
             extra: {
+              max: 25,
+              connectionTimeoutMillis: 10000,
+              idleTimeoutMillis: 30000,
               options: '-c timezone=America/La_Paz',
             },
           };
@@ -71,6 +74,9 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
           synchronize: configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
           ssl: isSsl ? { rejectUnauthorized: false } : false,
           extra: {
+            max: 25,
+            connectionTimeoutMillis: 10000,
+            idleTimeoutMillis: 30000,
             options: '-c timezone=America/La_Paz',
           },
         };

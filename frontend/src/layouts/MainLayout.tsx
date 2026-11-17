@@ -21,13 +21,10 @@ const getImageUrl = (url?: string | null) => {
 };
 
 const MainLayout: React.FC = () => {
-    const { logout, user, isAdmin, hasPermission, refreshProfile } = useAuth();
+    const { logout, user, isAdmin, hasPermission } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
-    React.useEffect(() => {
-        refreshProfile();
-    }, []);
     const { 
         selectedCiudad, 
         setSelectedCiudad, 

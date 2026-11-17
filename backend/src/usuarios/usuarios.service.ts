@@ -5,6 +5,7 @@ import * as bcrypt from 'bcryptjs';
 import { Usuario } from './usuario.entity';
 import { Persona } from '../personas/persona.entity';
 import { Personal } from '../personal/personal.entity';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class UsuariosService implements OnModuleInit {
@@ -167,6 +168,7 @@ export class UsuariosService implements OnModuleInit {
                 await this.personalRepo.update(saved.personal.id, { sucursal: saved.sucursal });
             }
 
+            AuthService.clearUserCache(id);
             return saved;
         } catch (err: any) {
             if (err instanceof ConflictException || err instanceof NotFoundException) {
@@ -191,6 +193,7 @@ export class UsuariosService implements OnModuleInit {
     async remove(id: number) {
         const u = await this.findOne(id);
         u.activo = false;
+        AuthService.clearUserCache(id);
         return this.repo.save(u);
     }
 }

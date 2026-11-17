@@ -260,8 +260,8 @@ const parsePossibleExcelNumber = (val: any, colKey?: string, header?: string): a
     // Ignore dates (e.g. 2026-10-06, 06/10/2026, 06-10-2026)
     if (/^\d{2,4}[-/]\d{2}[-/]\d{2,4}$/.test(trimmed)) return trimmed;
 
-    // Clean currency prefixes (Bs., $us, BOB, USD, $)
-    const cleanStr = trimmed.replace(/^(Bs\.?|\$us|BOB|USD|\$)\s*/i, '').trim();
+    // Clean currency prefixes (Bs., $us, BOB, USD, $) and non-breaking spaces
+    const cleanStr = trimmed.replace(/^(Bs\.?|\$us|BOB|USD|\$)\s*/i, '').replace(/[\u00A0\u202F]/g, '').trim();
 
     // 1. European decimal format with comma: "1.234,56" or "150,00" or "-1.234,56" or "0,75"
     if (/^-?\d{1,3}(\.\d{3})*,\d+$/.test(cleanStr) || /^-?\d+,\d+$/.test(cleanStr)) {
@@ -350,10 +350,14 @@ export const exportToExcel = (
     }
 
     if (cell && cell.t === 'n') {
-      if (Number.isInteger(cell.v)) {
-        cell.z = '#,##0';
-      } else {
+      const isAmount = colDef && (
+        (colDef.dataKey && /(monto|total|precio|saldo|costo|subtotal)/i.test(colDef.dataKey)) ||
+        (colDef.header && /(monto|total|precio|saldo|costo|subtotal|\(bs\.?\)|\(\$us\))/i.test(colDef.header))
+      );
+      if (isAmount || !Number.isInteger(cell.v)) {
         cell.z = '#,##0.00';
+      } else {
+        cell.z = '#,##0';
       }
     }
   });
@@ -968,11 +972,17 @@ export const exportGroupedToExcel = (
   Object.keys(worksheet).forEach(cellRef => {
     if (cellRef.startsWith('!')) return;
     const cell = worksheet[cellRef];
+    const decoded = XLSX.utils.decode_cell(cellRef);
+    const colDef = columns[decoded.c];
     if (cell && cell.t === 'n') {
-      if (Number.isInteger(cell.v)) {
-        cell.z = '#,##0';
-      } else {
+      const isAmount = colDef && (
+        (colDef.dataKey && /(monto|total|precio|saldo|costo|subtotal)/i.test(colDef.dataKey)) ||
+        (colDef.header && /(monto|total|precio|saldo|costo|subtotal|\(bs\.?\)|\(\$us\))/i.test(colDef.header))
+      );
+      if (isAmount || !Number.isInteger(cell.v)) {
         cell.z = '#,##0.00';
+      } else {
+        cell.z = '#,##0';
       }
     }
   });

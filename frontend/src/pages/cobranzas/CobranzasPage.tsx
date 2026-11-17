@@ -356,10 +356,15 @@ const CobranzasPage: React.FC = () => {
     // Mutations
     const createMutation = useMutation({
         mutationFn: cobranzaService.create,
-        onSuccess: () => {
+        onSuccess: (savedPago: any) => {
+            if (savedPago && savedPago.id) {
+                queryClient.setQueryData(['cobranzasList'], (old: any[] | undefined) => {
+                    if (!old) return [savedPago];
+                    return [savedPago, ...old.filter(p => p.id !== savedPago.id)];
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['cobranzasList'] });
             queryClient.invalidateQueries({ queryKey: ['todasLasDeudasCobranza'] });
-            queryClient.invalidateQueries({ queryKey: ['sales'] });
             setIsCreating(false);
             resetForm();
             toast.success('Cobranza registrada exitosamente');
@@ -372,10 +377,15 @@ const CobranzasPage: React.FC = () => {
 
     const updateMutation = useMutation({
         mutationFn: ({ id, data }: { id: number; data: any }) => cobranzaService.update(id, data),
-        onSuccess: () => {
+        onSuccess: (updatedPago: any) => {
+            if (updatedPago && updatedPago.id) {
+                queryClient.setQueryData(['cobranzasList'], (old: any[] | undefined) => {
+                    if (!old) return [updatedPago];
+                    return old.map(p => p.id === updatedPago.id ? updatedPago : p);
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['cobranzasList'] });
             queryClient.invalidateQueries({ queryKey: ['todasLasDeudasCobranza'] });
-            queryClient.invalidateQueries({ queryKey: ['sales'] });
             setIsCreating(false);
             resetForm();
             toast.success('Cobranza actualizada exitosamente');
@@ -388,10 +398,15 @@ const CobranzasPage: React.FC = () => {
 
     const anularMutation = useMutation({
         mutationFn: cobranzaService.anular,
-        onSuccess: () => {
+        onSuccess: (anuladoPago: any) => {
+            if (anuladoPago && anuladoPago.id) {
+                queryClient.setQueryData(['cobranzasList'], (old: any[] | undefined) => {
+                    if (!old) return [];
+                    return old.map(p => p.id === anuladoPago.id ? { ...p, activo: false } : p);
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['cobranzasList'] });
             queryClient.invalidateQueries({ queryKey: ['todasLasDeudasCobranza'] });
-            queryClient.invalidateQueries({ queryKey: ['sales'] });
             toast.success('Cobranza anulada exitosamente');
             setAnularConfirmId(null);
         },
@@ -585,7 +600,7 @@ const CobranzasPage: React.FC = () => {
         { header: 'Sucursal', dataKey: 'sucursalNombre' },
         { header: 'Método', dataKey: 'metodoPago' },
         { header: 'Nro. Recibo', dataKey: 'recibo' },
-        { header: 'Monto Pagado (Bs.)', dataKey: 'montoFormateado' },
+        { header: 'Monto Pagado (Bs.)', dataKey: 'montoNum' },
         { header: 'Observaciones / Glosa', dataKey: 'observaciones' }
     ];
 
@@ -634,6 +649,7 @@ const CobranzasPage: React.FC = () => {
                 sucursalNombre,
                 totalVentaFormateado,
                 montoFormateado,
+                montoNum: Number(p.monto) || 0,
                 saldoFormateado,
                 observaciones
             };
@@ -742,6 +758,7 @@ const CobranzasPage: React.FC = () => {
                 referencia: '',
                 totalVentaFormateado: totalVentaBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 montoFormateado: totalCobradoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                montoNum: totalCobradoBOB,
                 saldoFormateado: totalSaldoBOB.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 observaciones: ''
             });
@@ -763,6 +780,7 @@ const CobranzasPage: React.FC = () => {
                 referencia: '',
                 totalVentaFormateado: `$us ${totalVentaUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                 montoFormateado: `$us ${totalCobradoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                montoNum: totalCobradoUSD,
                 saldoFormateado: `$us ${totalSaldoUSD.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                 observaciones: ''
             });

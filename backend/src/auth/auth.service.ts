@@ -65,7 +65,26 @@ export class AuthService {
         };
     }
 
-    async validateUsuario(id: number): Promise<Usuario | null> {
+    private static userCache = new Map<number, { user: Usuario | null; expiresAt: number }>();
+    private static readonly CACHE_TTL_MS = 60 * 1000; // 60 segundos de caché por usuario
+
+    static clearUserCache(userId?: number) {
+        if (userId) {
+            AuthService.userCache.delete(userId);
+        } else {
+            AuthService.userCache.clear();
+        }
+    }
+
+    async validateUsuario(id: number, forceRefresh = false): Promise<Usuario | null> {
+        const now = Date.now();
+        if (!forceRefresh) {
+            const cached = AuthService.userCache.get(id);
+            if (cached && cached.expiresAt > now) {
+                return cached.user;
+            }
+        }
+
         const u = await this.usuarioRepository.findOne({ 
             where: { id, activo: true },
             relations: ['roles', 'roles.permisos', 'persona', 'sucursal', 'sucursal.ciudad', 'personal', 'personal.sucursal', 'personal.sucursal.ciudad']
@@ -73,6 +92,8 @@ export class AuthService {
         if (u && u.sucursal && u.personal) {
             u.personal.sucursal = u.sucursal;
         }
+
+        AuthService.userCache.set(id, { user: u, expiresAt: now + AuthService.CACHE_TTL_MS });
         return u;
     }
 
@@ -94,6 +115,7 @@ export class AuthService {
 
         usuario.password = await bcrypt.hash(newPassword, 10);
         await this.usuarioRepository.save(usuario);
+        AuthService.clearUserCache(userId);
         return { success: true, message: 'Contraseña actualizada con éxito' };
     }
 

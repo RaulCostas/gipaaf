@@ -125,7 +125,22 @@ export class CobranzasService {
             nota.saldo = Math.max(0, Number(nota.saldo) - montoEquivalente);
             await manager.save(nota);
 
-            return savedPago;
+            const completePago = await manager.findOne(PagoCobranza, {
+                where: { id: savedPago.id },
+                relations: [
+                    'nota',
+                    'nota.vendedor',
+                    'nota.usuario',
+                    'nota.sucursal',
+                    'nota.sucursal.ciudad',
+                    'cliente',
+                    'cliente.persona',
+                    'cliente.sucursal',
+                    'cliente.sucursal.ciudad'
+                ]
+            });
+
+            return completePago || savedPago;
         });
     }
 
@@ -182,7 +197,22 @@ export class CobranzasService {
             nota.saldo = Math.max(0, saldoSinEstePago - nuevoMontoEquivalente);
             await manager.save(nota);
 
-            return savedPago;
+            const completePago = await manager.findOne(PagoCobranza, {
+                where: { id: savedPago.id },
+                relations: [
+                    'nota',
+                    'nota.vendedor',
+                    'nota.usuario',
+                    'nota.sucursal',
+                    'nota.sucursal.ciudad',
+                    'cliente',
+                    'cliente.persona',
+                    'cliente.sucursal',
+                    'cliente.sucursal.ciudad'
+                ]
+            });
+
+            return completePago || savedPago;
         });
     }
 

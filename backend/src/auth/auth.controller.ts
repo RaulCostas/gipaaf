@@ -18,7 +18,7 @@ export class AuthController {
     @UseGuards(JwtAuthGuard)
     @Get('perfil')
     async perfil(@Request() req) {
-        const usuario = await this.authService.validateUsuario(req.user.id);
+        const usuario = req.user?.usuario || await this.authService.validateUsuario(req.user.id);
         if (!usuario) return req.user;
         return {
             id: usuario.id,

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Rol } from './rol.entity';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class RolesService {
@@ -44,8 +45,15 @@ export class RolesService {
         if (data.descripcion !== undefined) rol.descripcion = data.descripcion;
         if (data.activo !== undefined) rol.activo = data.activo;
         if (data.permisos !== undefined) rol.permisos = data.permisos as any;
-        return this.repo.save(rol);
+        const saved = await this.repo.save(rol);
+        AuthService.clearUserCache();
+        return saved;
     }
 
-    async remove(id: number) { const r = await this.findOne(id); return this.repo.remove(r); }
+    async remove(id: number) { 
+        const r = await this.findOne(id); 
+        const res = await this.repo.remove(r); 
+        AuthService.clearUserCache();
+        return res;
+    }
 }
