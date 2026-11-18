@@ -82,7 +82,7 @@ export class TraspasosService implements OnModuleInit {
     }
 
     async findAll(): Promise<Traspaso[]> {
-        return this.traspasoRepo.createQueryBuilder('traspaso')
+        const traspasos = await this.traspasoRepo.createQueryBuilder('traspaso')
             .leftJoinAndSelect('traspaso.sucursalOrigen', 'sucursalOrigen')
             .leftJoinAndSelect('sucursalOrigen.ciudad', 'origenCiudad')
             .leftJoinAndSelect('traspaso.sucursalDestino', 'sucursalDestino')
@@ -95,6 +95,20 @@ export class TraspasosService implements OnModuleInit {
             .orderBy('traspaso.fecha', 'DESC')
             .addOrderBy('traspaso.id', 'DESC')
             .getMany();
+
+        for (const t of traspasos) {
+            if (t.detalles?.length) {
+                t.detalles.sort((a, b) => {
+                    const nameA = String(a.producto?.nombre || '').trim();
+                    const nameB = String(b.producto?.nombre || '').trim();
+                    const cmp = nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+                    if (cmp !== 0) return cmp;
+                    return String(a.producto?.codigo || '').localeCompare(String(b.producto?.codigo || ''), 'es', { sensitivity: 'base' });
+                });
+            }
+        }
+
+        return traspasos;
     }
 
     async findOne(id: number): Promise<Traspaso> {
@@ -116,6 +130,14 @@ export class TraspasosService implements OnModuleInit {
         }
 
         if (traspaso.detalles?.length) {
+            traspaso.detalles.sort((a, b) => {
+                const nameA = String(a.producto?.nombre || '').trim();
+                const nameB = String(b.producto?.nombre || '').trim();
+                const cmp = nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+                if (cmp !== 0) return cmp;
+                return String(a.producto?.codigo || '').localeCompare(String(b.producto?.codigo || ''), 'es', { sensitivity: 'base' });
+            });
+
             const isActivo = traspaso.activo && traspaso.estado !== EstadoTraspaso.ANULADO;
             for (const det of traspaso.detalles) {
                 if (isActivo && traspaso.sucursalDestino) {

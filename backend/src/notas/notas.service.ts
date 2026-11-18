@@ -626,26 +626,65 @@ export class NotasService implements OnModuleInit {
                             relations: ['producto', 'sucursal']
                         });
 
-                        for (const lote of oldLotes) {
-                            const cantUsada = Number(lote.cantidadInicial) - Number(lote.cantidadActual);
-                            if (cantUsada > 0) {
-                                const errMsg = await this.buildLoteUsageErrorMessage(manager, lote, cantUsada, 'modificar los productos de', targetSucursal?.id);
-                                throw new BadRequestException(errMsg);
+                        // 1. Validar que no se cambie de sucursal si ya hubo salidas de inventario
+                        const origSucId = (nota.sucursal || (oldLotes[0]?.sucursal))?.id;
+                        if (targetSucursal && origSucId && targetSucursal.id !== origSucId) {
+                            for (const lote of oldLotes) {
+                                const cantUsada = Number(lote.cantidadInicial) - Number(lote.cantidadActual);
+                                if (cantUsada > 0) {
+                                    throw new BadRequestException(
+                                        `No se puede cambiar la sucursal de esta compra porque ya se registraron transferencias o ventas de sus productos en la sucursal original.`
+                                    );
+                                }
                             }
                         }
 
-                        for (const lote of oldLotes) {
-                            const sucId = lote.sucursal?.id || targetSucursal?.id;
-                            if (sucId && lote.producto?.id) {
-                                const inv = await manager.findOne(Inventario, {
-                                    where: { producto: { id: lote.producto.id }, sucursal: { id: sucId } }
-                                });
-                                if (inv) {
-                                    inv.stockActual = Math.max(0, Number(inv.stockActual) - Number(lote.cantidadActual));
-                                    await manager.save(inv);
+                        // 2. Mapear qué lotes existentes continúan en la compra y validar cantidades mínimas
+                        const matchedOldLoteIds = new Set<number>();
+                        for (const det of data.detalles) {
+                            const prodId = Number((det.producto as any)?.id || (det as any).productoId);
+                            if (!prodId) continue;
+
+                            let match = oldLotes.find(l => !matchedOldLoteIds.has(l.id) && l.producto?.id === prodId && det.numeroLote && l.numeroLote === det.numeroLote);
+                            if (!match) {
+                                match = oldLotes.find(l => !matchedOldLoteIds.has(l.id) && l.producto?.id === prodId);
+                            }
+
+                            if (match) {
+                                matchedOldLoteIds.add(match.id);
+                                const cantUsada = Number(match.cantidadInicial) - Number(match.cantidadActual);
+                                const newCant = Number(det.cantidad) || 0;
+
+                                if (cantUsada > 0 && newCant < cantUsada) {
+                                    throw new BadRequestException(
+                                        `No se puede reducir la cantidad del producto "${match.producto?.nombre}" a ${newCant} unidades porque ya se transfirieron o vendieron ${cantUsada} unidades (Lote: ${match.numeroLote || 'S/N'}). La cantidad mínima permitida es ${cantUsada}.`
+                                    );
                                 }
                             }
-                            await manager.remove(Lote, lote);
+                        }
+
+                        // 3. Revisar los lotes antiguos que fueron removidos de la compra
+                        for (const lote of oldLotes) {
+                            if (!matchedOldLoteIds.has(lote.id)) {
+                                const cantUsada = Number(lote.cantidadInicial) - Number(lote.cantidadActual);
+                                if (cantUsada > 0) {
+                                    const errMsg = await this.buildLoteUsageErrorMessage(manager, lote, cantUsada, 'eliminar de la compra el producto', targetSucursal?.id);
+                                    throw new BadRequestException(errMsg);
+                                }
+
+                                // Si cantUsada === 0, es seguro retirar el lote del inventario y borrarlo
+                                const sucId = lote.sucursal?.id || targetSucursal?.id;
+                                if (sucId && lote.producto?.id) {
+                                    const inv = await manager.findOne(Inventario, {
+                                        where: { producto: { id: lote.producto.id }, sucursal: { id: sucId } }
+                                    });
+                                    if (inv) {
+                                        inv.stockActual = Math.max(0, Number(inv.stockActual) - Number(lote.cantidadActual));
+                                        await manager.save(inv);
+                                    }
+                                }
+                                await manager.remove(Lote, lote);
+                            }
                         }
                     } else if (nota.tipo === TipoNota.VENTA) {
                         for (const det of nota.detalles || []) {
@@ -793,6 +832,12 @@ export class NotasService implements OnModuleInit {
                             factorIncremento = 1 + (porcentajeGastos / 100);
                         }
 
+                        const existingLotesAfter = await manager.find(Lote, {
+                            where: { notaIngreso: { id: nota.id } },
+                            relations: ['producto', 'sucursal']
+                        });
+                        const usedLoteIds = new Set<number>();
+
                         for (const det of savedDetalles) {
                             let inv: Inventario | null = null;
                             if (targetSucursal && det.producto?.id) {
@@ -808,36 +853,64 @@ export class NotasService implements OnModuleInit {
                             }
                             const costoUnitarioFinal = Number((precioUnitarioBob * factorIncremento).toFixed(2));
 
-                            const nuevoLote = manager.create(Lote, {
-                                numeroLote: det.numeroLote || `L-${nota.numero}-${det.id}`,
-                                producto: det.producto,
-                                sucursal: targetSucursal || inv?.sucursal || undefined,
-                                cantidadInicial: det.cantidad,
-                                cantidadActual: det.cantidad,
-                                costoUnitario: costoUnitarioFinal,
-                                fechaIngreso: new Date(),
-                                fechaVencimiento: det.fechaVencimiento,
-                                notaIngreso: nota
-                            });
-                            await manager.save(nuevoLote);
+                            let existingLote = existingLotesAfter.find(l => !usedLoteIds.has(l.id) && l.producto?.id === det.producto?.id && det.numeroLote && l.numeroLote === det.numeroLote);
+                            if (!existingLote) {
+                                existingLote = existingLotesAfter.find(l => !usedLoteIds.has(l.id) && l.producto?.id === det.producto?.id);
+                            }
 
-                            if (inv) {
-                                inv.stockActual = Number(inv.stockActual) + Number(det.cantidad);
-                                if (det.precioUnitario) {
-                                    inv.precioCompra = costoUnitarioFinal;
+                            if (existingLote) {
+                                usedLoteIds.add(existingLote.id);
+                                const diff = Number(det.cantidad) - Number(existingLote.cantidadInicial);
+                                existingLote.cantidadInicial = Number(det.cantidad);
+                                existingLote.cantidadActual = Math.max(0, Number(existingLote.cantidadActual) + diff);
+                                existingLote.costoUnitario = costoUnitarioFinal;
+                                if (det.fechaVencimiento) {
+                                    existingLote.fechaVencimiento = det.fechaVencimiento;
                                 }
-                                await manager.save(inv);
-                            } else if (targetSucursal && det.producto) {
-                                const nuevoInv = manager.create(Inventario, {
+                                if (det.numeroLote) {
+                                    existingLote.numeroLote = det.numeroLote;
+                                }
+                                await manager.save(existingLote);
+
+                                if (inv) {
+                                    inv.stockActual = Number(inv.stockActual) + diff;
+                                    if (det.precioUnitario) {
+                                        inv.precioCompra = costoUnitarioFinal;
+                                    }
+                                    await manager.save(inv);
+                                }
+                            } else {
+                                const nuevoLote = manager.create(Lote, {
+                                    numeroLote: det.numeroLote || `L-${nota.numero}-${det.id}`,
                                     producto: det.producto,
-                                    sucursal: targetSucursal,
-                                    stockActual: Number(det.cantidad),
-                                    stockMinimo: 0,
-                                    stockMaximo: 0,
-                                    precioCompra: costoUnitarioFinal,
-                                    precioVenta: Number(det.producto.precioVenta) || 0
+                                    sucursal: targetSucursal || inv?.sucursal || undefined,
+                                    cantidadInicial: det.cantidad,
+                                    cantidadActual: det.cantidad,
+                                    costoUnitario: costoUnitarioFinal,
+                                    fechaIngreso: new Date(),
+                                    fechaVencimiento: det.fechaVencimiento,
+                                    notaIngreso: nota
                                 });
-                                await manager.save(nuevoInv);
+                                await manager.save(nuevoLote);
+
+                                if (inv) {
+                                    inv.stockActual = Number(inv.stockActual) + Number(det.cantidad);
+                                    if (det.precioUnitario) {
+                                        inv.precioCompra = costoUnitarioFinal;
+                                    }
+                                    await manager.save(inv);
+                                } else if (targetSucursal && det.producto) {
+                                    const nuevoInv = manager.create(Inventario, {
+                                        producto: det.producto,
+                                        sucursal: targetSucursal,
+                                        stockActual: Number(det.cantidad),
+                                        stockMinimo: 0,
+                                        stockMaximo: 0,
+                                        precioCompra: costoUnitarioFinal,
+                                        precioVenta: Number(det.producto.precioVenta) || 0
+                                    });
+                                    await manager.save(nuevoInv);
+                                }
                             }
 
                             if (det.producto?.id) {

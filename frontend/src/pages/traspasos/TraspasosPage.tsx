@@ -313,7 +313,7 @@ const TraspasosPage: React.FC = () => {
                 stockDisponible: lotMax,
                 observacion: itemObservacion
             };
-            setItemsList(updated);
+            setItemsList(sortDetallesByProduct(updated));
             setEditingItemIndex(null);
             toast.success(`Producto "${prod.nombre}" actualizado en la lista`);
         } else {
@@ -336,9 +336,9 @@ const TraspasosPage: React.FC = () => {
                     cantidad: newTotalQty,
                     observacion: itemObservacion || updated[existingIndex].observacion
                 };
-                setItemsList(updated);
+                setItemsList(sortDetallesByProduct(updated));
             } else {
-                setItemsList([
+                setItemsList(sortDetallesByProduct([
                     ...itemsList,
                     {
                         productoId: prodId,
@@ -349,7 +349,7 @@ const TraspasosPage: React.FC = () => {
                         stockDisponible: lotMax,
                         observacion: itemObservacion
                     }
-                ]);
+                ]));
             }
         }
 
@@ -563,7 +563,7 @@ const TraspasosPage: React.FC = () => {
                 };
             });
 
-            setItemsList(mappedItems);
+            setItemsList(sortDetallesByProduct(mappedItems));
             setSelectedProdId('');
             setSelectedNumeroLote('');
             setItemCantidad('1');
@@ -2053,7 +2053,7 @@ const TraspasosPage: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y">
-                                        {viewingTraspaso.detalles?.map((d: any, idx) => {
+                                        {sortDetallesByProduct(viewingTraspaso.detalles || []).map((d: any, idx) => {
                                             let lotesList: any[] = [];
                                             if (d.lotesDetalle) {
                                                 try {
