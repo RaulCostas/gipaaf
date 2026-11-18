@@ -1485,6 +1485,18 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         };
     }
 
+    private sortDetallesByProduct<T extends { producto?: { nombre?: string; codigo?: string } | null }>(detalles: T[]): T[] {
+        return [...detalles].sort((a, b) => {
+            const prodA = (a.producto?.nombre || '').trim();
+            const prodB = (b.producto?.nombre || '').trim();
+            const cmp = prodA.localeCompare(prodB, 'es', { sensitivity: 'base' });
+            if (cmp !== 0) return cmp;
+            const codA = (a.producto?.codigo || '').trim();
+            const codB = (b.producto?.codigo || '').trim();
+            return codA.localeCompare(codB, 'es', { sensitivity: 'base' });
+        });
+    }
+
     private sortDetallesByMarcaAndProduct<T extends { producto?: { nombre?: string; marca?: { nombre?: string } | null } | null }>(detalles: T[]): T[] {
         return [...detalles].sort((a, b) => {
             const marcaA = (a.producto?.marca?.nombre || '').trim();
@@ -2402,7 +2414,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
             const rowHeight = 22;
             const maxY = 680;
-            const detalles = compra.detalles || [];
+            const detalles = this.sortDetallesByProduct(compra.detalles || []);
 
             detalles.forEach((det, idx) => {
                 if (currentY + rowHeight > maxY) {

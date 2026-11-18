@@ -31,3 +31,38 @@ export function sortDetallesByMarcaAndProduct<T extends { productoId?: number; p
         return prodA.localeCompare(prodB, 'es', { sensitivity: 'base' });
     });
 }
+
+/**
+ * Ordena una lista de detalles de compra alfabéticamente por nombre de Producto (A-Z).
+ * En caso de empate en nombre, ordena por código de producto.
+ */
+export function sortDetallesByProduct<T extends { productoId?: number; producto?: any }>(
+    detalles: T[],
+    productsCatalog?: Array<{ id: number; nombre?: string; codigo?: string }>
+): T[] {
+    const getProdInfo = (det: T): { nombre: string; codigo: string } => {
+        let nombre = det.producto?.nombre;
+        let codigo = det.producto?.codigo;
+        if ((!nombre || !codigo) && productsCatalog && (det.productoId || det.producto?.id)) {
+            const pId = Number(det.productoId || det.producto?.id);
+            const found = productsCatalog.find(p => p.id === pId);
+            if (found) {
+                if (!nombre) nombre = found.nombre;
+                if (!codigo) codigo = found.codigo;
+            }
+        }
+        return {
+            nombre: String(nombre || '').trim(),
+            codigo: String(codigo || '').trim()
+        };
+    };
+
+    return [...(detalles || [])].sort((a, b) => {
+        const infoA = getProdInfo(a);
+        const infoB = getProdInfo(b);
+        const cmp = infoA.nombre.localeCompare(infoB.nombre, 'es', { sensitivity: 'base' });
+        if (cmp !== 0) return cmp;
+        return infoA.codigo.localeCompare(infoB.codigo, 'es', { sensitivity: 'base' });
+    });
+}
+

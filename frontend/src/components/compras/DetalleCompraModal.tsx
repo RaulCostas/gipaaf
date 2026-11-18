@@ -5,6 +5,7 @@ import Modal from '../ui/Modal';
 import { ShoppingBag, Receipt, User, Calendar, CreditCard, Package, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { formatDate } from '../../utils/dateUtils';
+import { sortDetallesByProduct } from '../../utils/sortUtils';
 
 interface DetalleCompraModalProps {
     isOpen: boolean;
@@ -158,7 +159,7 @@ export const DetalleCompraModal: React.FC<DetalleCompraModalProps> = ({
                                             </td>
                                         </tr>
                                     ) : (
-                                        activeNota.detalles.map((det: any, idx: number) => {
+                                        sortDetallesByProduct(activeNota.detalles).map((det: any, idx: number) => {
                                             const prodNombre = det.producto?.nombre || 'Producto';
                                             const prodCodigo = det.producto?.codigo || '';
                                             const cant = Number(det.cantidad) || 0;

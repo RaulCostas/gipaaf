@@ -13,6 +13,7 @@ import { PagoCobranza } from '../cobranzas/pago.entity';
 import { PagoProveedor } from '../pagos-proveedores/pago-proveedor.entity';
 import { Egreso } from '../egresos/egreso.entity';
 import { Traspaso } from '../traspasos/traspaso.entity';
+import { DetalleTraspaso } from '../traspasos/detalle-traspaso.entity';
 
 import { CostoImportacion } from './costo-importacion.entity';
 import { Moneda } from './nota.entity';
@@ -138,6 +139,8 @@ export class NotasService implements OnModuleInit {
         for (const n of notas) {
             if ((n.tipo === TipoNota.VENTA || n.tipo === TipoNota.PROFORMA) && n.detalles?.length) {
                 n.detalles = this.sortDetallesByMarcaAndProduct(n.detalles);
+            } else if (n.tipo === TipoNota.COMPRA && n.detalles?.length) {
+                n.detalles = this.sortDetallesByProduct(n.detalles);
             }
         }
         return notas;
@@ -167,8 +170,22 @@ export class NotasService implements OnModuleInit {
         if (!nota) throw new NotFoundException(`Nota ${id} no encontrada`);
         if ((nota.tipo === TipoNota.VENTA || nota.tipo === TipoNota.PROFORMA) && nota.detalles?.length) {
             nota.detalles = this.sortDetallesByMarcaAndProduct(nota.detalles);
+        } else if (nota.tipo === TipoNota.COMPRA && nota.detalles?.length) {
+            nota.detalles = this.sortDetallesByProduct(nota.detalles);
         }
         return nota;
+    }
+
+    private sortDetallesByProduct(detalles: DetalleNota[]): DetalleNota[] {
+        return [...detalles].sort((a, b) => {
+            const prodA = (a.producto?.nombre || '').trim();
+            const prodB = (b.producto?.nombre || '').trim();
+            const cmp = prodA.localeCompare(prodB, 'es', { sensitivity: 'base' });
+            if (cmp !== 0) return cmp;
+            const codA = (a.producto?.codigo || '').trim();
+            const codB = (b.producto?.codigo || '').trim();
+            return codA.localeCompare(codB, 'es', { sensitivity: 'base' });
+        });
     }
 
     private sortDetallesByMarcaAndProduct(detalles: DetalleNota[]): DetalleNota[] {
@@ -185,6 +202,81 @@ export class NotasService implements OnModuleInit {
             const prodB = (b.producto?.nombre || '').trim();
             return prodA.localeCompare(prodB, 'es', { sensitivity: 'base' });
         });
+    }
+
+    private async buildLoteUsageErrorMessage(
+        manager: EntityManager,
+        lote: Lote,
+        cantUsada: number,
+        accion: string,
+        sucursalFallbackId?: number
+    ): Promise<string> {
+        const prodNombre = lote.producto?.nombre || 'Producto';
+        const loteNum = lote.numeroLote || 'S/N';
+
+        // 1. Verificar si hubo ventas que consumieron este lote
+        const movsVenta = await manager.find(MovimientoLote, {
+            where: { lote: { id: lote.id } },
+            relations: ['detalleNota', 'detalleNota.nota']
+        });
+        const cantVendida = movsVenta.reduce((acc, m) => acc + (Number(m.cantidad) || 0), 0);
+        const notasVenta = Array.from(new Set(movsVenta.map(m => m.detalleNota?.nota?.numero).filter(Boolean)));
+
+        // 2. Verificar si hubo traspasos desde la sucursal de este lote
+        let cantTraspasada = 0;
+        let codigosTraspaso: string[] = [];
+        const sucId = lote.sucursal?.id || sucursalFallbackId;
+
+        if (lote.producto?.id && sucId) {
+            const detallesTraspaso = await manager.find(DetalleTraspaso, {
+                where: {
+                    producto: { id: lote.producto.id },
+                    traspaso: {
+                        sucursalOrigen: { id: sucId }
+                    }
+                },
+                relations: ['traspaso', 'traspaso.sucursalDestino']
+            });
+
+            const traspasosLote = detallesTraspaso.filter(dt => {
+                if (dt.traspaso?.estado === 'ANULADO') return false;
+                if (lote.numeroLote && dt.numeroLote === lote.numeroLote) return true;
+                if (dt.lotesDetalle) {
+                    try {
+                        const parsed = JSON.parse(dt.lotesDetalle);
+                        return Array.isArray(parsed) && parsed.some((p) => p.numeroLote === lote.numeroLote);
+                    } catch {
+                        return false;
+                    }
+                }
+                return false;
+            });
+
+            codigosTraspaso = Array.from(new Set(traspasosLote.map(t => t.traspaso?.codigo).filter(Boolean)));
+            const sumTraspasada = traspasosLote.reduce((acc, t) => acc + (Number(t.cantidad) || 0), 0);
+            cantTraspasada = Math.min(Math.max(0, cantUsada - cantVendida), sumTraspasada);
+        }
+
+        const traspasoLabel = codigosTraspaso.length > 0 ? ` (Traspaso: ${codigosTraspaso.join(', ')})` : '';
+        const ventaLabel = notasVenta.length > 0 ? ` (Nota de Venta: ${notasVenta.join(', ')})` : '';
+
+        // Caso A: Solo traspasos (no hubo ventas de este lote)
+        if (cantVendida <= 0 && (cantTraspasada > 0 || codigosTraspaso.length > 0)) {
+            return `No se puede ${accion} esta compra porque se transfirieron ${cantUsada} unidades mediante traspaso${traspasoLabel} del producto "${prodNombre}" (Lote: ${loteNum}). Primero debe retirar el producto de dicho traspaso en /traspasos.`;
+        }
+
+        // Caso B: Solo ventas
+        if (cantVendida > 0 && cantTraspasada <= 0) {
+            return `No se puede ${accion} esta compra porque ya se vendieron ${cantVendida} unidades mediante nota de venta${ventaLabel} del producto "${prodNombre}" (Lote: ${loteNum}).`;
+        }
+
+        // Caso C: Mixto (hubo tanto ventas como traspasos)
+        if (cantVendida > 0 && cantTraspasada > 0) {
+            return `No se puede ${accion} esta compra porque ya se registraron salidas de ${cantUsada} unidades (${cantVendida} por venta${ventaLabel} y ${cantTraspasada} por traspaso${traspasoLabel}) del producto "${prodNombre}" (Lote: ${loteNum}).`;
+        }
+
+        // Caso D: Fallback genérico si no se determinó venta ni traspaso específico
+        return `No se puede ${accion} esta compra porque ya se utilizaron o salieron ${cantUsada} unidades del producto "${prodNombre}" (Lote: ${loteNum}).`;
     }
 
     async create(data: Partial<Nota> & { detalles: Partial<DetalleNota>[] }) {
@@ -537,9 +629,8 @@ export class NotasService implements OnModuleInit {
                         for (const lote of oldLotes) {
                             const cantUsada = Number(lote.cantidadInicial) - Number(lote.cantidadActual);
                             if (cantUsada > 0) {
-                                throw new BadRequestException(
-                                    `No se pueden modificar los productos de esta compra porque ya se vendieron o utilizaron ${cantUsada} unidades del producto "${lote.producto?.nombre || ''}" (Lote: ${lote.numeroLote}).`
-                                );
+                                const errMsg = await this.buildLoteUsageErrorMessage(manager, lote, cantUsada, 'modificar los productos de', targetSucursal?.id);
+                                throw new BadRequestException(errMsg);
                             }
                         }
 
@@ -1302,9 +1393,8 @@ export class NotasService implements OnModuleInit {
                     for (const lote of lotes) {
                         const cantUsada = Number(lote.cantidadInicial) - Number(lote.cantidadActual);
                         if (cantUsada > 0) {
-                            throw new BadRequestException(
-                                `No se puede anular la compra porque ya se vendieron o utilizaron ${cantUsada} unidades del producto "${lote.producto?.nombre}" (Lote: ${lote.numeroLote}).`
-                            );
+                            const errMsg = await this.buildLoteUsageErrorMessage(manager, lote, cantUsada, 'anular', targetSucursal?.id);
+                            throw new BadRequestException(errMsg);
                         }
                     }
 
@@ -1368,12 +1458,35 @@ export class NotasService implements OnModuleInit {
                             relations: ['lote']
                         });
 
+                        let cantRestauradaLotes = 0;
                         for (const mov of movimientos) {
                             if (mov.lote) {
                                 mov.lote.cantidadActual = Number(mov.lote.cantidadActual) + Number(mov.cantidad);
                                 await manager.save(mov.lote);
+                                cantRestauradaLotes += Number(mov.cantidad);
                             }
                             await manager.remove(MovimientoLote, mov);
+                        }
+
+                        // Si no había movimientos_lote registrados o faltó restaurar unidades al lote original:
+                        const faltanteLote = Number(det.cantidad) - cantRestauradaLotes;
+                        if (faltanteLote > 0 && sucId && det.producto?.id) {
+                            let loteDest: Lote | null = null;
+                            if (det.numeroLote) {
+                                loteDest = await manager.findOne(Lote, {
+                                    where: { producto: { id: det.producto.id }, sucursal: { id: sucId }, numeroLote: det.numeroLote }
+                                });
+                            }
+                            if (!loteDest) {
+                                loteDest = await manager.findOne(Lote, {
+                                    where: { producto: { id: det.producto.id }, sucursal: { id: sucId } },
+                                    order: { fechaIngreso: 'DESC' }
+                                });
+                            }
+                            if (loteDest) {
+                                loteDest.cantidadActual = Number(loteDest.cantidadActual) + faltanteLote;
+                                await manager.save(loteDest);
+                            }
                         }
                     }
                 } else if (nota.tipo === TipoNota.DEVOLUCION) {

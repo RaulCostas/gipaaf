@@ -18,6 +18,7 @@ import autoTable from 'jspdf-autotable';
 import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData, printJsPdf } from '../../utils/exportUtils';
 import { format } from 'date-fns';
 import { formatDate } from '../../utils/dateUtils';
+import { sortDetallesByProduct } from '../../utils/sortUtils';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
 import { whatsappService } from '../../api/whatsappService';
@@ -305,7 +306,7 @@ const ComprasPage: React.FC = () => {
         const pu = Number(prod.precioCompra) || 0;
         setNewNota({
             ...newNota,
-            detalles: [...newNota.detalles, {
+            detalles: sortDetallesByProduct([...newNota.detalles, {
                 productoId: prod.id,
                 producto: prod,
                 cantidad: 1,
@@ -314,7 +315,7 @@ const ComprasPage: React.FC = () => {
                 numeroLote: '',
                 fechaVencimiento: '',
                 subtotal: pu
-            }]
+            }], products)
         });
     };
 
@@ -378,7 +379,9 @@ const ComprasPage: React.FC = () => {
 
         const monedaSimbolo = newNota.moneda === 'USD' ? '$us' : 'Bs.';
 
-        const tableData = newNota.detalles.map((d: any) => {
+        const sortedDetalles = sortDetallesByProduct(newNota.detalles, products);
+
+        const tableData = sortedDetalles.map((d: any) => {
             const prod = products?.find(p => p.id === Number(d.productoId || d.producto?.id)) || d.producto;
             return [
                 prod ? `${prod.codigo || ''} - ${prod.nombre || ''}` : 'Producto',
@@ -448,7 +451,7 @@ const ComprasPage: React.FC = () => {
             observaciones: nota.observaciones || '',
             descuentoPorcentaje: Number(nota.descuentoPorcentaje || 0),
             descuentoPromocionPorcentaje: Number(nota.descuentoPromocionPorcentaje || 0),
-            detalles: (nota.detalles || []).map((d: any) => ({
+            detalles: sortDetallesByProduct((nota.detalles || []).map((d: any) => ({
                 producto: d.producto,
                 productoId: d.producto?.id || d.productoId || (typeof d.producto === 'number' ? d.producto : d.id),
                 cantidad: Number(d.cantidad) || 0,
@@ -457,7 +460,7 @@ const ComprasPage: React.FC = () => {
                 numeroLote: d.numeroLote || (d.movimientosLote?.[0]?.lote?.numeroLote) || '',
                 fechaVencimiento: d.fechaVencimiento ? d.fechaVencimiento.split('T')[0] : (d.movimientosLote?.[0]?.lote?.fechaVencimiento ? String(d.movimientosLote[0].lote.fechaVencimiento).split('T')[0] : ''),
                 subtotal: Number(d.subtotal) || (Number(d.cantidad || 0) * Number(d.precioUnitario || 0))
-            }))
+            })), products)
         });
         setSelectedMarcaModal('');
         setIsEditing(true);
@@ -478,7 +481,7 @@ const ComprasPage: React.FC = () => {
             observaciones: nota.observaciones || '',
             descuentoPorcentaje: Number(nota.descuentoPorcentaje || 0),
             descuentoPromocionPorcentaje: Number(nota.descuentoPromocionPorcentaje || 0),
-            detalles: (nota.detalles || []).map((d: any) => ({
+            detalles: sortDetallesByProduct((nota.detalles || []).map((d: any) => ({
                 producto: d.producto,
                 productoId: d.producto?.id || d.productoId || (typeof d.producto === 'number' ? d.producto : d.id),
                 cantidad: Number(d.cantidad) || 0,
@@ -487,7 +490,7 @@ const ComprasPage: React.FC = () => {
                 numeroLote: d.numeroLote || (d.movimientosLote?.[0]?.lote?.numeroLote) || '',
                 fechaVencimiento: d.fechaVencimiento ? d.fechaVencimiento.split('T')[0] : (d.movimientosLote?.[0]?.lote?.fechaVencimiento ? String(d.movimientosLote[0].lote.fechaVencimiento).split('T')[0] : ''),
                 subtotal: Number(d.subtotal) || (Number(d.cantidad || 0) * Number(d.precioUnitario || 0))
-            }))
+            })), products)
         });
         setSelectedMarcaModal('');
         setIsViewing(true);

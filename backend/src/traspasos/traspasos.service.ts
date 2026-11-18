@@ -210,6 +210,9 @@ export class TraspasosService implements OnModuleInit {
         let totalRevertiblePorLotes = invDestinoStock;
         if (lotesTransf.length > 0) {
             totalRevertiblePorLotes = 0;
+            let lotesFaltantes = 0;
+            const lotesConsultadosIds: number[] = [];
+
             for (const lt of lotesTransf) {
                 const ltCant = Number(lt.cantidad) || 0;
                 const lotDest = await this.findDestinoLote(
@@ -219,8 +222,33 @@ export class TraspasosService implements OnModuleInit {
                     lt.numeroLote,
                     traspaso.codigo,
                 );
+                if (lotDest) lotesConsultadosIds.push(lotDest.id);
                 const loteActualDestino = lotDest ? Math.max(0, Number(lotDest.cantidadActual)) : 0;
-                totalRevertiblePorLotes += Math.min(ltCant, loteActualDestino);
+                const cubierto = Math.min(ltCant, loteActualDestino);
+                totalRevertiblePorLotes += cubierto;
+                if (cubierto < ltCant) {
+                    lotesFaltantes += (ltCant - cubierto);
+                }
+            }
+
+            // Si el lote específico tiene un desfase (ej: por ventas anuladas o reconciliación de stock),
+            // pero el inventario físico en destino tiene stock disponible (invDestinoStock):
+            if (lotesFaltantes > 0 && invDestinoStock > totalRevertiblePorLotes) {
+                const otrosLotes = await manager.find(Lote, {
+                    where: {
+                        producto: { id: det.producto.id },
+                        sucursal: { id: traspaso.sucursalDestino.id },
+                        cantidadActual: MoreThan(0)
+                    }
+                });
+                let extraDisponible = 0;
+                for (const ol of otrosLotes) {
+                    if (!lotesConsultadosIds.includes(ol.id)) {
+                        extraDisponible += Number(ol.cantidadActual) || 0;
+                    }
+                }
+                const extraUtilizable = Math.min(lotesFaltantes, extraDisponible, invDestinoStock - totalRevertiblePorLotes);
+                totalRevertiblePorLotes += extraUtilizable;
             }
         }
 
@@ -553,6 +581,28 @@ export class TraspasosService implements OnModuleInit {
                     lt.cantidad -= aRevertir;
                     porRevertir -= aRevertir;
                     revertedSummary.push(`${lt.numeroLote} (${aRevertir} u.)`);
+                }
+            }
+
+            if (porRevertir > 0) {
+                // Si aún falta por revertir del lote específico pero hay otros lotes del mismo producto en destino:
+                const otrosLotes = await manager.find(Lote, {
+                    where: {
+                        producto: { id: producto.id },
+                        sucursal: { id: sucursalDestino.id },
+                        cantidadActual: MoreThan(0)
+                    }
+                });
+                for (const ol of otrosLotes) {
+                    if (porRevertir <= 0) break;
+                    const disp = Math.max(0, Number(ol.cantidadActual));
+                    if (disp > 0) {
+                        const aDescontar = Math.min(porRevertir, disp);
+                        ol.cantidadActual = disp - aDescontar;
+                        await manager.save(ol);
+                        porRevertir -= aDescontar;
+                        revertedSummary.push(`${ol.numeroLote} (${aDescontar} u.)`);
+                    }
                 }
             }
 

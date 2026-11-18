@@ -17,7 +17,9 @@ import { SearchableSelect, type SearchableOption } from '../../components/ui/Sea
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData } from '../../utils/exportUtils';
+import * as XLSX from 'xlsx';
+import { getBase64ImageFromURL, exportToPDF, exportToExcel, printData, printJsPdf } from '../../utils/exportUtils';
+import { sortDetallesByProduct } from '../../utils/sortUtils';
 import { format } from 'date-fns';
 import { useFilters } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
@@ -903,8 +905,9 @@ const TraspasosPage: React.FC = () => {
 
         const tableColumn = ["#", "Código", "Producto", "Lote / Vencimiento", "Cantidad", "Observación"];
         let totalUnidades = 0;
+        const sortedDetalles = sortDetallesByProduct(t.detalles || []);
 
-        const tableRows = (t.detalles || []).map((det: any, idx: number) => {
+        const tableRows = sortedDetalles.map((det: any, idx: number) => {
             const cantNum = Number(det.cantidad || 0);
             totalUnidades += cantNum;
 
@@ -971,7 +974,7 @@ const TraspasosPage: React.FC = () => {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(9);
         doc.setTextColor(30, 41, 59);
-        doc.text(`Total Ítems: ${(t.detalles || []).length} | Total Unidades: ${totalUnidades.toLocaleString('es-BO')}`, 14, finalY);
+        doc.text(`Total Ítems: ${sortedDetalles.length} | Total Unidades: ${totalUnidades.toLocaleString('es-BO')}`, 14, finalY);
 
         const signY = finalY + 26 > 270 ? 270 : finalY + 26;
         doc.setDrawColor(180, 180, 180);
@@ -986,7 +989,95 @@ const TraspasosPage: React.FC = () => {
         doc.line(142, signY, 196, signY);
         doc.text("Recibí Conforme\n(Sucursal Destino)", 169, signY + 4, { align: "center" });
 
-        window.open(doc.output('bloburl'), '_blank');
+        printJsPdf(doc);
+    };
+
+    const handleExportIndividualTraspasoExcel = (t: Traspaso) => {
+        const sucOrigen = t.sucursalOrigen || t.almacenOrigen;
+        const sucDestino = t.sucursalDestino || t.almacenDestino;
+        const fechaFormatted = t.fecha ? String(t.fecha).split('T')[0].split('-').reverse().join('/') : '-';
+        const usuarioNombre = t.usuario?.persona ? `${t.usuario.persona.nombres} ${t.usuario.persona.apellidos || ''}`.trim() : (t.usuario?.username || 'Sistema');
+        const origenNombre = sucOrigen ? `${sucOrigen.nombre}${(sucOrigen as any)?.ciudad?.nombre ? ` (${(sucOrigen as any).ciudad.nombre})` : ''}` : '-';
+        const destinoNombre = sucDestino ? `${sucDestino.nombre}${(sucDestino as any)?.ciudad?.nombre ? ` (${(sucDestino as any).ciudad.nombre})` : ''}` : '-';
+        const sucGastoNombre = t.sucursalGasto?.nombre || (t.sucursalCargoCosto === 'DESTINO' ? 'Destino' : 'Origen');
+        const costoNum = Number(t.costoTransporte) || 0;
+
+        const sortedDetalles = sortDetallesByProduct(t.detalles || []);
+        let totalUnidades = 0;
+
+        const rows: any[][] = [
+            ['GUÍA DE TRASPASO ENTRE SUCURSALES', '', '', '', '', '', ''],
+            ['N° de Traspaso:', t.codigo || `TRS-${t.id}`, '', 'Fecha:', fechaFormatted, '', ''],
+            ['Estado:', t.estado, '', 'Registrado por:', usuarioNombre, '', ''],
+            ['Sucursal Origen (Salida):', origenNombre, '', '', '', '', ''],
+            ['Sucursal Destino (Ingreso):', destinoNombre, '', '', '', '', ''],
+            ['Costo Transporte (Bs.):', costoNum, '', 'Cargo Costo:', sucGastoNombre, '', ''],
+        ];
+
+        if (t.motivo || t.observaciones) {
+            const obs = `${t.motivo ? `Motivo: ${t.motivo}` : ''}${t.motivo && t.observaciones ? ' | ' : ''}${t.observaciones ? `Obs: ${t.observaciones}` : ''}`;
+            rows.push(['Observaciones:', obs, '', '', '', '', '']);
+        }
+
+        rows.push([]); // Espacio
+        rows.push(['#', 'Código', 'Producto', 'Lote / Vencimiento', 'Cantidad', 'Unidad', 'Observación']);
+
+        sortedDetalles.forEach((det: any, idx: number) => {
+            const cantNum = Number(det.cantidad || 0);
+            totalUnidades += cantNum;
+
+            let loteVencStr = '-';
+            let lotesList: any[] = [];
+            if (det.lotesDetalle) {
+                try {
+                    lotesList = JSON.parse(det.lotesDetalle);
+                } catch (e) {
+                    lotesList = [];
+                }
+            }
+
+            if (lotesList.length > 0) {
+                loteVencStr = lotesList.map((lt: any) => {
+                    const venc = lt.fechaVencimiento ? String(lt.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') : '';
+                    return `Lote ${lt.numeroLote || 'S/N'} (${lt.cantidad} u.)${venc ? ' - Venc: ' + venc : ''}`;
+                }).join('; ');
+            } else if (det.numeroLote) {
+                const venc = det.fechaVencimiento ? String(det.fechaVencimiento).substring(0, 10).split('-').reverse().join('/') : '';
+                loteVencStr = `Lote ${det.numeroLote}${venc ? ' - Venc: ' + venc : ''}`;
+            }
+
+            rows.push([
+                idx + 1,
+                String(det.producto?.codigo || '-'),
+                det.producto?.nombre || '-',
+                loteVencStr,
+                cantNum,
+                det.producto?.unidadMedida || 'u.',
+                det.observacion || '-'
+            ]);
+        });
+
+        rows.push([]);
+        rows.push(['TOTALES', '', '', `Total Ítems: ${sortedDetalles.length}`, totalUnidades, 'unidades', '']);
+
+        const worksheet = XLSX.utils.aoa_to_sheet(rows);
+
+        // Formatos y anchos de columna
+        worksheet['!cols'] = [
+            { wch: 6 },
+            { wch: 18 },
+            { wch: 38 },
+            { wch: 35 },
+            { wch: 14 },
+            { wch: 12 },
+            { wch: 28 },
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Traspaso');
+
+        const fileName = `${t.codigo || 'Traspaso_' + t.id}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
     };
 
     return (
@@ -1316,6 +1407,13 @@ const TraspasosPage: React.FC = () => {
                                                     title="Imprimir Guía de Traspaso"
                                                 >
                                                     <Printer className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleExportIndividualTraspasoExcel(t)}
+                                                    className="px-2.5 py-1.5 bg-card border hover:border-emerald-500/50 text-foreground rounded-lg text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                                    title="Exportar Guía a Excel"
+                                                >
+                                                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleOpenWhatsAppModal(t)}
@@ -2078,6 +2176,14 @@ const TraspasosPage: React.FC = () => {
                                     title="Imprimir Guía de Traspaso"
                                 >
                                     <Printer className="w-3.5 h-3.5" /> Imprimir
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleExportIndividualTraspasoExcel(viewingTraspaso)}
+                                    className="px-3 py-2 bg-emerald-600/10 text-emerald-600 hover:bg-emerald-600 hover:text-white border border-emerald-500/20 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                    title="Exportar a Excel"
+                                >
+                                    <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
                                 </button>
                                 <button
                                     type="button"
