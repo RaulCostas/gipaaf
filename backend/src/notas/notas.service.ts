@@ -872,6 +872,18 @@ export class NotasService implements OnModuleInit {
                                 }
                                 await manager.save(existingLote);
 
+                                // Propagar costo actualizado a lotes derivados en otras sucursales
+                                if (existingLote.numeroLote) {
+                                    await manager.createQueryBuilder()
+                                        .update(Lote)
+                                        .set({ costoUnitario: costoUnitarioFinal })
+                                        .where('"productoId" = :prodId AND "numeroLote" = :numLote', {
+                                            prodId: det.producto.id,
+                                            numLote: existingLote.numeroLote
+                                        })
+                                        .execute();
+                                }
+
                                 if (inv) {
                                     inv.stockActual = Number(inv.stockActual) + diff;
                                     if (det.precioUnitario) {
@@ -2123,6 +2135,51 @@ export class NotasService implements OnModuleInit {
                 for (const lote of lotes) {
                     lote.costoUnitario = nuevoPrecioCompra;
                     await manager.save(lote);
+
+                    // Propagar a lotes en otras sucursales que tengan el mismo número de lote
+                    if (lote.numeroLote) {
+                        await manager.createQueryBuilder()
+                            .update(Lote)
+                            .set({ costoUnitario: nuevoPrecioCompra })
+                            .where('"productoId" = :prodId AND "numeroLote" = :numLote', {
+                                prodId: det.producto.id,
+                                numLote: lote.numeroLote
+                            })
+                            .execute();
+                    }
+                }
+
+                // Propagar a lotes creados por traspasos derivados de esta compra
+                const traspasosRelacionados = await manager.createQueryBuilder(DetalleTraspaso, 'dt')
+                    .leftJoinAndSelect('dt.traspaso', 't')
+                    .where('dt.productoId = :prodId AND (dt.numeroLote LIKE :likeNota OR dt.lotesDetalle LIKE :likeNota)', {
+                        prodId: det.producto.id,
+                        likeNota: `%${nota.numero}%`
+                    })
+                    .getMany();
+
+                for (const dt of traspasosRelacionados) {
+                    const destId = dt.traspaso?.sucursalDestino?.id || (dt.traspaso as any)?.sucursalDestinoId;
+                    if (destId) {
+                        const traspLoteCode = `TRASP-${dt.traspaso.codigo}`;
+                        await manager.createQueryBuilder()
+                            .update(Lote)
+                            .set({ costoUnitario: nuevoPrecioCompra })
+                            .where('"productoId" = :prodId AND "sucursalId" = :destId AND "numeroLote" = :traspCode', {
+                                prodId: det.producto.id,
+                                destId,
+                                traspCode: traspLoteCode
+                            })
+                            .execute();
+
+                        const invDest = await manager.findOne(Inventario, {
+                            where: { producto: { id: det.producto.id }, sucursal: { id: destId } }
+                        });
+                        if (invDest) {
+                            invDest.precioCompra = nuevoPrecioCompra;
+                            await manager.save(invDest);
+                        }
+                    }
                 }
 
                 // 4. Actualizar MovimientoInventario de la compra
