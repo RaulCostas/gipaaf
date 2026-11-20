@@ -1100,6 +1100,18 @@ export class NotasService implements OnModuleInit {
                 } else {
                     inv = await manager.findOne(Inventario, { where: { producto: { id: det.producto.id } } });
                 }
+
+                if (!inv && targetSucursal && det.producto?.id) {
+                    inv = await manager.save(manager.create(Inventario, {
+                        producto: det.producto,
+                        sucursal: targetSucursal,
+                        stockActual: 0,
+                        stockMinimo: 0,
+                        stockMaximo: 0,
+                        precioCompra: Number(det.producto.precioCompra) || 0,
+                        precioVenta: Number(det.producto.precioVenta) || 0
+                    }));
+                }
                 
                 if (nota.tipo === TipoNota.COMPRA) {
                     const costoImp = await manager.findOne(CostoImportacion, { where: { notaId: nota.id } });
@@ -1251,6 +1263,7 @@ export class NotasService implements OnModuleInit {
                             observaciones: nota.observaciones || '',
                             costoUnitario: Number(inv.precioCompra) || Number(det.producto?.precioCompra) || 0,
                             usuario: nota.usuario || undefined,
+                            creadoEn: nota.fecha ? new Date(nota.fecha + 'T12:00:00') : new Date(),
                         });
                         await manager.save(mov);
                     }

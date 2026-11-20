@@ -299,6 +299,20 @@ export class MovimientosInventarioService implements OnModuleInit {
                   );
             `);
 
+            // 1c. Limpiar movimientos sintéticos erróneos INI-INV-% que no tienen respaldo de lote inicial auténtico L-INI-%
+            await this.repo.query(`
+                DELETE FROM movimientos_inventario mi
+                WHERE mi.tipo = 'INVENTARIO_INICIAL'
+                  AND mi."numeroDocumento" LIKE 'INI-INV-%'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM lotes l 
+                      JOIN inventario inv ON inv.id = mi."inventarioId"
+                      WHERE l."productoId" = inv."productoId" 
+                        AND l."sucursalId" = inv."sucursalId"
+                        AND l."numeroLote" LIKE 'L-INI-%'
+                  );
+            `);
+
             // 2. Buscar lotes de saldo inicial auténticos ('L-INI-%')
             const allLotes = await this.loteRepo.find({
                 where: { numeroLote: Like('L-INI-%') },
@@ -378,25 +392,6 @@ export class MovimientosInventarioService implements OnModuleInit {
                     Number(lote.costoUnitario) || Number(inv.precioCompra) || 0,
                     baseDate
                 ]);
-            }
-
-            // También verificar inventarios que tengan stockActual > 0 y no hayan tenido lote L-INI
-            for (const inv of allInventarios) {
-                const docId = `INI-INV-${inv.id}`;
-                const hasIniMov = existingDocs.has(docId);
-                const hasLoteForInv = initialLotes.some(l => l.producto?.id === inv.producto?.id && l.sucursal?.id === inv.sucursal?.id);
-                if (!hasIniMov && !hasLoteForInv && Number(inv.stockActual) > 0) {
-                    rawRowsToInsert.push([
-                        inv.id,
-                        'INVENTARIO_INICIAL',
-                        Number(inv.stockActual),
-                        `Inventario Inicial [${docId}]`,
-                        docId,
-                        'Stock inicial registrado en inventario al 30/09/2026',
-                        Number(inv.precioCompra) || 0,
-                        '2026-09-30 00:00:00'
-                    ]);
-                }
             }
 
             if (rawRowsToInsert.length === 0) {

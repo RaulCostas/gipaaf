@@ -89,11 +89,14 @@ const InventarioAlmacenModal: React.FC<InventarioAlmacenModalProps> = ({ isOpen,
 
         return items.filter(item => {
             const term = searchTerm.trim().toLowerCase();
+            const cleanTerm = term.replace(/[\s\-_.]/g, '');
+            const cleanCode = (item.codigo || '').toLowerCase().replace(/[\s\-_.]/g, '');
             const matchesSearch = !term ||
-                item.nombre.toLowerCase().includes(term) ||
-                item.codigo.toLowerCase().includes(term) ||
-                item.marca.toLowerCase().includes(term) ||
-                item.linea.toLowerCase().includes(term);
+                (item.nombre || '').toLowerCase().includes(term) ||
+                (item.codigo || '').toLowerCase().includes(term) ||
+                (Boolean(cleanTerm) && cleanCode.includes(cleanTerm)) ||
+                (item.marca || '').toLowerCase().includes(term) ||
+                (item.linea || '').toLowerCase().includes(term);
 
             const matchesMarca = selectedMarca === 'all' || 
                 (marcas?.find(m => m.id === selectedMarca)?.nombre && 

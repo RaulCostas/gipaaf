@@ -347,11 +347,12 @@ export class InventarioService implements OnModuleInit {
         const cutoffTimestamp = isPast ? `${fechaCorte!.trim()} 23:59:59.999` : '2099-12-31 23:59:59.999';
 
         // Excluir mermas históricas migradas del sistema anterior (MERMA-*-HIST-*)
-        // ya que no formaron parte del inventario vendible inicial de GIPAAF
+        // ya que no formaron parte del inventario vendible inicial de GIPAAF, y excluir INVENTARIO_INICIAL
         const movSubquery = `
             SELECT "inventarioId", SUM(cantidad) as total_movs
             FROM movimientos_inventario
             WHERE "creadoEn" > $1::timestamp
+              AND tipo != 'INVENTARIO_INICIAL'
               AND NOT (tipo = 'MERMA' AND COALESCE("numeroDocumento", '') LIKE 'MERMA-%-HIST-%')
             GROUP BY "inventarioId"
         `;
@@ -380,7 +381,7 @@ export class InventarioService implements OnModuleInit {
                 LEFT JOIN grupos g ON p."grupoId" = g.id
                 LEFT JOIN inventario i ON i."productoId" = p.id AND i."sucursalId" = $2
                 LEFT JOIN (${movSubquery}) mov ON mov."inventarioId" = i.id
-                WHERE p.activo = true AND p."eliminadoEn" IS NULL
+                WHERE p."eliminadoEn" IS NULL
                 GROUP BY p.id, p.codigo, p.nombre, p."unidadMedida", p."precioVenta", p."precioCompra", m.nombre, l.nombre, g.nombre
                 ORDER BY p.nombre ASC
             `;
@@ -411,7 +412,7 @@ export class InventarioService implements OnModuleInit {
                     WHERE suc."ciudadId" = $2
                 ) i ON i."productoId" = p.id
                 LEFT JOIN (${movSubquery}) mov ON mov."inventarioId" = i.id
-                WHERE p.activo = true AND p."eliminadoEn" IS NULL
+                WHERE p."eliminadoEn" IS NULL
                 GROUP BY p.id, p.codigo, p.nombre, p."unidadMedida", p."precioVenta", p."precioCompra", m.nombre, l.nombre, g.nombre
                 ORDER BY p.nombre ASC
             `;
@@ -437,7 +438,7 @@ export class InventarioService implements OnModuleInit {
                 LEFT JOIN grupos g ON p."grupoId" = g.id
                 LEFT JOIN inventario i ON i."productoId" = p.id
                 LEFT JOIN (${movSubquery}) mov ON mov."inventarioId" = i.id
-                WHERE p.activo = true AND p."eliminadoEn" IS NULL
+                WHERE p."eliminadoEn" IS NULL
                 GROUP BY p.id, p.codigo, p.nombre, p."unidadMedida", p."precioVenta", p."precioCompra", m.nombre, l.nombre, g.nombre
                 ORDER BY p.nombre ASC
             `;

@@ -153,6 +153,8 @@ const VentasPage: React.FC = () => {
         mutationFn: salesService.create,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sales'] });
+            queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+            queryClient.invalidateQueries({ queryKey: ['movimientos'] });
             setIsCreating(false);
             resetForm();
         },
@@ -232,6 +234,8 @@ const VentasPage: React.FC = () => {
         mutationFn: ({ id, payload }: { id: number; payload: any }) => salesService.update(id, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sales'] });
+            queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+            queryClient.invalidateQueries({ queryKey: ['movimientos'] });
             setIsCreating(false);
             resetForm();
         },
@@ -240,7 +244,11 @@ const VentasPage: React.FC = () => {
 
     const confirmMutation = useMutation({
         mutationFn: salesService.confirmar,
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sales'] }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales'] });
+            queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+            queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+        },
         onError: (err: any) => toast.error(err.response?.data?.message || 'Error al confirmar venta'),
     });
 
@@ -248,7 +256,11 @@ const VentasPage: React.FC = () => {
 
     const anularMutation = useMutation({
         mutationFn: salesService.anular,
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sales'] })
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales'] });
+            queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+            queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+        }
     });
 
     // WhatsApp State & Mutations
